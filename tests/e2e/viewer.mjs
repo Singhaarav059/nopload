@@ -154,8 +154,12 @@ await suite(async ({ browser, test }) => {
   await test("opened again, it goes back to the page where you stopped", async () => {
     let step = "scroll";
     try {
+    // Leaving reading mode (the last test) goes back to the page you were on a frame later; let it, then scroll to the end.
+    await page.waitForTimeout(500);
     await viewer().locator(".vw-scroll").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
-    await page.waitForTimeout(800);
+    await viewer().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor({ state: "attached" });
+    // The place is kept a moment after scrolling stops.
+    await page.waitForFunction(() => localStorage.getItem("nopload:viewer:report.pdf:3463") === "2");
     await wake();
     step = "close";
     await bar(t["viewer.close"]).click();
