@@ -164,7 +164,8 @@ await suite(async ({ name, browser, test }) => {
     await page.getByRole("button", { name: t["ed.placeCentre"] }).click();
     await page.getByLabel(t["ed.dateFormat"], { exact: true }).selectOption("iso");
     await page.getByRole("button", { name: t["ed.date"], exact: true }).click();
-    await page.locator("main img").first().click({ position: { x: 100, y: 100 } });
+    // Well below the page's top edge: the sticky header and toolbar cover it once the page scrolls into view.
+    await page.locator("main img").first().click({ position: { x: 100, y: 320 } });
     const text = (await textOf(await save(page, t["tool.sign.action"])))[0];
     const d = new Date();
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

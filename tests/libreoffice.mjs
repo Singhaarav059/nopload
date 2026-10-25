@@ -74,8 +74,29 @@ await test("PowerPoint: one landscape page per slide", async () => {
 });
 
 // The export options, through the same pipeline the browser runs (one
-// LibreOffice for all of them).
-const lo = await createWorkerConverter({ wasmPath });
+// LibreOffice for all of them). Like the browser (src/lib/office/libreoffice.ts),
+// a LibreOffice that stops responding is stopped and started afresh, and the
+// conversion tried again once; a second stall fails the test.
+let worker = await createWorkerConverter({ wasmPath });
+const STALL_MS = 120_000;
+const lo = {
+  async convert(bytes, options, file) {
+    for (let attempt = 0; ; attempt++) {
+      let timer;
+      const late = new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(`LibreOffice stopped responding (${file})`)), STALL_MS)));
+      try {
+        return await Promise.race([worker.convert(bytes, options, file), late]);
+      } catch (e) {
+        if (attempt || !/stopped responding/.test(String(e))) throw e;
+        console.log(`note  ${e.message}: restarting it`);
+        worker.worker?.terminate();
+        worker = await createWorkerConverter({ wasmPath });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  },
+};
 const run = (data, name, options) =>
   exportPdf((bytes, format, file, filterOptions) => lo.convert(bytes, { outputFormat: format, filterOptions }, file).then((r) => r.data), new Uint8Array(data), name, options);
 const catalog = async (bytes) => {
