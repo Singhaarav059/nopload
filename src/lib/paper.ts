@@ -14,7 +14,7 @@ const ACTIONS: Record<PaperAction, ToolId[]> = {
   turn: ["rotate", "organize", "crop", "resize"],
   convert: ["wordToPdf", "pptToPdf", "excelToPdf", "htmlToPdf", "pdfToJpg", "pdfToWord", "pdfToPpt", "pdfToExcel", "pdfToPdfa", "pdfToMarkdown", "accessible"],
   write: ["edit", "watermark", "pageNumbers", "headerFooter", "forms", "metadata", "bookmarks"],
-  read: ["ocr", "summarize", "chat", "listen", "translate"],
+  read: ["ocr", "summarize", "chat", "listen", "translate", "view"],
 };
 
 // Tools whose own action reads better than their family's: drawn in 2D

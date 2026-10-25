@@ -31,7 +31,8 @@ export const CATEGORIES: { id: CategoryId }[] = [
 //  check   – a report on the file's signatures, nothing to download
 //  url     – a web address instead of a file
 //  chat    – questions about one file, answered with page citations
-export type ToolMode = "files" | "pages" | "editor" | "scan" | "compare" | "check" | "url" | "chat" | "listen";
+//  view    – the file to read, full screen, nothing to download
+export type ToolMode = "files" | "pages" | "editor" | "scan" | "compare" | "check" | "url" | "chat" | "listen" | "view";
 
 export type OptionDef =
   | { key: string; type: "select"; choices: string[]; default: string; when?: Cond }
@@ -60,7 +61,7 @@ export type ToolId =
   | "unlock" | "protect" | "sign" | "verify" | "redact" | "compare"
   | "metadata" | "bookmarks" | "flatten" | "attachments" | "sanitize" | "linearize"
   | "nUp" | "booklet" | "removeBlank" | "mix" | "resize" | "grayscale" | "headerFooter"
-  | "listen" | "accessible" | "cleanScans";
+  | "listen" | "accessible" | "cleanScans" | "view";
 
 export type Tool = {
   id: ToolId;
@@ -391,6 +392,11 @@ const ALL: Tool[] = [
     ],
   },
   // ── Edit
+  {
+    // src/components/workspace/ViewerView.tsx: pages first, controls out of the way.
+    id: "view", slug: "pdf-viewer", category: "edit", icon: "BookOpenText", mode: "view",
+    runtime: "browser", accept: PDF, multiple: false, isNew: true, options: [],
+  },
   {
     id: "rotate", slug: "rotate-pdf", category: "edit", icon: "RotateCw", mode: "pages",
     runtime: "browser", accept: PDF, multiple: true, chainable: true,

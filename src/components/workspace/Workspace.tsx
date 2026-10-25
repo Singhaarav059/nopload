@@ -42,6 +42,7 @@ const load = {
   SignatureCheck: () => import("./SignatureCheck"),
   ChatView: () => import("./ChatView"),
   ListenView: () => import("./ListenView"),
+  ViewerView: () => import("./ViewerView"),
   PrintResults: () => import("./PrintResults"),
   PasteHtml: () => import("./PasteHtml"),
   Results: () => import("./Results"),
@@ -54,6 +55,7 @@ const CompareView = dynamic(() => load.CompareView().then((m) => m.CompareView),
 const SignatureCheck = dynamic(() => load.SignatureCheck().then((m) => m.SignatureCheck), { ssr: false });
 const ChatView = dynamic(() => load.ChatView().then((m) => m.ChatView), { ssr: false });
 const ListenView = dynamic(() => load.ListenView().then((m) => m.ListenView), { ssr: false });
+const ViewerView = dynamic(() => load.ViewerView().then((m) => m.ViewerView), { ssr: false });
 const PrintResults = dynamic(() => load.PrintResults().then((m) => m.PrintResults), { ssr: false });
 const PasteHtml = dynamic(() => load.PasteHtml().then((m) => m.PasteHtml), { ssr: false });
 const Results = dynamic(() => load.Results().then((m) => m.Results), { ssr: false });
@@ -63,6 +65,7 @@ const prepareCompare = () => load.CompareView().then((m) => m.prepareCompare());
 const prepareCheck = () => load.SignatureCheck().then((m) => m.prepareCheck());
 const prepareChat = () => load.ChatView().then((m) => m.prepareChat());
 const prepareListen = () => load.ListenView().then((m) => m.prepareListen());
+const prepareViewer = () => load.ViewerView().then((m) => m.prepareViewer());
 // The tools with a live preview (StampPreview.tsx).
 const STAMPS: string[] = ["watermark", "pageNumbers", "headerFooter"];
 
@@ -159,6 +162,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
       : tool.mode === "check" ? prepareCheck
       : tool.mode === "chat" ? prepareChat
       : tool.mode === "listen" ? prepareListen
+      : tool.mode === "view" ? prepareViewer
       : () => import("@/lib/pdf/run").then((m) => m.prepare(tool.id));
     // The views this tool shows load on demand too (the dynamic imports above),
     // so they're fetched with its code, for offline use.
@@ -532,6 +536,18 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         {errorBox}
         <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
         <ListenView key={items[0].id} file={files[0]} onError={(e) => void drop(items[0].id, files[0], e)} />
+      </div>
+    );
+  }
+
+  // The viewer opens full screen as soon as the file is in; closing it starts over.
+  if (tool.mode === "view") {
+    return (
+      <div>
+        {dropHint}
+        {errorBox}
+        <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
+        <ViewerView key={items[0].id} file={files[0]} onClose={reset} onError={(e) => void drop(items[0].id, files[0], e)} />
       </div>
     );
   }

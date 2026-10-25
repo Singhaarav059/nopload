@@ -3,7 +3,7 @@ import {
   Presentation, Sheet, Globe, Images, FileText, MonitorPlay, Table, Archive, Hash, RotateCw, ListOrdered, Stamp,
   Crop, PenLine, TextCursorInput, LockOpen, Lock, Signature, SquareSlash, GitCompare, TextQuote, ShieldCheck,
   MessagesSquare, Languages, SquareUser, Tags, Bookmark, Layers, Paperclip, ShieldX, Zap,
-  Grid2x2, BookOpen, Eraser, Shuffle, Scaling, Contrast, PanelTop, AudioLines, Accessibility, BrushCleaning,
+  Grid2x2, BookOpen, Eraser, Shuffle, Scaling, Contrast, PanelTop, AudioLines, Accessibility, BrushCleaning, BookOpenText,
   type LucideIcon,
 } from "lucide-react";
 import type { Tool } from "@/lib/tools";
@@ -13,7 +13,7 @@ const ICONS: Record<string, LucideIcon> = {
   Presentation, Sheet, Globe, Images, FileText, MonitorPlay, Table, Archive, Hash, RotateCw, ListOrdered, Stamp,
   Crop, PenLine, TextCursorInput, LockOpen, Lock, Signature, SquareSlash, GitCompare, TextQuote, ShieldCheck,
   MessagesSquare, Languages, SquareUser, Tags, Bookmark, Layers, Paperclip, ShieldX, Zap,
-  Grid2x2, BookOpen, Eraser, Shuffle, Scaling, Contrast, PanelTop, AudioLines, Accessibility, BrushCleaning,
+  Grid2x2, BookOpen, Eraser, Shuffle, Scaling, Contrast, PanelTop, AudioLines, Accessibility, BrushCleaning, BookOpenText,
 };
 
 // A soft tile in the tool's family colour (globals.css, [data-cat]). Inside

@@ -15,7 +15,7 @@ import { haptic, modKey } from "@/lib/device";
 // files", "dark") and Enter. Remembers the tools opened last.
 
 const RECENT_KEY = "nopload:recent";
-const POPULAR = ["merge", "compress", "edit", "sign", "pdfToWord", "split"];
+const POPULAR = ["view", "merge", "compress", "edit", "sign", "pdfToWord", "split"];
 const OPEN_EVENT = "nopload:command";
 
 // Anything can open it: dispatchEvent(new Event("nopload:command")).
