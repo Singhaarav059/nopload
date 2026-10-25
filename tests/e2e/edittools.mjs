@@ -35,6 +35,24 @@ await suite(async ({ name, browser, test }) => {
   const panel = () => page.locator("aside");
   const tool = (key) => page.getByRole("toolbar").getByRole("button", { name: t[key], exact: true });
   let step = "";
+  // The saved file's text, and when a word that should be gone is still there,
+  // what the page held when it was saved: the evidence for a failure seen only
+  // on CI's faster machines.
+  const saveText = async (label) => {
+    const [dl] = await Promise.all([
+      page.waitForEvent("download", { timeout: 60000 }),
+      page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
+    ]);
+    const saved = join(downloads, `${name}-${label}.pdf`);
+    await dl.saveAs(saved);
+    const bytes = new Uint8Array(readFileSync(saved));
+    const pdf = await getDocument({ data: bytes.slice(), verbosity: 0 }).promise;
+    return { text: (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" "), size: bytes.length };
+  };
+  const evidence = async (first) => {
+    const items = await page.evaluate(() => [...document.querySelectorAll("[data-item]")].map((e) => e.dataset.item).join(",") || "none");
+    return `saved ${first.size} B of ${readFileSync(letter).length} B, items on page: ${items}`;
+  };
   await test("labelled tools; Eraser, stamp, tick, arrow, note and link", async () => {
     try {
       step = "open";
@@ -160,15 +178,9 @@ await suite(async ({ name, browser, test }) => {
       if (await page.locator("[data-item=path]").count()) throw new Error("the scribble stayed as a drawing");
       await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
       step = "save";
-      const [dl] = await Promise.all([
-        page.waitForEvent("download", { timeout: 60000 }),
-        page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
-      ]);
-      const saved = join(downloads, `${name}-scribbled.pdf`);
-      await dl.saveAs(saved);
-      const pdf = await getDocument({ data: new Uint8Array(readFileSync(saved)), verbosity: 0 }).promise;
-      const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" ");
-      if (/business/.test(text)) throw new Error(`crossed-out word still there: ${text}`);
+      const first = await saveText("scribbled");
+      const text = first.text;
+      if (/business/.test(text)) throw new Error(`crossed-out word still there: ${text} (${await evidence(first)})`);
       if (!/Thank you for your/.test(text) || !/SECRET/.test(text)) throw new Error(`text around it went: ${text}`);
       return text.slice(0, 70);
     } catch (e) {
@@ -208,15 +220,9 @@ await suite(async ({ name, browser, test }) => {
       await bar.getByRole("button", { name: t["ed.lassoErase"], exact: true }).click();
       await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
       step = "save";
-      const [dl] = await Promise.all([
-        page.waitForEvent("download", { timeout: 60000 }),
-        page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
-      ]);
-      const saved = join(downloads, `${name}-looped.pdf`);
-      await dl.saveAs(saved);
-      const pdf = await getDocument({ data: new Uint8Array(readFileSync(saved)), verbosity: 0 }).promise;
-      const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" ");
-      if (/Thank/.test(text)) throw new Error(`erased words still there: ${text}`);
+      const first = await saveText("looped");
+      const text = first.text;
+      if (/Thank/.test(text)) throw new Error(`erased words still there: ${text} (${await evidence(first)})`);
       if (!/Dear customer/.test(text) || !/business/.test(text)) throw new Error(`text around it went: ${text}`);
       return text.slice(0, 70);
     } catch (e) {

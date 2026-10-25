@@ -127,8 +127,13 @@ await suite(async ({ name, browser, test }) => {
     page.setDefaultTimeout(15000);
     try {
       await open(page, "/en");
-      await page.keyboard.press("Control+k");
       const bar = page.getByRole("dialog", { name: t["cmd.label"] });
+      // The shortcut is listened for once the page has started; a key pressed
+      // before that does nothing, so press until the bar opens.
+      for (let i = 0; i < 20 && !(await bar.isVisible()); i++) {
+        await page.keyboard.press("Control+k");
+        await bar.waitFor({ timeout: 500 }).catch(() => {});
+      }
       await bar.waitFor();
       await bar.getByRole("combobox").fill("make it smaller");
       const first = bar.getByRole("option").first();
