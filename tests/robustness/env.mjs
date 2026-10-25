@@ -28,7 +28,7 @@ if (!existsSync(join(OUT, "hooks.mjs"))) {
     "--outDir", OUT, "--module", "esnext", "--target", "es2022", "--moduleResolution", "bundler",
     "--skipLibCheck", "--noCheck", "--rootDir", "src/lib",
     "src/lib/pdf/convert.ts", "src/lib/pdf/optimize.ts", "src/lib/pdf/ocr.ts", "src/lib/pdf/security.ts",
-    "src/lib/pdf/organize.ts", "src/lib/pdf/edit.ts", "src/lib/pdf/pdfa.ts", "src/lib/pdf/pdfium.ts",
+    "src/lib/pdf/organize.ts", "src/lib/pdf/edit.ts", "src/lib/pdf/pdfa.ts", "src/lib/pdf/pdfium.ts", "src/lib/pdf/run.ts",
   ], { cwd: ROOT, stdio: "inherit" });
   writeFileSync(join(OUT, "vendor.js"), `export const VENDOR_VERSION = ${JSON.stringify(vendorSrc.match(/VENDOR_VERSION = "([^"]+)"/)[1])};\nexport const VENDOR = ${JSON.stringify(vendorDir)};\n`);
   // Written last: its presence means the build is complete.

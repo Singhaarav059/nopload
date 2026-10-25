@@ -1,6 +1,6 @@
 "use client";
 
-import { LIGHT_OFFICE, type ToolId } from "../tools";
+import { LIGHT_OFFICE, optionVisible, toolById, type ToolId } from "../tools";
 import { baseName, type Output, type Progress, type Skipped } from "./common";
 import { forFile, PdfError, ServerError, toPdfError } from "./errors";
 import { STATIC } from "../mode";
@@ -61,7 +61,8 @@ async function withOcr(f: File, o: Opts, p: Progress, convert: (f: File, p: Prog
   return out.map((x) => ({ ...x, note: x.note ?? scan.note }));
 }
 
-export type Labels = { page: string; pageOf: string; nOf: string };
+// `index`: the exhibit index's title and column headings (Add page numbers).
+export type Labels = { page: string; pageOf: string; nOf: string; index?: { title: string; file: string; numbers: string; pages: string } };
 export type FileState = "wait" | "work" | "done" | "fail";
 export type Track = (index: number, state: FileState) => void;
 
@@ -159,16 +160,44 @@ export async function runTool(id: ToolId, files: File[], o: Opts, progress?: Pro
       return each(files, progress, (f, p) => translatePdf(f, { translateLang: s(o.translateLang), translateFormat: s(o.translateFormat), aiModel: s(o.aiModel) }, p));
     }
     case "pageNumbers": {
-      const { pageNumbers } = await import("./edit");
-      // Bates numbers run on from one file to the next.
-      const counter = { next: n(o.startAt) };
-      return each(files, progress, (f) => pageNumbers(f, {
+      const { pageNumbers, numberedPages, exhibitIndex } = await import("./edit");
+      const opts = {
         position: s(o.position), numberFormat: s(o.numberFormat), startAt: n(o.startAt), pageRange: s(o.pageRange),
         skipFirst: n(o.skipFirstPages), skipLast: n(o.skipLastPages), fontSize: n(o.fontSize), color: s(o.color), facing: b(o.facing),
         template: s(o.template), numberStyle: s(o.numberStyle), margin: s(o.margin), font: s(o.font),
-        batesPrefix: s(o.batesPrefix), batesDigits: n(o.batesDigits), counter,
+        batesPrefix: s(o.batesPrefix), batesDigits: n(o.batesDigits),
         labels,
-      }), signal);
+      };
+      const shown = (key: string) => {
+        const defs = toolById("pageNumbers").options;
+        return b(o[key]) && optionVisible(defs.find((d) => d.key === key)!, o, defs);
+      };
+      // A job saved before the choice existed: Bates numbers ran on across files then.
+      const runOn = o.continueNumbers === undefined ? o.numberFormat === "bates" : shown("continueNumbers");
+      const index = runOn && shown("exhibitIndex");
+      if (!runOn || (files.length < 2 && !index)) return each(files, progress, (f) => pageNumbers(f, opts), signal);
+      // Numbered as one set, in the order given: first every file's page count,
+      // so each knows where its numbers start and what the total is. A file
+      // that can't be read stops the run, since numbering on without it would
+      // give every later file the wrong numbers.
+      const { loadPdf } = await import("./organize");
+      const rows: import("./edit").IndexRow[] = [];
+      let used = 0;
+      for (let i = 0; i < files.length; i++) {
+        signal?.throwIfAborted();
+        const pages = await forFile(files[i], () => loadPdf(files[i], files[i].name)).then((d) => d.getPageCount()).catch((e) => {
+          track?.(i, "fail");
+          throw e;
+        });
+        const count = numberedPages(pages, opts).length;
+        rows.push({ name: files[i].name, pages, first: opts.startAt + used, last: opts.startAt + used + count - 1 });
+        used += count;
+      }
+      // Files are numbered one after another, so the k-th call is the k-th file.
+      let k = 0;
+      const out = await each(files, progress, (f) => pageNumbers(f, { ...opts, offset: rows[k++].first - opts.startAt, setCount: used }), signal, true);
+      if (!index) return out;
+      return [...out, await exhibitIndex(rows, { ...opts, labels: labels?.index && { ...labels.index, pageOf: labels.pageOf } })];
     }
     case "watermark": {
       const { watermark } = await import("./edit");
