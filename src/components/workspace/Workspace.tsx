@@ -652,7 +652,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         </aside>
       </div>
       {/* Phones: the action stays in reach at the bottom. */}
-      <div className="sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-[color-mix(in_oklab,var(--bg)_92%,transparent)] px-4 py-3 backdrop-blur lg:hidden">
+      <div data-sticky-action className="sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-[color-mix(in_oklab,var(--bg)_92%,transparent)] px-4 py-3 backdrop-blur lg:hidden">
         <button className="btn btn-primary btn-lg w-full" onClick={start}>
           {t(`tool.${tool.id}.action`)} <ArrowRight size={18} className="rtl:rotate-180" />
         </button>

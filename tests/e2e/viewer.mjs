@@ -94,8 +94,13 @@ await suite(async ({ browser, test }) => {
   });
 
   await test("select text, highlight it, and save a copy with the highlight in it", async () => {
+    let step = "select";
+    try {
+    // After the last test's zoom and layout changes, the page is drawn again at its size; select once that's done.
+    await page.waitForTimeout(800);
     // Select a line of page 1's text the way a drag would.
     await page.evaluate(() => {
+      document.querySelector('[data-page="1"]').scrollIntoView();
       const span = [...document.querySelectorAll('[data-page="1"] .textLayer span')].find((s) => s.textContent.includes("Revenue grew"));
       const r = document.createRange();
       r.selectNodeContents(span);
@@ -104,13 +109,17 @@ await suite(async ({ browser, test }) => {
     });
     const bar = viewer().getByRole("toolbar", { name: t["viewer.highlight"] });
     await bar.waitFor();
+    step = "colour";
     await bar.getByRole("button", { name: `${t["viewer.highlight"]}: ${t["viewer.color.yellow"]}` }).click();
+    step = "mark";
     await viewer().locator('[data-page="1"] .vw-hl').first().waitFor();
+    step = "list";
     // Listed, and saved into a copy as a real annotation.
     await wake();
     await viewer().getByRole("button", { name: t["viewer.pages"] }).click();
     await viewer().getByRole("tab", { name: t["viewer.highlights"] }).click();
     await viewer().getByText(/Revenue grew/).first().waitFor();
+    step = "save";
     const [dl] = await Promise.all([page.waitForEvent("download"), viewer().getByRole("button", { name: t["viewer.saveHighlights"] }).click()]);
     const path = await dl.path();
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -121,6 +130,9 @@ await suite(async ({ browser, test }) => {
     if (!/highlighted\.pdf$/.test(dl.suggestedFilename())) throw new Error(dl.suggestedFilename());
     await page.keyboard.press("Escape");
     return dl.suggestedFilename();
+    } catch (e) {
+      throw new Error(`${step}: ${e.message.split("\n")[0]}`);
+    }
   });
 
   await test("reading mode lays the text out again", async () => {
@@ -182,7 +194,8 @@ await suite(async ({ browser, test }) => {
     await viewer().getByRole("menuitem", { name: t["tool.compress.name"] }).click();
     await page.waitForURL(/\/en\/compress-pdf/);
     await page.getByText("report.pdf").first().waitFor();
-    if (await page.evaluate(() => "viewer" in document.documentElement.dataset)) throw new Error("page still locked");
+    // The viewer gone, the page scrolls again.
+    await page.waitForFunction(() => !("viewer" in document.documentElement.dataset), null, { timeout: 5000 }).catch(() => { throw new Error("page still locked"); });
     return "compress holds report.pdf";
   });
   await ctx.close();

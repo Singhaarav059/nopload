@@ -116,7 +116,7 @@ export function OpenFiles() {
         ) : (
           files && <p className="text-pretty text-[15px] text-ink-2">{t("open.empty", { brand: BRAND.name })}</p>
         )}
-        <label className="btn btn-quiet btn-sm mt-4 inline-flex cursor-pointer">
+        <label className={`btn mt-4 inline-flex cursor-pointer ${files?.length ? "btn-quiet btn-sm" : "btn-primary"}`}>
           <Upload size={15} aria-hidden /> {t("ws.select")}
           <input
             type="file"

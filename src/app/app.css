@@ -48,8 +48,7 @@
 :root[data-app] header[data-site-header] {
   padding: env(safe-area-inset-top) 0 0;
   background: color-mix(in oklab, var(--bg) 82%, transparent);
-  backdrop-filter: blur(18px) saturate(1.5);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
   border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
 }
 :root[data-app] header[data-site-header] > div {
@@ -118,8 +117,7 @@
 /* iPhone: frosted, hairline on top, icons tinted when chosen. */
 [data-tabbar="ios"] {
   background: color-mix(in oklab, var(--surface) 88%, transparent);
-  backdrop-filter: blur(22px) saturate(1.8);
-  -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
   border-top: 0.5px solid var(--line-strong);
 }
 [data-tabbar="ios"] .app-tab { padding-top: 5px; justify-content: flex-start; }
@@ -194,8 +192,7 @@
 /* iPad and Mac: a translucent sidebar, like Finder's and Notes'. */
 [data-side="sidebar"] {
   background: color-mix(in oklab, var(--surface-2) 74%, transparent);
-  backdrop-filter: blur(30px) saturate(1.7);
-  -webkit-backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(30px) saturate(1.7); backdrop-filter: blur(30px) saturate(1.7);
   border-inline-end: 1px solid var(--line);
 }
 :root[data-os="ipados"] [data-side="sidebar"] .app-side-item { height: 40px; border-radius: 11px; font-size: 15px; }
@@ -394,7 +391,7 @@
 
 /* ---------- Command bar (⌘K) ---------- */
 .cmd-wrap { position: fixed; inset: 0; z-index: 80; display: grid; justify-items: center; align-items: start; padding: max(10vh, calc(env(safe-area-inset-top) + 16px)) 16px 16px; }
-.cmd-scrim { position: absolute; inset: 0; background: rgb(12 9 22 / 0.3); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: app-fade 220ms var(--ease-out) both; cursor: default; }
+.cmd-scrim { position: absolute; inset: 0; background: rgb(12 9 22 / 0.3); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);animation: app-fade 220ms var(--ease-out) both; cursor: default; }
 .cmd {
   position: relative;
   width: min(640px, 100%);
@@ -405,8 +402,7 @@
   border-radius: 22px;
   border: 1px solid var(--line);
   background: color-mix(in oklab, var(--surface) 94%, transparent);
-  backdrop-filter: blur(24px) saturate(1.6);
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
   box-shadow: var(--shadow-lift);
   animation: cmd-in 340ms var(--ease-spring) both;
 }
@@ -559,7 +555,9 @@ html[data-viewer] body { overflow: hidden; }
 }
 .vw[data-night] { --vw-bg: #121214; --vw-glass: rgb(30 30 34 / 0.8); color: #e8e6e3; }
 @keyframes vw-in { from { opacity: 0; transform: scale(0.985); } }
-.vw-scroll { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; outline: none; padding-top: calc(env(safe-area-inset-top) + 56px); padding-bottom: 96px; }
+.vw-scroll { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; outline: none; padding-top: calc(env(safe-area-inset-top) + 58px); padding-bottom: 96px; transition: padding-top 380ms var(--ease-spring); }
+/* Controls hidden: the page moves up into the space the bar left, no empty band. */
+.vw:not([data-chrome]) .vw-scroll { padding-top: calc(env(safe-area-inset-top) + 8px); }
 .vw-pages { position: relative; margin: 0 auto; }
 /* At fit width the browser keeps vertical scrolling and leaves sideways swipes to the viewer (page turns). */
 .vw-scroll { touch-action: pan-y; }
@@ -575,8 +573,7 @@ html[data-viewer] body { overflow: hidden; }
 .vw-loading { display: flex; gap: 10px; align-items: center; justify-content: center; padding-top: 30vh; opacity: 0.7; }
 
 .vw-bar, .vw-dock, .vw-search, .vw-side, .vw-sheet {
-  background: var(--vw-glass); backdrop-filter: blur(22px) saturate(1.6); -webkit-backdrop-filter: blur(22px) saturate(1.6);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--line) 80%, transparent), 0 10px 30px rgb(0 0 0 / 0.1);
+  background: var(--vw-glass); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);  box-shadow: 0 0 0 1px color-mix(in oklab, var(--line) 80%, transparent), 0 10px 30px rgb(0 0 0 / 0.1);
 }
 .vw-bar {
   position: absolute; z-index: 3; top: calc(env(safe-area-inset-top) + 8px); left: 8px; right: 8px; height: 46px;
@@ -771,8 +768,7 @@ html[data-app] .install-pill { display: none; }
 [data-color="pink"] { --hl: #ff99cc; }
 .vw-pick {
   position: fixed; z-index: 5; translate: -50% 0; display: flex; align-items: center; gap: 4px; padding: 5px;
-  border-radius: 999px; background: var(--vw-glass); backdrop-filter: blur(22px) saturate(1.6); -webkit-backdrop-filter: blur(22px) saturate(1.6);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--line) 80%, transparent), 0 12px 30px rgb(0 0 0 / 0.18);
+  border-radius: 999px; background: var(--vw-glass); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);  box-shadow: 0 0 0 1px color-mix(in oklab, var(--line) 80%, transparent), 0 12px 30px rgb(0 0 0 / 0.18);
   animation: vw-pop 260ms var(--ease-spring) both;
 }
 @keyframes vw-pop { from { opacity: 0; scale: 0.85; } }
@@ -783,3 +779,18 @@ html[data-app] .install-pill { display: none; }
 .vw-mark-row { align-items: flex-start !important; }
 .vw-mark-row .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .vw-tabs button span { font-size: 11px; padding: 0 5px; border-radius: 999px; background: color-mix(in oklab, currentColor 14%, transparent); }
+
+/* App mode, phones: the sticky action bar sits above the tab bar, not under it. */
+:root[data-app][data-nav="tabs"] [data-sticky-action] { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+/* App mode: a tool's page opens with its name and the work, not the website's introduction. */
+:root[data-app] [data-app-toolhead] { padding-top: 6px; padding-bottom: 10px; }
+:root[data-app] [data-app-toolhead] > div:not([aria-hidden]) { margin-top: 0; }
+:root[data-app] [data-app-toolhead] h1 { font-size: clamp(1.5rem, 4vw, 2.2rem); }
+:root[data-app] [data-app-toolhead] .sparkle, :root[data-app] [data-app-toolhead] svg.absolute { display: none; }
+/* Touch screens: every control at least 42px, comfortably tappable. */
+@media (pointer: coarse) {
+  .icon-btn { min-width: 42px; min-height: 42px; }
+  .install-pill { height: 42px; }
+  .vw-btn, .vw-count, .vw-zoom { min-height: 44px; }
+  .vw-btn { min-width: 44px; }
+}

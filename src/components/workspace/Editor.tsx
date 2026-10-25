@@ -1620,7 +1620,7 @@ export function Editor({
       )}
     </div>
       {/* Below lg the panel sits under the page, so the action stays in reach at the bottom of the screen. */}
-      <div className="sticky bottom-0 z-30 mt-4 rounded-t-xl border border-b-0 border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-3 shadow-card backdrop-blur-md lg:hidden">
+      <div data-sticky-action className="sticky bottom-0 z-30 mt-4 rounded-t-xl border border-b-0 border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-3 shadow-card backdrop-blur-md lg:hidden">
         {runButton}
       </div>
     </div>

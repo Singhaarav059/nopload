@@ -61,7 +61,7 @@ function Card({ item, onRemove, sortable }: { item: Item; onRemove: () => void; 
     >
       {sortable && (
         <button ref={setActivatorNodeRef} {...attributes} aria-label={t("ws.moveItem", { name: item.file.name })}
-          className="absolute start-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md text-muted hover:text-ink">
+          className="absolute start-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md text-muted hover:text-ink pointer-coarse:h-10 pointer-coarse:w-10">
           <GripVertical size={15} />
         </button>
       )}
@@ -69,7 +69,7 @@ function Card({ item, onRemove, sortable }: { item: Item; onRemove: () => void; 
         aria-label={`${t("ws.remove")} ${item.file.name}`}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={onRemove}
-        className="absolute end-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-line bg-surface text-muted opacity-100 transition-opacity hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+        className="absolute end-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-line bg-surface text-muted opacity-100 transition-opacity hover:text-danger pointer-coarse:h-10 pointer-coarse:w-10 [@media(hover:hover)_and_(min-width:640px)]:opacity-0 [@media(hover:hover)_and_(min-width:640px)]:group-hover:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:focus:opacity-100"
       >
         <X size={15} />
       </button>

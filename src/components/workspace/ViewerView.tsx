@@ -389,10 +389,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   const saveWithMarks = async () => {
     const { withHighlights } = await import("@/lib/pdf/highlights");
     const out = await withHighlights(await file.arrayBuffer(), marks);
-    const url = URL.createObjectURL(new Blob([out as BlobPart], { type: "application/pdf" }));
-    const a = Object.assign(document.createElement("a"), { href: url, download: file.name.replace(/\.pdf$/i, "") + "-highlighted.pdf" });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    save(new Blob([out as BlobPart], { type: "application/pdf" }), file.name.replace(/\.pdf$/i, "") + "-highlighted.pdf");
   };
 
   const toggleReading = () => {
@@ -540,12 +537,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     };
     document.body.append(frame);
   };
-  const downloadFile = () => {
-    const url = URL.createObjectURL(file);
-    const a = Object.assign(document.createElement("a"), { href: url, download: file.name });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  };
+  const downloadFile = () => save(file, file.name);
 
   const total = ratios.length;
   const iconBtn = "vw-btn";
@@ -710,7 +702,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
 
       {picked && (
         <div className="vw-pick" role="toolbar" aria-label={t("viewer.highlight")}
-          style={{ left: Math.min(Math.max(picked.at.x, 120), window.innerWidth - 120), top: Math.min(picked.at.y + 10, window.innerHeight - 70) }}
+          style={{ left: Math.min(Math.max(picked.at.x, 120), window.innerWidth - 120), top: Math.max(70, Math.min(picked.at.y + 10, window.innerHeight - 70)) }}
           onPointerDown={(e) => e.preventDefault()}>
           {"text" in picked ? (
             <>
@@ -878,4 +870,14 @@ function Choice({ label, value, options, onChange }: { label: string; value: str
       </div>
     </div>
   );
+}
+
+// Saves a file the way a download link does (Firefox needs the link in the page).
+function save(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement("a"), { href: url, download: name, hidden: true });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

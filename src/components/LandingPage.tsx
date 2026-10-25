@@ -42,7 +42,7 @@ export function LandingPage({ intent, t, lang }: { intent: Landing; t: Dict; lan
 
       <Workspace toolId={tool.id} preset={intent.preset} />
 
-      <section className="mx-auto mt-28 max-w-[960px]">
+      <section data-web-only className="mx-auto mt-20 max-w-[960px] sm:mt-28">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: toolJsonLd({ lang, slug: intent.slug, home: t["nav.allTools"], content }) }} />
         <h2 className="reveal mb-6 display text-[1.4rem] sm:text-[1.6rem]">{content.howTo}</h2>
         <ol className="reveal grid border-y border-line sm:grid-cols-3">

@@ -79,7 +79,8 @@ function TabBar({ os, open, sheet }: { os: Os | null; open: (s: Sheet) => void; 
   return (
     <nav aria-label={t("app.nav")} data-tabbar={material ? "material" : "ios"} className="app-tabbar">
       {tabs.map((tab) => {
-        const on = tab.sheet ? sheet === tab.sheet : tab.current && !sheet;
+        // A sheet tab is lit while its sheet is open, or while on one of its pages (Tools on a tool page).
+        const on = sheet ? sheet === tab.sheet : !!tab.current;
         const body = (
           <>
             <span className="app-tab-icon"><tab.icon size={material ? 22 : 24} strokeWidth={on ? 2.1 : 1.75} /></span>

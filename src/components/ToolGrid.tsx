@@ -54,11 +54,11 @@ export function ToolGrid() {
 
   return (
     <section ref={top} id="tools" aria-labelledby="tools-title" className="scroll-mt-20">
-      <div className="max-w-[640px]">
+      <div data-web-only className="max-w-[640px]">
         <h2 id="tools-title" className="reveal display text-[2rem] sm:text-[2.75rem]">{t("home.toolsTitle")}</h2>
         <p className="reveal mt-4 text-pretty text-[16px] leading-relaxed text-muted">{t("home.toolsBody")}</p>
       </div>
-      <div data-sticky-bar className="sticky top-16 z-20 -mx-4 mt-8 bg-[color-mix(in_oklab,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-[14px] sm:-mx-6 sm:px-6">
+      <div data-sticky-bar className="sticky top-16 z-20 -mx-4 mt-8 border-b border-line/60 bg-[color-mix(in_oklab,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-[14px] sm:-mx-6 sm:px-6">
         <label className="relative block">
           <span className="sr-only">{t("home.searchPlaceholder")}</span>
           <Search size={18} strokeWidth={1.75} className="pointer-events-none absolute start-5 top-1/2 -translate-y-1/2 text-muted" />
@@ -71,7 +71,7 @@ export function ToolGrid() {
             className="field h-14 rounded-full ps-12 pe-12 text-[16px] shadow-card [&::-webkit-search-cancel-button]:hidden"
           />
           {!q && (
-            <kbd aria-hidden className="pointer-events-none absolute end-4 top-1/2 hidden h-7 min-w-7 -translate-y-1/2 place-items-center rounded-lg border border-line bg-surface-2 px-1.5 font-mono text-[12px] text-muted sm:grid">/</kbd>
+            <kbd aria-hidden className="pointer-events-none absolute end-4 top-1/2 hidden h-7 min-w-7 -translate-y-1/2 place-items-center rounded-lg border border-line bg-surface-2 px-1.5 font-mono text-[12px] text-muted sm:grid pointer-coarse:hidden">/</kbd>
           )}
           {q && (
             <button
@@ -93,7 +93,7 @@ export function ToolGrid() {
               aria-pressed={cat === id}
               data-cat={id === "all" ? undefined : id}
               onClick={() => choose(id)}
-              className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[13px] font-medium text-ink-2 transition-[background-color,border-color,color,scale] duration-300 ease-(--ease-spring) hover:border-line-strong hover:text-ink active:scale-95 aria-pressed:border-transparent aria-pressed:bg-(--tint) aria-pressed:text-(--tint-ink) [&:not([data-cat])]:aria-pressed:bg-ink [&:not([data-cat])]:aria-pressed:text-bg"
+              className="flex h-9 shrink-0 items-center gap-2 rounded-full pointer-coarse:h-10 border border-line bg-surface px-3.5 text-[13px] font-medium text-ink-2 transition-[background-color,border-color,color,scale] duration-300 ease-(--ease-spring) hover:border-line-strong hover:text-ink active:scale-95 aria-pressed:border-transparent aria-pressed:bg-(--tint) aria-pressed:text-(--tint-ink) [&:not([data-cat])]:aria-pressed:bg-ink [&:not([data-cat])]:aria-pressed:text-bg"
             >
               {id !== "all" && <span aria-hidden className="h-2 w-2 rounded-full bg-(--tint-ink)" />}
               {id === "all" ? t("home.filterAll") : t(`cat.${id}`)}
