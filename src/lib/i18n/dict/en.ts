@@ -1924,6 +1924,7 @@ const en = {
   "ed.redactWholeWords": "Whole words only",
   "ed.redactFound": "{n|one:# match marked|other:# matches marked}",
   "ed.redactPresets": "Quick marks",
+  "ed.redactAll": "Everything personal: emails, phones, cards, IDs, dates",
   "ed.redactEmails": "Emails",
   "ed.redactPhones": "Phone numbers",
   "ed.redactNumbers": "Long numbers",

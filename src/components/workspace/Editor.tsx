@@ -6,7 +6,7 @@ import {
   MousePointer2, Type, ImagePlus, Square, Circle, Minus, Pencil, Highlighter, Eraser, Undo2, Redo2, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Signature as SignatureIcon, CalendarDays, Search, ScanEye, Crop as CropIcon,
   TextCursorInput, SquareCheck, Copy, Bold, Stamp, UserRound, Crosshair, CircleDot, SquareChevronDown, List, PenLine,
-  LetterText, BringToFront, SendToBack, Loader2, ArrowUpRight, Underline as UnderlineIcon, Strikethrough, StickyNote, Link2, Check, X, Brush,
+  LetterText, BringToFront, SendToBack, Loader2, ArrowUpRight, ShieldCheck, Underline as UnderlineIcon, Strikethrough, StickyNote, Link2, Check, X, Brush,
 } from "lucide-react";
 import { useI18n } from "../I18n";
 import { SignaturePad, type SignatureImage } from "./SignaturePad";
@@ -525,7 +525,8 @@ export function Editor({
   // ── Redaction search across all pages.
   // `preset` names one of the quick marks; otherwise `typed` is the search box text.
   const ocrLang = String(options.ocrLang ?? "eng");
-  const markMatches = async (typed: string, preset?: (typeof PRESET_NAMES)[number]) => {
+  // `presets`: one or more quick marks (all of them for "Everything personal"), in one step to undo.
+  const markMatches = async (typed: string, presets: (typeof PRESET_NAMES)[number][] = []) => {
     if (readable === "busy") return;
     const { searchable, searchMatches, searchPattern, PRESETS } = await import("@/lib/pdf/security");
     let text = readable;
@@ -538,14 +539,20 @@ export function Editor({
       }
       setReadable(text);
     }
-    const pattern = preset ? PRESETS[preset] : searchPattern(typed, { matchCase, wholeWord });
-    const hits = searchMatches(text.pages, { pattern, preset });
-    const search = uid();
-    const of = new Map<string, number>();
-    for (const h of hits) of.set(h.text, (of.get(h.text) ?? 0) + 1);
-    marks.set((l) => [...l, ...hits.map((h) => ({ id: uid(), page: h.page, rect: h.rect, term: h.text, search, pattern, preset, of: of.get(h.text) }))]);
-    // A match that wraps to the next line has a box on each line but counts once.
-    setFound(new Set(hits.map((h) => h.hit)).size);
+    const added: Mark[] = [];
+    let n = 0;
+    for (const preset of presets.length ? presets : [undefined]) {
+      const pattern = preset ? PRESETS[preset] : searchPattern(typed, { matchCase, wholeWord });
+      const hits = searchMatches(text.pages, { pattern, preset });
+      const search = uid();
+      const of = new Map<string, number>();
+      for (const h of hits) of.set(h.text, (of.get(h.text) ?? 0) + 1);
+      added.push(...hits.map((h) => ({ id: uid(), page: h.page, rect: h.rect, term: h.text, search, pattern, preset, of: of.get(h.text) })));
+      // A match that wraps to the next line has a box on each line but counts once.
+      n += new Set(hits.map((h) => h.hit)).size;
+    }
+    marks.set((l) => [...l, ...added]);
+    setFound(n);
   };
 
   // ── Forms: suggest fields for the blanks of a flat form.
@@ -1054,9 +1061,14 @@ export function Editor({
             </div>
             <div>
               <p className="mb-1.5 text-[13px] font-medium text-ink-2">{t("ed.redactPresets")}</p>
+              {/* Everything a document can give away about a person (long numbers aside: the ID presets cover those), at once. */}
+              <button className="btn btn-quiet btn-sm mb-2 w-full justify-center font-medium" data-redact-all
+                onClick={() => markMatches("", PRESET_NAMES.filter((k) => k !== "numbers"))}>
+                <ShieldCheck size={15} /> {t("ed.redactAll")}
+              </button>
               <div className="flex flex-wrap gap-1.5">
                 {PRESET_NAMES.map((k) => (
-                  <button key={k} className="btn btn-quiet btn-sm" onClick={() => markMatches("", k)}>
+                  <button key={k} className="btn btn-quiet btn-sm" onClick={() => markMatches("", [k])}>
                     {t(`ed.redact${k[0].toUpperCase()}${k.slice(1)}`)}
                   </button>
                 ))}

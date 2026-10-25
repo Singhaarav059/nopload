@@ -1,4 +1,4 @@
-// Redact PDF: the e-mail preset, or a searched word at 300 dpi, is gone from
+// Redact PDF: the e-mail preset, every personal-data preset at once, or a searched word at 300 dpi, is gone from
 // the text, and a verification report comes with the result; with two files,
 // the search redacts both.
 import { must } from "./lib.mjs";
@@ -20,6 +20,17 @@ const spec = {
         must(r.type === "pdf" && r.pages === 3, `${r.type} ${r.pages}p`);
         must(!/jane\.doe@example\.com/.test(r.text) && /Quarterly/.test(r.text), "e-mail still there, or all text gone");
         await report(h);
+      },
+    },
+    // Every personal-data preset at once: the e-mail and the phone number both go.
+    "everything personal": {
+      set: async (h) => {
+        await h.page.locator("main aside [data-redact-all]").click();
+        await h.page.waitForFunction(() => document.querySelectorAll("main div.touch-none div.absolute").length > 1, null, { timeout: 10000 }).catch(() => {});
+      },
+      check: (r) => {
+        must(r.type === "pdf" && r.pages === 3, `${r.type} ${r.pages}p`);
+        must(!/jane\.doe@example\.com/.test(r.text) && !/555 0134/.test(r.text) && /Quarterly/.test(r.text), `text: ${r.text.slice(0, 160)}`);
       },
     },
     "two files, one search": {
