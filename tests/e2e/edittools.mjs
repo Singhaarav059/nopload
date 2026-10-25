@@ -28,7 +28,8 @@ const letter = join(downloads, "letter.pdf");
 }
 
 await suite(async ({ name, browser, test }) => {
-  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 1100 } });
+  // Tall enough for the whole page: Firefox drops pointer events below the window, so a stroke there never ends.
+  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 1700 } });
   const page = await ctx.newPage();
   page.setDefaultTimeout(20000);
   const panel = () => page.locator("aside");

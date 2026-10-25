@@ -145,7 +145,7 @@ await suite(async ({ browser, test }) => {
     await swipeCard(1, 140);
     await swipeCard(3, -140);
     await swipeCard(5, 140);
-    await swipeCard(5, -140);
+    await swipeCard(5, 140);
     await page.getByText(t["ws.selected"].replace("{n}", "2"), { exact: true }).waitFor({ timeout: 5000 });
     expect("pages", await widths(await download(t["tool.remove.action"])), [400, 402, 404, 405, 406]);
     return "2 removed";
