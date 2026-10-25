@@ -70,6 +70,10 @@ await suite(async ({ name, browser, test }) => {
       await drag(at(0.3, 0.55), at(0.5, 0.6));
       if ((await page.locator("[data-item=path]").count()) !== 1) throw new Error("no pencil stroke");
       if (await page.locator("[data-item=path][data-selected]").count()) throw new Error("a fresh stroke is selected");
+      // Over it, the pencil stays a pencil: the stroke lets the pointer through to the page.
+      const [hx, hy] = at(0.4, 0.575);
+      const under = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-item]")?.getAttribute("data-item") ?? null, [hx, hy]);
+      if (under) throw new Error(`the pointer lands on the ${under}, not the page`);
       await tool("ed.erase").click();
       await drag(at(0.4, 0.5), at(0.4, 0.65));
       if (await page.locator("[data-item=path]").count()) throw new Error("the stroke wasn't erased");

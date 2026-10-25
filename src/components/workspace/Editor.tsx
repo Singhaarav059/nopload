@@ -882,8 +882,10 @@ export function Editor({
         <div ref={wrap} className="overflow-auto rounded-xl bg-surface-2 p-4">
           <div
             ref={stage}
-            className="relative mx-auto touch-none select-none bg-white shadow-[0_0_0_1px_var(--line),0_8px_24px_rgb(0_0_0/0.08)]"
+            className="relative mx-auto touch-none select-none bg-white data-[drawing]:[&_[data-item]]:pointer-events-none shadow-[0_0_0_1px_var(--line),0_8px_24px_rgb(0_0_0/0.08)]"
             style={{ width, height, cursor }}
+            // With a tool that draws or places, what's already on the page lets the pointer through: the tool's own pointer stays, and it draws over them.
+            data-drawing={!["select", "editText", "place"].includes(tool) || undefined}
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
@@ -1284,7 +1286,7 @@ export function Editor({
                   className="h-7 w-7 rounded-full border border-line ring-offset-2 ring-offset-[var(--surface)] aria-pressed:ring-2 aria-pressed:ring-[var(--ink)]" style={{ background: c }} />
               ))}
             </div>
-            {(!selected || selected.kind === "text") && (
+            {(selected ? selected.kind === "text" : tool === "text" || toolId !== "edit") && (
               <div className="flex items-center gap-2">
                 <label className="flex flex-1 items-center gap-2 text-[13px] text-ink-2">
                   {t("ed.fontSize")}
@@ -1297,14 +1299,14 @@ export function Editor({
                 </button>
               </div>
             )}
-            {(!selected || ["rect", "ellipse", "line", "path"].includes(selected.kind)) && toolId === "edit" && (
+            {(selected ? ["rect", "ellipse", "line", "path", "arrow"].includes(selected.kind) : ["rect", "ellipse", "line", "path", "arrow", "select"].includes(tool)) && toolId === "edit" && (
               <label className="flex items-center gap-2 text-[13px] text-ink-2">
                 {t("ed.stroke")}
                 <input type="range" min={0.5} max={12} step={0.5} className="flex-1 accent-[var(--accent)]" value={selected?.stroke ?? style.stroke}
                   onChange={(e) => { const v = Number(e.target.value); setStyle((s) => ({ ...s, stroke: v })); if (selected) patch(selected.id, { stroke: v }, false); }} />
               </label>
             )}
-            {(!selected || ["rect", "ellipse"].includes(selected.kind)) && toolId === "edit" && (
+            {(selected ? ["rect", "ellipse"].includes(selected.kind) : ["rect", "ellipse", "select"].includes(tool)) && toolId === "edit" && (
               <label className="flex items-center gap-2 text-[13px] text-ink-2">
                 <input type="checkbox" className="accent-[var(--accent)]" checked={Boolean(selected?.fill ?? style.fill)}
                   onChange={(e) => { const f = e.target.checked ? (selected?.color ?? style.color) : null; setStyle((s) => ({ ...s, fill: f })); if (selected) patch(selected.id, { fill: f }); }} />
