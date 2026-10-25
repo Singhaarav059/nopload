@@ -194,6 +194,18 @@ export function Editor({
   const wrap = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const drag = useRef<null | { kind: "new" | "move" | "resize" | "crop-move" | "crop-resize"; id?: string; x0: number; y0: number; orig?: FracRect; handle?: string }>(null);
+  // The Eraser wipes as it goes: each bit of its path is painted at once in
+  // the colour of the paper around it (wipe), until the preview, with the
+  // page's own content really deleted, takes over. A stroke that starts on
+  // something drawn or added only takes those away and leaves the page be.
+  const pageImg = useRef<HTMLImageElement>(null);
+  const wipe = useRef<HTMLCanvasElement>(null);
+  const paper = useRef<CanvasRenderingContext2D | null>(null);
+  const wiped = useRef(new Map<string, { c: string; w: number; a: [number, number]; b: [number, number] }[]>());
+  const eraseMode = useRef<"items" | "page">("page");
+  // The preview the page image has finished loading (its key), so the wipe
+  // gives way only once the real result is on screen.
+  const shownKey = useRef("");
 
   // The latest handler, without reloading the file when it changes.
   const failed = useRef(onError);
@@ -253,7 +265,8 @@ export function Editor({
   // from it, once changes stop for a moment. A paragraph being typed in is
   // left out (the text box shows it), so typing doesn't redraw the page.
   // The Eraser leaves nothing on top to show, so its result is part of the preview too.
-  const changes = useMemo(() => items.value.filter((i) => (isContent(i) && i.source) || i.kind === "erase"), [items.value]);
+  // A stroke still under way isn't saved yet: the wipe shows it.
+  const changes = useMemo(() => items.value.filter((i) => (isContent(i) && i.source) || (i.kind === "erase" && i.id !== erasing)), [items.value, erasing]);
   const previewKey = useMemo(() => JSON.stringify(changes.map((i) => (
     { ...i, image: i.image ? `${i.image.length}:${i.image.slice(-64)}` : undefined, ...(i.id === editing ? { removed: true } : {}) }
   ))), [changes, editing]);
@@ -411,7 +424,29 @@ export function Editor({
     items.set((l) => [...l, it]);
     // A stroke being drawn isn't selected: no frame grows around it as the pen moves.
     setSel(["path", "line", "arrow", "erase"].includes(kind) ? null : it.id);
-    if (kind === "erase") setErasing(it.id);
+    if (kind === "erase") {
+      setErasing(it.id);
+      const hit = touchedBy(page, [[p.x, p.y]], eraserSize / 2);
+      eraseMode.current = hit.length ? "items" : "page";
+      if (hit.length) items.set((l) => l.filter((o) => !hit.includes(o.id)), false);
+      // The page as shown, to read the paper's colour from.
+      const im = pageImg.current;
+      paper.current = null;
+      if (im?.complete && im.naturalWidth) {
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(width);
+        cv.height = Math.round(height);
+        const ctx = cv.getContext("2d", { willReadFrequently: true });
+        try {
+          ctx?.drawImage(im, 0, 0, cv.width, cv.height);
+          paper.current = ctx;
+        } catch {
+          // Not readable: the wipe is white.
+        }
+      }
+      wiped.current.set(it.id, []);
+      if (eraseMode.current === "page") wipeTo(it.id, [p.x, p.y], [p.x, p.y]);
+    }
     drag.current = { kind: "new", id: it.id, x0: p.x, y0: p.y };
   };
 
@@ -441,7 +476,14 @@ export function Editor({
     if (d.kind === "new" && d.id) {
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
-      if (it.kind === "path" || it.kind === "erase") patch(d.id, { points: [...(it.points ?? []), [p.x, p.y]] }, false);
+      if (it.kind === "erase") {
+        const last = it.points?.[it.points.length - 1] ?? [p.x, p.y];
+        const r = eraserSize / 2;
+        const hit = touchedBy(page, along([last, [p.x, p.y]], r), r, it.id);
+        items.set((l) => l.filter((o) => !hit.includes(o.id)).map((o) => (o.id === it.id ? { ...o, points: [...(o.points ?? []), [p.x, p.y]] } : o)), false);
+        if (hit.includes(sel ?? "")) setSel(null);
+        if (eraseMode.current === "page") wipeTo(it.id, last, [p.x, p.y]);
+      } else if (it.kind === "path") patch(d.id, { points: [...(it.points ?? []), [p.x, p.y]] }, false);
       else if (it.kind === "line" || it.kind === "arrow") patch(d.id, { points: [[d.x0, d.y0], [p.x, p.y]], ...box }, false);
       else patch(d.id, box, false);
       return;
@@ -468,19 +510,22 @@ export function Editor({
   // touched goes; if it touched none of that, the stroke erases the page
   // itself, along its path (saving empties it: edit.ts erase areas), shown
   // by the preview. Either way it's one step to undo.
-  const finishErase = (it: EditorItem) => {
-    setErasing(null);
+  // The points a brush of radius r (in points) covers along raw, filled in
+  // between the ones the pointer reported, so a quick swipe can't jump over a thin line.
+  const along = (raw: [number, number][], r: number) => {
     const pw = size?.w ?? 612, ph = size?.h ?? 792;
-    // Distances in points, so the brush is round on the page.
-    const r = (it.stroke ?? eraserSize) / 2;
-    // The stroke filled in between the points the pointer reported, so a quick swipe can't jump over a thin line.
-    const raw = it.points ?? [];
     const pts: [number, number][] = raw.slice(0, 1);
     for (let k = 1; k < raw.length; k++) {
       const [ax, ay] = raw[k - 1], [bx, by] = raw[k];
       const steps = Math.max(1, Math.ceil(Math.hypot((bx - ax) * pw, (by - ay) * ph) / Math.max(1, r * 0.5)));
       for (let j = 1; j <= steps; j++) pts.push([ax + ((bx - ax) * j) / steps, ay + ((by - ay) * j) / steps]);
     }
+    return pts;
+  };
+
+  // What was drawn or added on page pg that a brush of radius r at pts touches.
+  const touchedBy = (pg: number, pts: [number, number][], r: number, skip?: string) => {
+    const pw = size?.w ?? 612, ph = size?.h ?? 792;
     const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot((ax - bx) * pw, (ay - by) * ph);
     const segDist = (px: number, py: number, [ax, ay]: [number, number], [bx, by]: [number, number]) => {
       const vx = (bx - ax) * pw, vy = (by - ay) * ph, wx = (px - ax) * pw, wy = (py - ay) * ph;
@@ -489,7 +534,7 @@ export function Editor({
       return Math.hypot(wx - k * vx, wy - k * vy);
     };
     const touches = (o: EditorItem) => {
-      if (o.page !== it.page || o.id === it.id || isContent(o) || o.kind === "erase") return false;
+      if (o.page !== pg || o.id === skip || isContent(o) || o.kind === "erase") return false;
       if ((o.kind === "path" || o.kind === "line" || o.kind === "arrow") && o.points?.length) {
         const reach = r + (o.stroke ?? 2) / 2;
         return pts.some(([px, py]) => o.points!.some((q, k) => (k ? segDist(px, py, o.points![k - 1], q) : dist(px, py, q[0], q[1])) <= reach));
@@ -497,7 +542,87 @@ export function Editor({
       const mx = r / pw, my = r / ph;
       return pts.some(([px, py]) => px >= o.x - mx && px <= o.x + o.w + mx && py >= o.y - my && py <= o.y + o.h + my);
     };
-    const hit = items.value.filter(touches).map((o) => o.id);
+    return items.value.filter(touches).map((o) => o.id);
+  };
+
+  // The colour of the paper around (x, y) on the page as shown, r pixels out:
+  // the lighter middle of a ring of samples, so the text the ring crosses doesn't count.
+  const paperAround = (x: number, y: number, r: number) => {
+    const ctx = paper.current;
+    if (!ctx) return "#ffffff";
+    const seen: [number, number, number][] = [];
+    for (let k = 0; k < 12; k++) {
+      const sx = Math.round(x + Math.cos((k * Math.PI) / 6) * r), sy = Math.round(y + Math.sin((k * Math.PI) / 6) * r);
+      if (sx < 0 || sy < 0 || sx >= ctx.canvas.width || sy >= ctx.canvas.height) continue;
+      const d = ctx.getImageData(sx, sy, 1, 1).data;
+      seen.push([d[0], d[1], d[2]]);
+    }
+    if (!seen.length) return "#ffffff";
+    seen.sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
+    const [cr, cg, cb] = seen[Math.floor(seen.length * 0.7)];
+    return `rgb(${cr} ${cg} ${cb})`;
+  };
+
+  // Paints the wipe: every stroke not yet in the preview, the one under way included.
+  const paintWipe = () => {
+    const cv = wipe.current;
+    if (!cv) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(width * dpr) || cv.height !== Math.round(height * dpr)) {
+      cv.width = Math.round(width * dpr);
+      cv.height = Math.round(height * dpr);
+    }
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const shown = shownKey.current;
+    for (const it of items.value) {
+      const segs = wiped.current.get(it.id);
+      if (!segs || it.page !== page || (it.id !== erasing && shown.includes(`"${it.id}"`))) continue;
+      for (const s of segs) {
+        ctx.strokeStyle = s.c;
+        ctx.lineWidth = s.w * ptToPx;
+        ctx.beginPath();
+        ctx.moveTo(s.a[0] * width, s.a[1] * height);
+        ctx.lineTo(s.b[0] * width, s.b[1] * height);
+        ctx.stroke();
+      }
+    }
+  };
+
+  // Undo, redo, another page or a new size: the wipe drawn again for what's there now.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => paintWipe(), [items.value, page, width, height]);
+
+  // One more bit of the stroke under way, from a to b, wiped at once.
+  const wipeTo = (id: string, a: [number, number], b: [number, number]) => {
+    const segs = wiped.current.get(id);
+    const ctx = wipe.current?.getContext("2d");
+    if (!segs) return;
+    const r = (eraserSize / 2) * ptToPx;
+    const s = { c: paperAround(b[0] * width, b[1] * height, r * 1.5 + 2), w: eraserSize, a, b };
+    segs.push(s);
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineCap = "round";
+    ctx.strokeStyle = s.c;
+    ctx.lineWidth = s.w * ptToPx;
+    ctx.beginPath();
+    ctx.moveTo(a[0] * width, a[1] * height);
+    ctx.lineTo(b[0] * width, b[1] * height);
+    ctx.stroke();
+  };
+
+  const finishErase = (it: EditorItem) => {
+    setErasing(null);
+    // Distances in points, so the brush is round on the page.
+    const r = (it.stroke ?? eraserSize) / 2;
+    const pts = along(it.points ?? [], r);
+    const hit = touchedBy(it.page, pts, r, it.id);
     const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
     items.set((l) => {
       const rest = l.filter((o) => !hit.includes(o.id));
@@ -540,6 +665,13 @@ export function Editor({
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
       if (it.kind === "erase") {
+        // Started on something drawn: that's gone already, and the page is left as it was.
+        if (eraseMode.current === "items") {
+          setErasing(null);
+          wiped.current.delete(it.id);
+          items.set((l) => l.filter((o) => o.id !== it.id), false);
+          return;
+        }
         finishErase(it);
         return;
       }
@@ -998,7 +1130,9 @@ export function Editor({
             onPointerUp={onUp}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {img && <img src={img} alt="" draggable={false} data-preview={img !== original || undefined} className="absolute inset-0 h-full w-full" />}
+            {img && <img ref={pageImg} src={img} alt="" draggable={false} data-preview={img !== original || undefined} className="absolute inset-0 h-full w-full"
+              onLoad={() => { shownKey.current = img !== original && preview ? preview.key : ""; paintWipe(); }} />}
+            <canvas ref={wipe} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
 
             {/* Existing form fields */}
             {toolId === "forms" && fields.filter((f) => f.page === page && f.rect).map((f) => (
@@ -1127,16 +1261,8 @@ export function Editor({
                   </div>
                 );
               }
-              // The Eraser leaves nothing on the page to pick: while it moves, its track; afterwards the preview shows the result.
-              if (i.kind === "erase") {
-                if (erasing !== i.id || !i.points) return null;
-                return (
-                  <svg key={i.id} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`}>
-                    <polyline points={i.points.map(([x, y]) => `${x * width},${y * height}`).join(" ")} fill="none" stroke="rgb(120 120 140 / 0.35)"
-                      strokeWidth={(i.stroke ?? eraserSize) * ptToPx} strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                );
-              }
+              // The Eraser leaves nothing on the page to pick: the wipe shows it, then the preview.
+              if (i.kind === "erase") return null;
               if (i.kind === "path" || i.kind === "line" || i.kind === "arrow") {
                 // A drawing selected shows a light dashed outline, not a box (it isn't one), and no resize handle.
                 return <div key={i.id} {...common} className={`absolute cursor-move rounded-sm ${isSel ? "outline-dashed outline-1 outline-offset-4 outline-[color-mix(in_oklab,var(--accent)_70%,transparent)]" : ""}`} style={{ ...boxStyle, minWidth: 6, minHeight: 6 }} />;
