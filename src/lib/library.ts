@@ -11,7 +11,9 @@ const MAX_FILES = 12;
 const MAX_BYTES = 300 * 1024 * 1024;
 
 export type Recent = { id: string; name: string; size: number; type: string; opened: number; page: number; pages: number };
-type Row = Recent & { data: Blob };
+// The bytes, not a Blob: Safari can't keep Blobs in IndexedDB in a private
+// window. Rows kept earlier may still hold a Blob.
+type Row = Recent & { data: ArrayBuffer | Blob };
 
 const idOf = (f: { name: string; size: number }) => `${f.name}:${f.size}`;
 
@@ -56,8 +58,8 @@ export async function recentFiles(): Promise<Recent[]> {
   return (await all()).map(({ id, name, size, type, opened, page, pages }) => ({ id, name, size, type, opened, page, pages }));
 }
 
-// The file's bytes are read while the database is still open: Firefox can't
-// read a file kept in IndexedDB once its connection has closed.
+// An older row's Blob is read while the database is still open: Firefox
+// can't read a file kept in IndexedDB once its connection has closed.
 export function openRecent(id: string): Promise<File | null> {
   return new Promise((resolve) => {
     if (typeof indexedDB === "undefined") return resolve(null);
@@ -74,7 +76,7 @@ export function openRecent(id: string): Promise<File | null> {
       req.onsuccess = async () => {
         const row = req.result as Row | undefined;
         try {
-          resolve(row ? new File([await row.data.arrayBuffer()], row.name, { type: row.type || "application/pdf", lastModified: row.opened }) : null);
+          resolve(row ? new File([row.data instanceof Blob ? await row.data.arrayBuffer() : row.data], row.name, { type: row.type || "application/pdf", lastModified: row.opened }) : null);
         } catch {
           resolve(null);
         } finally {
@@ -92,8 +94,9 @@ export async function remember(file: File, pages: number) {
   void navigator.storage?.persist?.().catch(() => {});
   const id = idOf(file);
   const old = await withStore<Row>("readonly", (s) => s.get(id));
-  // The file as opened (in memory): a copy read back from here can't be stored again in Firefox.
-  await withStore("readwrite", (s) => s.put({ id, name: file.name, size: file.size, type: file.type, opened: Date.now(), page: old?.page ?? 0, pages, data: file } satisfies Row));
+  const data = await file.arrayBuffer().catch(() => null);
+  if (!data) return;
+  await withStore("readwrite", (s) => s.put({ id, name: file.name, size: file.size, type: file.type, opened: Date.now(), page: old?.page ?? 0, pages, data } satisfies Row));
   const rows = await all();
   let bytes = 0;
   const drop = rows.filter((r, i) => (bytes += r.size) > MAX_BYTES || i >= MAX_FILES).map((r) => r.id);
