@@ -2,10 +2,11 @@ name: CI
 
 # Every push, on any branch, so a problem shows before it reaches main;
 # main only takes changes whose run is green (branch protection, see
-# docs/ci.md), and the site deploys from main.
+# docs/ci.md), and the site deploys from main. A pull request shows the
+# checks of its branch's push run (they're the same commit), so there's no
+# second run for the pull request itself.
 on:
   push:
-  pull_request:
   workflow_dispatch:
 
 concurrency:

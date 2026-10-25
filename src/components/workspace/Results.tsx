@@ -137,6 +137,7 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
           {t("res.saved", { pct: Math.round((1 - saved[2] / saved[1]) * 100), from: humanSize(saved[1]), to: humanSize(saved[2]) })}
         </p>
       )}
+      {saved && <Shrink ratio={saved[2] / saved[1]} />}
       {kind === "target" && (
         <p className="tabular mt-2 text-[15px] text-ink-2">
           {t("res.target", { to: kb(n3), target: kb(n1), from: humanSize(n2) })}
@@ -317,5 +318,20 @@ function Summary({ output, named }: { output: Output; named: boolean }) {
         <button className="btn btn-quiet" onClick={() => save(new Blob([text + "\n"], { type: "text/plain" }), `${base}.txt`)}><Download size={17} /> {t("res.downloadTxt")}</button>
       </div>
     </section>
+  );
+}
+
+// Compress: the file's size as a bar that shrinks from what it was to what it
+// is now, once the result is in. The sentence above says the same in words.
+function Shrink({ ratio }: { ratio: number }) {
+  const [now, setNow] = useState(1);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setNow(Math.max(0.02, ratio)));
+    return () => cancelAnimationFrame(id);
+  }, [ratio]);
+  return (
+    <div aria-hidden data-shrink className="mx-auto mt-3 h-2.5 w-full max-w-[320px] overflow-hidden rounded-full bg-surface-2">
+      <div className="shrink-bar h-full rounded-full bg-success" style={{ width: `${now * 100}%` }} />
+    </div>
   );
 }

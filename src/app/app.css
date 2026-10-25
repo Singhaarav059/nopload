@@ -467,3 +467,80 @@
 .page-swipe { transition: box-shadow 200ms, translate 420ms var(--ease-spring), rotate 420ms var(--ease-spring), opacity 300ms; }
 .page-swipe[data-swiping] { transition: box-shadow 200ms; cursor: grabbing; }
 .page-swipe img, .page-swipe canvas, .page-swipe > div { transition: transform 460ms var(--ease-spring); }
+
+/* ---------- Each tool's own motion (src/lib/paper.ts paperMotion) ----------
+   Added to the paper's 2D version: what the tool does, shown on the sheet. */
+.p2d-b > i { display: block; height: 5%; margin: 0 12% 7%; border-radius: 2px; background: var(--line-strong); opacity: 0.7; }
+.p2d-b > i:first-child { margin-top: 16%; width: 55%; background: var(--ink); opacity: 0.85; }
+
+/* protect / unlock: a padlock closes on the page, or springs open */
+.p2d-padlock { position: absolute; left: 50%; top: 52%; width: 34%; translate: -50% -50%; aspect-ratio: 1; }
+.p2d-body { position: absolute; inset: 42% 0 0; border-radius: 18%; background: var(--accent); box-shadow: 0 6px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent); }
+.p2d-shackle { position: absolute; left: 20%; right: 20%; top: 0; height: 62%; border: 4px solid var(--ink); border-bottom: 0; border-radius: 999px 999px 0 0; transform-origin: 100% 100%; }
+.p2d-padlock .p2d-body { animation: p2d-lock-body 2.6s var(--ease-out) infinite; }
+.p2d-padlock .p2d-shackle { animation: p2d-lock 2.6s var(--ease-spring) infinite; }
+.p2d-unlock .p2d-shackle { animation-name: p2d-unlock; }
+@keyframes p2d-lock { 0%, 20% { translate: 0 -28%; } 45%, 90% { translate: 0 0; } 100% { translate: 0 -28%; } }
+@keyframes p2d-unlock { 0%, 25% { translate: 0 0; rotate: 0deg; } 50%, 85% { translate: 0 -24%; rotate: 32deg; } 100% { translate: 0 0; rotate: 0deg; } }
+@keyframes p2d-lock-body { 0%, 44% { scale: 1; } 50% { scale: 1.12 0.92; } 58%, 100% { scale: 1; } }
+
+/* sign: a pen line writes itself across the foot of the page */
+.p2d-sig { position: absolute; inset-inline: 10%; bottom: 10%; width: 80%; overflow: visible; }
+.p2d-sig path { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 260; animation: p2d-sign 2.6s var(--ease-in-out) infinite; }
+@keyframes p2d-sign { 0%, 10% { stroke-dashoffset: 260; opacity: 1; } 60%, 90% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+
+/* redact: black bars sweep over the lines, one by one */
+.p2d-bars { position: absolute; inset: 0; padding: 16% 12%; display: flex; flex-direction: column; gap: 7%; padding-top: calc(16% + 12%); }
+.p2d-bars > u { display: block; height: 7%; border-radius: 2px; background: var(--ink); transform-origin: left; animation: p2d-redact 2.6s var(--ease-out) infinite; }
+.p2d-bars > u:nth-child(1) { width: 92%; }
+.p2d-bars > u:nth-child(2) { width: 80%; animation-delay: 0.2s; }
+.p2d-bars > u:nth-child(3) { width: 64%; animation-delay: 0.4s; }
+[dir="rtl"] .p2d-bars > u { transform-origin: right; }
+@keyframes p2d-redact { 0%, 15% { scale: 0 1; opacity: 1; } 45%, 85% { scale: 1 1; opacity: 1; } 100% { scale: 1 1; opacity: 0; } }
+
+/* watermark: a stamp comes down on the page and leaves its mark */
+.p2d-stampmark { position: absolute; left: 18%; right: 18%; top: 40%; height: 18%; border: 3px solid var(--accent); border-radius: 6px; rotate: -14deg; animation: p2d-stamp 2.6s var(--ease-out) infinite; }
+@keyframes p2d-stamp { 0%, 20% { opacity: 0; scale: 1.8; } 38% { opacity: 1; scale: 0.94; } 46%, 88% { opacity: 0.55; scale: 1; } 100% { opacity: 0; } }
+
+/* page numbers: the number at the foot counts on */
+.p2d-num { position: absolute; bottom: 6%; left: 50%; translate: -50% 0; height: 14%; aspect-ratio: 1.4; overflow: hidden; border-radius: 4px; background: color-mix(in oklab, var(--accent) 16%, transparent); font: 600 clamp(9px, 1.4vw, 13px) / 1 var(--font-geist-mono), monospace; color: var(--accent); }
+.p2d-num > span { display: grid; place-items: center; height: 100%; animation: p2d-num 2.6s var(--ease-spring) infinite; }
+@keyframes p2d-num { 0%, 25% { translate: 0 0; } 33%, 58% { translate: 0 -100%; } 66%, 92% { translate: 0 -200%; } 100% { translate: 0 0; } }
+
+/* compare: the two versions slide apart, and the lines that differ light up */
+.p2d-compare .p2d-b { opacity: 1; animation-name: p2d-compare-b; }
+.p2d-compare .p2d-a { animation-name: p2d-compare-a; }
+.p2d-compare .p2d-a > i:nth-child(3), .p2d-compare .p2d-b > i:nth-child(3) { animation: p2d-differ 2.6s infinite; }
+@keyframes p2d-compare-a { 0%, 15% { translate: 0 0; } 40%, 85% { translate: 32% 0; } 100% { translate: 0 0; } }
+@keyframes p2d-compare-b { 0%, 15% { translate: 0 0; } 40%, 85% { translate: -32% 0; } 100% { translate: 0 0; } }
+@keyframes p2d-differ { 0%, 45% { background: var(--line-strong); } 55%, 85% { background: var(--coral); opacity: 1; } 100% { background: var(--line-strong); } }
+
+/* summarize / chat: the lines gather into one highlighted line */
+.p2d-summarize .p2d-a > i:not(:first-child) { animation: p2d-gather 2.6s var(--ease-in-out) infinite; }
+.p2d-gist { position: absolute; left: 12%; width: 70%; top: 46%; height: 8%; border-radius: 3px; background: var(--accent); transform-origin: left; animation: p2d-gist 2.6s var(--ease-out) infinite; }
+@keyframes p2d-gather { 0%, 15% { translate: 0 0; opacity: 0.7; } 45%, 85% { translate: 0 var(--to, 0); opacity: 0; } 100% { translate: 0 0; opacity: 0.7; } }
+.p2d-summarize .p2d-a > i:nth-child(2) { --to: 120%; }
+.p2d-summarize .p2d-a > i:nth-child(4) { --to: -120%; }
+@keyframes p2d-gist { 0%, 35% { scale: 0 1; opacity: 1; } 55%, 88% { scale: 1 1; opacity: 1; } 100% { scale: 1 1; opacity: 0; } }
+
+/* translate: the page turns over into the same page in another language */
+.p2d-translate { perspective: 600px; }
+.p2d-translate .p2d-a, .p2d-translate .p2d-b { backface-visibility: hidden; }
+.p2d-translate .p2d-a { animation-name: p2d-face; }
+.p2d-translate .p2d-b { opacity: 1; animation-name: p2d-back; }
+.p2d-translate .p2d-b > i { background: var(--accent); opacity: 0.55; border-radius: 999px; }
+@keyframes p2d-face { 0%, 20% { transform: rotateY(0); } 45%, 80% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+@keyframes p2d-back { 0%, 20% { transform: rotateY(-180deg); } 45%, 80% { transform: rotateY(0); } 100% { transform: rotateY(180deg); } }
+
+/* OCR / clean up scans: lines of text appear where the scan bar passes */
+.p2d-ocr .p2d-mark { inset-inline: -6%; height: 2px; top: 0; background: var(--accent); box-shadow: 0 0 12px var(--accent); opacity: 1; animation: p2d-scan-down 2.6s linear infinite; }
+.p2d-ocr .p2d-a > i { transform-origin: left; animation: p2d-ocr-line 2.6s linear infinite; }
+.p2d-ocr .p2d-a > i:nth-child(1) { animation-delay: 0s; }
+@keyframes p2d-scan-down { 0% { top: 4%; opacity: 1; } 80% { top: 94%; opacity: 1; } 100% { top: 94%; opacity: 0; } }
+@keyframes p2d-ocr-line { 0% { opacity: 0.12; } 30% { opacity: 0.12; } 40%, 90% { opacity: 0.9; background: var(--ink); } 100% { opacity: 0.12; } }
+.p2d-ocr .p2d-a > i:nth-child(2) { animation-delay: 0.35s; }
+.p2d-ocr .p2d-a > i:nth-child(3) { animation-delay: 0.7s; }
+.p2d-ocr .p2d-a > i:nth-child(4) { animation-delay: 1.05s; }
+
+/* Compress's result: the size bar shrinks to the new size, with a little bounce. */
+.shrink-bar { transition: width 1100ms var(--ease-spring) 450ms; }

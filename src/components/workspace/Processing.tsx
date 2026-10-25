@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { useI18n } from "../I18n";
 import { PaperStage } from "../paper/PaperStage";
-import { paperAction, reducedMotion } from "@/lib/paper";
+import { paperAction, paperMotion, reducedMotion } from "@/lib/paper";
 import type { ToolId } from "@/lib/tools";
 
 // While a tool works: its sheet performs the tool's action, and the bar and
@@ -34,7 +34,7 @@ export function Processing({ tool, value, label }: { tool: ToolId; value: number
 
   return (
     <>
-      <PaperStage mode={paperAction(tool)} className="h-[200px] w-full max-w-[320px] sm:h-[240px]" />
+      <PaperStage mode={paperAction(tool)} motion={paperMotion(tool)} className="h-[200px] w-full max-w-[320px] sm:h-[240px]" />
       <p className="mt-4 text-[17px] font-medium tracking-[-0.01em]">{t("ws.processing")}</p>
       {label && <p className="mt-1 text-[14px] text-muted">{label}</p>}
       <div className="relative mt-6 h-1.5 w-full overflow-hidden rounded-full bg-line">

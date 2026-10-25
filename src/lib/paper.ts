@@ -17,6 +17,24 @@ const ACTIONS: Record<PaperAction, ToolId[]> = {
   read: ["ocr", "summarize", "chat", "listen", "translate"],
 };
 
+// Tools whose own action reads better than their family's: drawn in 2D
+// (Paper2D) whatever the device, since the 3D scene has the families only.
+export type PaperMotion = "lock" | "unlock" | "sign" | "redact" | "stamp" | "number" | "compare" | "summarize" | "translate" | "ocr";
+const MOTIONS: Record<PaperMotion, ToolId[]> = {
+  lock: ["protect"],
+  unlock: ["unlock"],
+  sign: ["sign", "verify"],
+  redact: ["redact", "sanitize"],
+  stamp: ["watermark"],
+  number: ["pageNumbers", "headerFooter"],
+  compare: ["compare"],
+  summarize: ["summarize", "chat"],
+  translate: ["translate"],
+  ocr: ["ocr", "cleanScans"],
+};
+export const paperMotion = (tool: ToolId): PaperMotion | null =>
+  (Object.entries(MOTIONS) as [PaperMotion, ToolId[]][]).find(([, tools]) => tools.includes(tool))?.[0] ?? null;
+
 export function paperAction(tool: ToolId): PaperAction {
   for (const [action, tools] of Object.entries(ACTIONS) as [PaperAction, ToolId[]][]) if (tools.includes(tool)) return action;
   return "convert";
