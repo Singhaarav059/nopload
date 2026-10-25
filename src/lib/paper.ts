@@ -9,7 +9,7 @@ export type PaperMode = "hero" | PaperAction;
 const ACTIONS: Record<PaperAction, ToolId[]> = {
   merge: ["merge", "mix", "jpgToPdf", "booklet", "nUp", "scan", "attachments"],
   split: ["split", "extract", "remove", "removeBlank"],
-  compress: ["compress", "linearize", "grayscale", "examKit", "repair", "flatten"],
+  compress: ["compress", "linearize", "grayscale", "examKit", "repair", "flatten", "cleanScans"],
   seal: ["protect", "unlock", "sign", "verify", "redact", "sanitize", "compare"],
   turn: ["rotate", "organize", "crop", "resize"],
   convert: ["wordToPdf", "pptToPdf", "excelToPdf", "htmlToPdf", "pdfToJpg", "pdfToWord", "pdfToPpt", "pdfToExcel", "pdfToPdfa", "pdfToMarkdown", "accessible"],

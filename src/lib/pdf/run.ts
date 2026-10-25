@@ -110,6 +110,15 @@ export async function runTool(id: ToolId, files: File[], o: Opts, progress?: Pro
       const { ocr } = await import("./optimize");
       return each(files, progress, (f, p) => ocr(f, { ocrLang: s(o.ocrLang), dpi: s(o.dpi), ocrEngine: s(o.ocrEngine) }, p, signal), signal);
     }
+    case "cleanScans": {
+      const { cleanScans } = await import("./cleanscan");
+      // A step saved before an option existed gets its default (on).
+      const on = (v: unknown) => v !== false;
+      return each(files, progress, (f, p) => cleanScans(f, {
+        straighten: on(o.cleanStraighten), whiten: on(o.cleanWhiten), upright: on(o.cleanUpright), borders: on(o.cleanBorders),
+        color: s(o.cleanColor) || "keep", dpi: s(o.dpi) || "200", ocr: on(o.cleanOcr), ocrLang: s(o.ocrLang) || "eng",
+      }, p, signal), signal);
+    }
     case "jpgToPdf": {
       const { imagesToPdf } = await import("./convert");
       return imagesToPdf(files, files.map((f) => f.name), {
@@ -356,6 +365,9 @@ export async function prepare(id: ToolId): Promise<unknown> {
       return Promise.all([import("./tag"), (await import("./qpdf")).prepareQpdf(), (await import("./common")).pdfjs()]);
     case "grayscale":
       return Promise.all([import("./gray"), (await import("./qpdf")).prepareQpdf(), (await import("./jpeg")).prepareJpeg()]);
+    // Tesseract, which making the result searchable needs, is left to first use as for OCR.
+    case "cleanScans":
+      return Promise.all([import("./cleanscan"), (await import("./qpdf")).prepareQpdf(), (await import("./jpeg")).prepareJpeg(), (await import("./common")).pdfjs()]);
     case "protect":
     case "unlock":
       return (await import("./security")).prepare();

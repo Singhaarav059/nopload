@@ -60,7 +60,7 @@ export type ToolId =
   | "unlock" | "protect" | "sign" | "verify" | "redact" | "compare"
   | "metadata" | "bookmarks" | "flatten" | "attachments" | "sanitize" | "linearize"
   | "nUp" | "booklet" | "removeBlank" | "mix" | "resize" | "grayscale" | "headerFooter"
-  | "listen" | "accessible";
+  | "listen" | "accessible" | "cleanScans";
 
 export type Tool = {
   id: ToolId;
@@ -254,6 +254,21 @@ const ALL: Tool[] = [
       // PaddleOCR (src/lib/pdf/paddle.ts); downloads about 36 MB the first time.
       { key: "ocrEngine", type: "select", choices: ["standard", "accurate"], default: "standard", when: { key: "ocrLang", is: PADDLE_LANGS } },
       { key: "dpi", type: "select", choices: ["150", "200", "300"], default: "200" },
+    ],
+  },
+  {
+    // Scanned pages straightened, turned upright, trimmed and whitened (src/lib/pdf/cleanscan.ts).
+    id: "cleanScans", slug: "clean-up-scans", category: "optimize", icon: "BrushCleaning", mode: "files",
+    runtime: "browser", accept: PDF, multiple: true, chainable: true, isNew: true,
+    options: [
+      { key: "cleanStraighten", type: "toggle", default: true },
+      { key: "cleanUpright", type: "toggle", default: true },
+      { key: "cleanBorders", type: "toggle", default: true },
+      { key: "cleanWhiten", type: "toggle", default: true },
+      { key: "cleanColor", type: "select", choices: ["keep", "gray", "bw"], default: "keep" },
+      { key: "dpi", type: "select", choices: ["150", "200", "300"], default: "200" },
+      { key: "cleanOcr", type: "toggle", default: true },
+      { key: "ocrLang", type: "multi", choices: OCR_LANGS, max: MAX_OCR_LANGS, default: "eng", when: { key: "cleanOcr", is: [true] } },
     ],
   },
   // ── Convert to PDF

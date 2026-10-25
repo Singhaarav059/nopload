@@ -153,9 +153,9 @@ export async function autoOcr(file: File, o: { ocrLang: string }, progress?: Pro
   return { file: new File([r.bytes as BlobPart], file.name, { type: "application/pdf" }), pages: r.pages, note: r.note ?? "ocrUsed" };
 }
 
-const IMAGE_OPS = ["paintImageXObject", "paintInlineImageXObject", "paintImageXObjectRepeat", "paintInlineImageXObjectGroup", "paintImageMaskXObject"] as const;
+export const IMAGE_OPS = ["paintImageXObject", "paintInlineImageXObject", "paintImageXObjectRepeat", "paintInlineImageXObjectGroup", "paintImageMaskXObject"] as const;
 // Share of the page a picture must cover for the page to count as a scan.
-const SCAN_COVER = 0.5;
+export const SCAN_COVER = 0.5;
 
 type Matrix = [number, number, number, number, number, number];
 const mul = (m: Matrix, n: Matrix): Matrix => [
@@ -176,7 +176,7 @@ const COVER_GRID = 64;
 // or tiles counts like one stored whole: pictures are drawn into the unit
 // square under the current transform, which save, restore, transform and
 // form XObjects change.
-function imageCover(ops: { fnArray: number[]; argsArray: unknown[][] }, OPS: Record<string, number>, view: number[], images: Set<number>) {
+export function imageCover(ops: { fnArray: number[]; argsArray: unknown[][] }, OPS: Record<string, number>, view: number[], images: Set<number>) {
   const [vx0, vy0, vx1, vy1] = view;
   const [px0, px1, py0, py1] = [Math.min(vx0, vx1), Math.max(vx0, vx1), Math.min(vy0, vy1), Math.max(vy0, vy1)];
   const cw = (px1 - px0) / COVER_GRID || 1, ch = (py1 - py0) / COVER_GRID || 1;

@@ -163,7 +163,10 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
         </p>
       )}
       {first?.note === "tagKept" && <p className="mt-2 text-[15px] text-ink-2">{t("res.tagKept")}</p>}
-      {total("grayPartial:") > 0 && <p className="mt-2 text-[15px] text-muted">{t("res.grayPartial", { n: total("grayPartial:") })}</p>}
+      {outputs.some((o) => o.note?.startsWith("cleaned:")) && (
+        <p className="mt-2 text-[15px] text-ink-2">{total("cleaned:") ? t("res.cleaned", { n: total("cleaned:") }) : t("res.cleanedNone")}</p>
+      )}
+      {total("grayPartial:") > 0 &&<p className="mt-2 text-[15px] text-muted">{t("res.grayPartial", { n: total("grayPartial:") })}</p>}
       {kind === "attached" && <p className="mt-2 text-[15px] text-ink-2">{t("res.attached", { n: n1 })}</p>}
       {sanitized && (
         <p className="mt-2 text-[15px] text-ink-2">

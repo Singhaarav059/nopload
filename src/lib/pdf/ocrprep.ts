@@ -25,10 +25,13 @@ const shrink = (g: Gray, maxSide: number): Gray => {
 
 // ── Background
 
-// Divides by a smooth estimate of the paper colour, so shadows and tints
-// become white and text keeps its contrast. Text is removed from the estimate
-// by taking the brightest pixel of each block.
-export function flattenBackground(g: Gray): Gray {
+// The paper colour on a grid of B-pixel blocks: the brightest pixel of each
+// block (`max`, which leaves the text out), then the brightest of it and its
+// neighbours (`level`), so blocks inside pictures or big dark areas take
+// their neighbours' paper colour.
+export type PaperGrid = { B: number; bw: number; bh: number; max: Float32Array; level: Float32Array };
+
+export function paperGrid(g: Gray): PaperGrid {
   const B = 24;
   const bw = Math.ceil(g.w / B);
   const bh = Math.ceil(g.h / B);
@@ -38,8 +41,7 @@ export function flattenBackground(g: Gray): Gray {
       const k = Math.floor(y / B) * bw + Math.floor(x / B);
       if (g.data[y * g.w + x] > max[k]) max[k] = g.data[y * g.w + x];
     }
-  // Blocks inside pictures or big dark areas take their neighbours' paper colour.
-  const smooth = new Float32Array(bw * bh);
+  const level = new Float32Array(bw * bh);
   for (let y = 0; y < bh; y++)
     for (let x = 0; x < bw; x++) {
       let best = 0;
@@ -48,8 +50,15 @@ export function flattenBackground(g: Gray): Gray {
           const yy = y + dy, xx = x + dx;
           if (yy >= 0 && yy < bh && xx >= 0 && xx < bw) best = Math.max(best, max[yy * bw + xx]);
         }
-      smooth[y * bw + x] = best;
+      level[y * bw + x] = best;
     }
+  return { B, bw, bh, max, level };
+}
+
+// Divides by a smooth estimate of the paper colour, so shadows and tints
+// become white and text keeps its contrast.
+export function flattenBackground(g: Gray): Gray {
+  const { B, bw, bh, level: smooth } = paperGrid(g);
   const out = new Uint8Array(g.w * g.h);
   for (let y = 0; y < g.h; y++) {
     const fy = Math.min(bh - 1, Math.max(0, y / B - 0.5));
@@ -68,7 +77,8 @@ export function flattenBackground(g: Gray): Gray {
 
 // ── Skew and orientation
 
-function otsu(g: Gray) {
+// The grey level that best splits ink from paper (Otsu 1979).
+export function otsu(g: Gray) {
   const hist = new Float64Array(256);
   for (const v of g.data) hist[v]++;
   const total = g.data.length;
@@ -167,10 +177,11 @@ export function rotate90(g: Gray, k: number): Gray {
   return { w, h, data: out };
 }
 
-// Rotates by -angle about the centre (undoing a skew of `angle`), white outside, bilinear.
-export function deskew(g: Gray, angle: number): Gray {
+// Rotates by -angle about the centre (undoing a skew of `angle`), bilinear.
+// What comes in from outside the image is `fill` (white).
+export function deskew(g: Gray, angle: number, fill = 255): Gray {
   if (!angle) return g;
-  const out = new Uint8Array(g.w * g.h).fill(255);
+  const out = new Uint8Array(g.w * g.h).fill(fill);
   const cx = g.w / 2, cy = g.h / 2;
   const c = Math.cos(angle), s = Math.sin(angle);
   for (let y = 0; y < g.h; y++)
