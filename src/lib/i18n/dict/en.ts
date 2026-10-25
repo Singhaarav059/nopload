@@ -735,7 +735,7 @@ const en = {
   "tool.crop.private": "The page preview and the crop are both handled inside your browser. The PDF is not uploaded, so you can trim statements or scans without anyone else seeing them. Closing the tab clears the document from memory.",
 
   "tool.edit.title": "Edit PDF online: change text, pictures and shapes",
-  "tool.edit.meta": "Edit the text, pictures and shapes already in a PDF, even on scans, and add your own text, images, drawings and white-out. Free, private and edited in your browser.",
+  "tool.edit.meta": "Edit the text, pictures and shapes already in a PDF, even on scans, and add text, images, drawings and white-out. Free, private and done in your browser.",
   "tool.edit.intro": "Edit PDF lets you change everything already in a PDF, much as you would in a word processor. Click a paragraph to retype it: it wraps again at its width in its own font. Click a picture to move, resize, turn, flip or replace it, or a shape to change its colours, and delete anything you don't want. Scanned pages are read with OCR, so you can retype a line in place. The page you see is drawn from the edited file itself, so what you see is what you save. You can also add new text, pictures, shapes, freehand marks, highlights and white-out, and undo any step. It's ideal for correcting a letter, updating a brochure or filling in a form that has no fields.",
   "tool.edit.step1": "Open the PDF. Use the arrows to move between pages and zoom in for detail.",
   "tool.edit.step2": "Pick a tool from the toolbar and click or drag on the page. Change size, colour, fill and line width, and undo or redo as you go.",
