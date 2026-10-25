@@ -1,5 +1,6 @@
 // Edit PDF's toolbar and markup tools in a real browser: every tool is named
-// under its icon; the Eraser removes text with no box left; a stamp, a tick,
+// under its icon; the Eraser removes text with no box left; a scribble with
+// the pen crosses a word out; a stamp, a tick,
 // an arrow, a note and a link are added. The saved file is read back: the
 // erased words are gone, the stamp's word is there, and the note and link are
 // real annotations.
@@ -135,6 +136,42 @@ await suite(async ({ name, browser, test }) => {
       return text.slice(0, 70);
     } catch (e) {
       await page.screenshot({ path: join(downloads, `${name}-failed.png`) }).catch(() => {});
+      throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
+    }
+  });
+
+  await test("a scribble with the pen crosses a word out", async () => {
+    try {
+      step = "open";
+      await open(page, "/en/edit-pdf");
+      await pick(page, [letter]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      const box = await page.locator("main img").first().boundingBox();
+      const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
+      step = "scribble";
+      // Back and forth over "business." (Helvetica 14 pt, x 202-262, baseline 660), as a hand would.
+      await tool("ed.draw").click();
+      await page.mouse.move(...at(200, 664));
+      await page.mouse.down();
+      for (let k = 0; k < 7; k++) await page.mouse.move(...at(k % 2 ? 200 : 264, 662 + (k % 3) * 2), { steps: 6 });
+      await page.mouse.up();
+      await page.locator("[data-poof]").first().waitFor({ state: "attached", timeout: 2000 });
+      if (await page.locator("[data-item=path]").count()) throw new Error("the scribble stayed as a drawing");
+      await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
+      step = "save";
+      const [dl] = await Promise.all([
+        page.waitForEvent("download", { timeout: 60000 }),
+        page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
+      ]);
+      const saved = join(downloads, `${name}-scribbled.pdf`);
+      await dl.saveAs(saved);
+      const pdf = await getDocument({ data: new Uint8Array(readFileSync(saved)), verbosity: 0 }).promise;
+      const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" ");
+      if (/business/.test(text)) throw new Error(`crossed-out word still there: ${text}`);
+      if (!/Thank you for your/.test(text) || !/SECRET/.test(text)) throw new Error(`text around it went: ${text}`);
+      return text.slice(0, 70);
+    } catch (e) {
+      await page.screenshot({ path: join(downloads, `${name}-scribble-failed.png`) }).catch(() => {});
       throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
     }
   });

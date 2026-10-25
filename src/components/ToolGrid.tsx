@@ -58,7 +58,7 @@ export function ToolGrid() {
         <h2 id="tools-title" className="reveal display text-[2rem] sm:text-[2.75rem]">{t("home.toolsTitle")}</h2>
         <p className="reveal mt-4 text-pretty text-[16px] leading-relaxed text-muted">{t("home.toolsBody")}</p>
       </div>
-      <div className="sticky top-16 z-20 -mx-4 mt-8 bg-[color-mix(in_oklab,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-[14px] sm:-mx-6 sm:px-6">
+      <div data-sticky-bar className="sticky top-16 z-20 -mx-4 mt-8 bg-[color-mix(in_oklab,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-[14px] sm:-mx-6 sm:px-6">
         <label className="relative block">
           <span className="sr-only">{t("home.searchPlaceholder")}</span>
           <Search size={18} strokeWidth={1.75} className="pointer-events-none absolute start-5 top-1/2 -translate-y-1/2 text-muted" />

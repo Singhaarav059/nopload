@@ -56,7 +56,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 isolate px-3 pt-2 sm:px-4">
+    <header data-site-header className="sticky top-0 z-40 isolate px-3 pt-2 sm:px-4">
       <div className="relative mx-auto flex h-14 max-w-[1240px] items-center gap-2 rounded-full ps-4 pe-2 sm:ps-5">
         {/* The frosted island is its own layer: a backdrop-filter on an
             ancestor would make it the containing block of the fixed menus below. */}
@@ -65,7 +65,7 @@ export function Header() {
           <Logo />
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav data-web-only className="hidden items-center gap-1 md:flex">
           <div ref={toolsRef} className="relative">
             <button
               className="inline-flex h-9 items-center gap-1 rounded-full px-3.5 text-[14px] font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink aria-expanded:bg-surface-2 aria-expanded:text-ink"
@@ -109,7 +109,7 @@ export function Header() {
         </nav>
 
         <div className="ms-auto flex items-center gap-1">
-          <div ref={langRef} className="relative hidden sm:block">
+          <div ref={langRef} data-web-only className="relative hidden sm:block">
             <button
               className="icon-btn h-9 w-auto gap-1.5 px-3 text-[13px] aria-expanded:bg-surface-2"
               aria-label={t("nav.language")}
@@ -143,7 +143,7 @@ export function Header() {
 
           <ThemeMenu />
 
-          <button className="icon-btn md:hidden" aria-label={t("nav.menu")} onClick={() => setMenu("mobile")}>
+          <button data-web-only className="icon-btn md:hidden" aria-label={t("nav.menu")} onClick={() => setMenu("mobile")}>
             <Menu size={22} />
           </button>
         </div>

@@ -1,0 +1,393 @@
+/* The installed app: the frame around the pages (src/components/AppShell.tsx)
+   and how it behaves on each system. Keyed off <html>:
+     data-os    ios | ipados | android | mac | windows | linux | chromeos
+     data-form  phone | tablet | desktop
+     data-app   standalone | wco      (opened as an installed app)
+     data-nav   tabs | rail | sidebar | fluent   (the navigation it gets)
+   set before the first paint by src/lib/device.ts. */
+
+/* Touch screens, app or not: no grey flash on tap, no double-tap delay. */
+:root:is([data-form="phone"], [data-form="tablet"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+:root:is([data-form="phone"], [data-form="tablet"]) :is(a, button, label, input, select, textarea) {
+  touch-action: manipulation;
+}
+
+/* ---------- App mode: what changes for every system ---------- */
+:root[data-app] {
+  --tabbar-h: 0px;
+  --side-w: 0px;
+  overscroll-behavior: none;
+}
+:root[data-app][data-nav="tabs"] { --tabbar-h: 54px; }
+:root[data-app][data-nav="tabs"][data-os="android"] { --tabbar-h: 80px; }
+:root[data-app][data-nav="rail"] { --side-w: 80px; }
+:root[data-app][data-nav="sidebar"] { --side-w: 264px; }
+:root[data-app][data-nav="fluent"] { --side-w: 280px; }
+
+:root[data-app] body {
+  overscroll-behavior-y: none;
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-inline-start: var(--side-w);
+}
+:root[data-app][data-sheet] body { overflow: hidden; }
+
+/* An app's controls aren't text to select or links to preview. */
+:root[data-app] :is(nav, header, button, .btn, .app-tab, .app-side-item, .app-launch) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The site's marketing parts stay on the website. */
+:root[data-app] :is([data-web-only], [data-site-footer]) { display: none !important; }
+
+/* The header becomes the app's title bar: flat, edge to edge, under the
+   status bar on phones and in the window's title bar where it's ours. */
+:root[data-app] header[data-site-header] {
+  padding: env(safe-area-inset-top) 0 0;
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+}
+:root[data-app] header[data-site-header] > div {
+  max-width: none;
+  height: 52px;
+  border-radius: 0;
+  padding-inline: 16px 10px;
+}
+:root[data-app] header[data-site-header] .header-scroll { display: none; }
+:root[data-app][data-form="phone"] header[data-site-header] > div { height: 46px; }
+/* Bars that stick under the header stick under the app's shorter one. */
+:root[data-app] [data-sticky-bar] { top: calc(52px + env(safe-area-inset-top)); }
+:root[data-app][data-form="phone"] [data-sticky-bar] { top: calc(46px + env(safe-area-inset-top)); }
+
+/* Desktop window with its own title bar (window-controls-overlay): the
+   header sits in the title bar's space and drags the window; the system's
+   buttons keep their corner. */
+:root[data-app="wco"] header[data-site-header] {
+  padding: 0;
+  padding-inline-start: env(titlebar-area-x, 0);
+  width: env(titlebar-area-width, 100%);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+:root[data-app="wco"] header[data-site-header] > div { height: env(titlebar-area-height, 40px); }
+:root[data-app="wco"] header[data-site-header] :is(a, button, input, select) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* ---------- Tab bar (phones, and narrow windows) ---------- */
+.app-tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: app-rise 420ms var(--ease-out) both;
+}
+.app-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--muted);
+  cursor: default;
+}
+.app-tab-icon {
+  display: grid;
+  place-items: center;
+  transition: transform 300ms var(--ease-spring), background-color 300ms var(--ease-out), color 200ms;
+}
+.app-tab:active .app-tab-icon { transform: scale(0.84); transition-duration: 90ms; }
+.app-tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* iPhone: frosted, hairline on top, icons tinted when chosen. */
+[data-tabbar="ios"] {
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  backdrop-filter: blur(22px) saturate(1.8);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  border-top: 0.5px solid var(--line-strong);
+}
+[data-tabbar="ios"] .app-tab { padding-top: 5px; justify-content: flex-start; }
+[data-tabbar="ios"] .app-tab-label { font-size: 10px; font-weight: 560; letter-spacing: 0.01em; }
+[data-tabbar="ios"] .app-tab[aria-current] { color: var(--brand); }
+
+/* Android: Material's navigation bar, a pill behind the chosen icon. */
+[data-tabbar="material"] {
+  background: var(--surface-2);
+}
+[data-tabbar="material"] .app-tab { gap: 4px; }
+[data-tabbar="material"] .app-tab-icon {
+  width: 64px;
+  height: 32px;
+  border-radius: 16px;
+}
+[data-tabbar="material"] .app-tab[aria-current] { color: var(--ink); }
+[data-tabbar="material"] .app-tab[aria-current] .app-tab-icon {
+  background: color-mix(in oklab, var(--brand) 24%, transparent);
+  animation: app-pill 360ms var(--ease-out);
+}
+[data-tabbar="material"] .app-tab-label { font-size: 12px; font-weight: 600; }
+
+/* ---------- Side navigation (tablets, desktops) ---------- */
+.app-side {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: 0;
+  z-index: 41;
+  width: var(--side-w);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  animation: app-slide-in 460ms var(--ease-out) both;
+}
+.app-side-drag { height: 8px; flex: none; }
+:root[data-app="wco"] .app-side-drag { height: env(titlebar-area-height, 40px); -webkit-app-region: drag; app-region: drag; }
+.app-side-top { padding: 6px 10px; display: grid; gap: 1px; }
+.app-side-list { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 4px 10px 24px; scrollbar-width: thin; }
+.app-side-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+  cursor: default;
+}
+.app-side-chev { transition: rotate 240ms var(--ease-out); opacity: 0; }
+.app-side-head:hover .app-side-chev { opacity: 1; }
+.app-side-head[aria-expanded="false"] .app-side-chev { rotate: -90deg; opacity: 1; }
+.app-side-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: default;
+  transition: background-color 160ms, color 160ms;
+}
+.app-side-item:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); }
+.app-side-item[aria-current] { background: color-mix(in oklab, var(--brand) 16%, transparent); color: var(--ink); font-weight: 560; }
+
+/* iPad and Mac: a translucent sidebar, like Finder's and Notes'. */
+[data-side="sidebar"] {
+  background: color-mix(in oklab, var(--surface-2) 74%, transparent);
+  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(30px) saturate(1.7);
+  border-inline-end: 1px solid var(--line);
+}
+:root[data-os="ipados"] [data-side="sidebar"] .app-side-item { height: 40px; border-radius: 11px; font-size: 15px; }
+:root[data-os="ipados"] [data-side="sidebar"] .app-side-head { font-size: 13px; }
+
+/* Windows: a navigation pane, the chosen item marked by a bar at its edge. */
+[data-side="fluent"] {
+  background: var(--surface-2);
+  border-inline-end: 1px solid var(--line);
+}
+[data-side="fluent"] .app-side-item { height: 36px; border-radius: 4px; }
+[data-side="fluent"] .app-side-item[aria-current] { background: color-mix(in oklab, var(--ink) 7%, transparent); }
+[data-side="fluent"] .app-side-item[aria-current]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  translate: 0 -50%;
+  border-radius: 2px;
+  background: var(--brand);
+  animation: app-indicator 300ms var(--ease-spring);
+}
+
+/* Android tablets and ChromeOS: Material's navigation rail. */
+[data-side="rail"] {
+  align-items: center;
+  gap: 12px;
+  padding-top: calc(env(safe-area-inset-top) + 64px);
+  background: var(--surface-2);
+}
+[data-side="rail"] .app-tab { gap: 4px; width: 100%; color: var(--ink-2); }
+[data-side="rail"] .app-tab-icon { width: 56px; height: 32px; border-radius: 16px; }
+[data-side="rail"] .app-tab[aria-current] .app-tab-icon { background: color-mix(in oklab, var(--brand) 24%, transparent); color: var(--ink); }
+[data-side="rail"] .app-tab-label { font-size: 12px; font-weight: 600; }
+
+/* ---------- Sheets ---------- */
+.app-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  align-items: end;
+}
+.app-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(12 9 22 / 0.34);
+  animation: app-fade 300ms var(--ease-out) both;
+  transition: opacity 260ms;
+  cursor: default;
+}
+.app-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  border-radius: 28px 28px 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: app-sheet-up 460ms var(--ease-out) both;
+  transition: translate 340ms var(--ease-out), scale 340ms var(--ease-out), opacity 260ms;
+}
+.app-sheet-grip { touch-action: none; flex: none; }
+.app-sheet-handle {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 8px auto 6px;
+  border-radius: 3px;
+  background: var(--line-strong);
+}
+.app-sheet-body { overflow: auto; overscroll-behavior: contain; }
+.app-sheet-wrap[data-leaving] .app-sheet { translate: 0 105%; }
+.app-sheet-wrap[data-leaving] .app-sheet-scrim { opacity: 0; }
+/* Bigger screens: a panel in the middle. */
+.app-sheet-wrap:not([data-phone]) { place-items: center; }
+.app-sheet-wrap:not([data-phone]) .app-sheet {
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(82dvh, 760px);
+  border-radius: 24px;
+  animation-name: app-pop;
+}
+.app-sheet-wrap:not([data-phone]) .app-sheet-handle { visibility: hidden; height: 0; margin: 6px; }
+.app-sheet-wrap:not([data-phone])[data-leaving] .app-sheet { translate: none; scale: 0.96; opacity: 0; }
+.app-sheet-wrap[data-os="windows"] .app-sheet { border-radius: 8px; }
+
+/* Launcher tiles in the tools sheet. */
+.app-launch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border-radius: 14px;
+  cursor: default;
+  transition: transform 260ms var(--ease-spring);
+}
+.app-launch:active { transform: scale(0.9); transition-duration: 90ms; }
+
+/* Grouped rows, as in a settings screen. */
+.app-group { border-radius: 16px; background: var(--surface-2); overflow: hidden; }
+.app-group li + li { border-top: 1px solid var(--line); }
+.app-row { display: flex; align-items: center; min-height: 46px; padding-inline: 16px; font-size: 15px; color: var(--ink); }
+.app-row::after { content: "›"; margin-inline-start: auto; color: var(--muted); font-size: 20px; }
+[dir="rtl"] .app-row::after { content: "‹"; }
+.app-row:active { background: color-mix(in oklab, var(--ink) 6%, transparent); }
+
+/* ---------- Each system's manners ---------- */
+
+/* Mac and Windows apps don't use the hand cursor on their own controls. */
+:root[data-app]:is([data-os="mac"], [data-os="windows"], [data-os="linux"]) :is(button, .btn, nav a) { cursor: default; }
+
+/* Windows: Fluent's squarer corners and a focus ring that always shows. */
+:root[data-app][data-os="windows"] { --radius: 8px; }
+:root[data-app][data-os="windows"] :is(.btn, .field) { border-radius: 6px; }
+:root[data-app][data-os="windows"] .card { border-radius: 8px; }
+:root[data-app][data-os="windows"] :focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* iPhone and iPad: larger targets, a press that dims rather than ripples. */
+:root[data-app]:is([data-os="ios"], [data-os="ipados"]) .btn { min-height: 44px; }
+:root[data-app]:is([data-os="ios"], [data-os="ipados"]) :is(.btn, .icon-btn):active:not(:disabled) { opacity: 0.72; }
+
+/* Android: a ripple from where the finger lands (AppShell sets --rx/--ry). */
+:root[data-os="android"] :is(.btn, .icon-btn, .app-tab, .app-row)[data-ripple]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: currentColor;
+  opacity: 0.14;
+  clip-path: circle(var(--ripple) at var(--rx) var(--ry));
+  animation: app-ripple 520ms var(--ease-out) forwards;
+}
+:root[data-os="android"] :is(.icon-btn, .app-tab, .app-row) { position: relative; overflow: hidden; }
+:root[data-os="android"][data-app] .btn { min-height: 48px; }
+
+/* ---------- Moving between pages ---------- */
+::view-transition { pointer-events: none; }
+::view-transition-old(.app-out) { animation: 160ms var(--ease-in-out) both app-page-out; }
+::view-transition-new(.app-in) { animation: 380ms var(--ease-out) 60ms both app-page-in; }
+:root[data-nav="tabs"]::view-transition-new(.app-in) { animation-name: app-page-push; }
+
+@keyframes app-page-out { to { opacity: 0; scale: 0.985; } }
+@keyframes app-page-in { from { opacity: 0; translate: 0 10px; } }
+@keyframes app-page-push { from { opacity: 0; translate: 28px 0; } }
+@keyframes app-rise { from { translate: 0 100%; } }
+@keyframes app-slide-in { from { translate: -100% 0; opacity: 0; } }
+[dir="rtl"] .app-side { animation-name: app-slide-in-rtl; }
+@keyframes app-slide-in-rtl { from { translate: 100% 0; opacity: 0; } }
+@keyframes app-fade { from { opacity: 0; } }
+@keyframes app-sheet-up { from { translate: 0 100%; } }
+@keyframes app-pop { from { opacity: 0; scale: 0.94; translate: 0 12px; } }
+@keyframes app-pill { from { scale: 0.4 1; opacity: 0.4; } }
+@keyframes app-indicator { from { height: 4px; } }
+@keyframes app-ripple { from { --ripple: 0%; opacity: 0.22; } to { --ripple: 150%; opacity: 0; } }
+@property --ripple {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tabbar, .app-side, .app-sheet, .app-sheet-scrim { animation: none !important; }
+}
+
+/* The home screen as an app's start screen: a title, the drop area, the
+   tools. The website's introduction stays on the website. */
+:root[data-app] [data-app-hero] { padding-top: 1.25rem; padding-bottom: 0; }
+:root[data-app] [data-app-title] { margin-top: 0; font-size: clamp(1.9rem, 5vw, 2.6rem); max-width: 22ch; }
+:root[data-app] [data-app-tight] { margin-top: 2.5rem; }
+
+/* ---------- Gestures ---------- */
+
+/* Crossed out with a scribble: the spot clouds over and blows away. */
+.poof { animation: poof-cloud 620ms var(--ease-out) forwards; border-radius: 40%; background: radial-gradient(closest-side, rgb(180 176 196 / 0.45), transparent); }
+.poof i {
+  position: absolute;
+  left: calc(10% + var(--k) * 8%);
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(150 145 170 / 0.7);
+  animation: poof-dust 620ms var(--ease-out) forwards;
+  --a: calc(var(--k) * 36deg);
+}
+@keyframes poof-cloud { from { scale: 0.9; opacity: 1; } to { scale: 1.25; opacity: 0; } }
+@keyframes poof-dust {
+  from { translate: 0 0; scale: 1; opacity: 0.9; }
+  to { translate: calc(cos(var(--a)) * 28px) calc(sin(var(--a)) * 22px - 14px); scale: 0.2; opacity: 0; }
+}

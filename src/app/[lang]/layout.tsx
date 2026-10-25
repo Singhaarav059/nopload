@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import localFont from "next/font/local";
 import "../globals.css";
+import "../app.css";
 import { I18nProvider } from "@/components/I18n";
 import { clientDict } from "@/lib/i18n/meta";
 import { Header } from "@/components/Header";
@@ -9,10 +10,13 @@ import { Footer } from "@/components/Footer";
 import { ServiceWorker } from "@/components/ServiceWorker";
 import { ExtensionHandoff } from "@/components/ExtensionHandoff";
 import { PointerLight } from "@/components/PointerLight";
+import { AppShell } from "@/components/AppShell";
+import { PageTransition } from "@/components/PageTransition";
 import { getDictionary } from "@/lib/i18n/dictionary";
 import { hasLocale, isRtl, LOCALE_CODES } from "@/lib/i18n/locales";
 import { BRAND, SITE_URL } from "@/lib/brand";
 import { THEME_SCRIPT } from "@/lib/theme";
+import { DEVICE_SCRIPT } from "@/lib/device";
 
 // Committed in src/app/fonts, so builds never reach out to a font CDN.
 const sans = localFont({ src: "../fonts/Geist-Variable.woff2", variable: "--font-geist-sans", weight: "100 900" });
@@ -37,10 +41,16 @@ export async function generateMetadata({ params }: LayoutProps<"/[lang]">): Prom
       apple: "/apple-touch-icon.png",
     },
     manifest: "/manifest.webmanifest",
+    // Opened from an iPhone's or iPad's home screen: full screen, the page
+    // under a see-through status bar (app.css keeps clear of it).
+    appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: "black-translucent" },
   };
 }
 
 export const viewport: Viewport = {
+  // Edge to edge on phones with rounded corners and notches; the app's bars
+  // pad themselves with the safe-area insets.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#fbf9f6" },
     { media: "(prefers-color-scheme: dark)", color: "#13111a" },
@@ -56,6 +66,7 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
     <html lang={lang} dir={isRtl(lang) ? "rtl" : "ltr"} className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: DEVICE_SCRIPT }} />
       </head>
       <body className="flex min-h-dvh flex-col">
         <I18nProvider locale={lang} dict={clientDict(dict)}>
@@ -66,11 +77,12 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
           {/* Decoration hangs past the edges; clip it without making a scroll container (sticky still works). */}
           <main id="main" className="flex-1 overflow-x-clip">
             <ExtensionHandoff />
-            {children}
+            <PageTransition>{children}</PageTransition>
           </main>
           <Footer />
           <ServiceWorker />
           <PointerLight />
+          <AppShell />
         </I18nProvider>
       </body>
     </html>

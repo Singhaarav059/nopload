@@ -19,6 +19,8 @@ import { ContentLayer, itemFor, isFor, type ContentTarget, type PageContent } fr
 import { ContentPanel } from "./ContentPanel";
 import { contentChanged } from "@/lib/pdf/contentchange";
 import { linkTarget } from "@/lib/pdf/links";
+import { scratchOut } from "@/lib/gestures";
+import { haptic } from "@/lib/device";
 import { AutofillPanel } from "./AutofillPanel";
 import type { PresetName } from "@/lib/pdf/security";
 import type { PageText } from "@/lib/pdf/text";
@@ -133,6 +135,13 @@ export function Editor({
   const [eraserSize, setEraserSize] = useState(14);
   // The Eraser stroke under way, drawn as a track until it's lifted.
   const [erasing, setErasing] = useState<string | null>(null);
+  // Where something was just crossed out: a puff of dust there for a moment.
+  const [poofs, setPoofs] = useState<{ id: string; page: number; box: FracRect }[]>([]);
+  const poof = (pg: number, box: FracRect) => {
+    const id = uid();
+    setPoofs((l) => [...l, { id, page: pg, box }]);
+    setTimeout(() => setPoofs((l) => l.filter((x) => x.id !== id)), 700);
+  };
   // The stamp the Stamp tool places next.
   const [stampPick, setStampPick] = useState<{ text: string; color: string }>({ text: "", color: STAMPS[0][1] });
   const [pad, setPad] = useState<null | "signature" | "initials" | "stamp">(null);
@@ -506,6 +515,24 @@ export function Editor({
       if (it.kind === "erase") {
         finishErase(it);
         return;
+      }
+      // Scribbled over something with the pen: crossed out, as on paper. The
+      // scribble becomes an eraser stroke along its band, as wide as the band.
+      if (it.kind === "path" && it.points) {
+        const pw = size?.w ?? 612, ph = size?.h ?? 792;
+        const box = scratchOut(it.points.map(([a, b]) => [a * pw, b * ph]));
+        if (box) {
+          const wide = box.w >= box.h;
+          const band = (wide ? box.h : box.w) + 6;
+          const mid = wide ? (box.y + box.h / 2) / ph : (box.x + box.w / 2) / pw;
+          const ends: [number, number][] = wide ? [[box.x / pw, mid], [(box.x + box.w) / pw, mid]] : [[mid, box.y / ph], [mid, (box.y + box.h) / ph]];
+          const erase: EditorItem = { ...it, kind: "erase", color: "#000000", fill: null, stroke: Math.max(band, eraserSize), points: ends };
+          items.set((l) => l.map((o) => (o.id === it.id ? erase : o)), false);
+          poof(it.page, { x: box.x / pw, y: box.y / ph, w: box.w / pw, h: box.h / ph });
+          haptic("done");
+          finishErase(erase);
+          return;
+        }
       }
       // A click without a drag drops a default-sized shape.
       // A click without a drag: areas (erase, white-out, marks, links) aren't made at all, so a stray click changes nothing.
@@ -913,6 +940,14 @@ export function Editor({
               <SuggestionBox key={s.id} s={s} onAccept={() => void acceptSuggestions([s])} onReject={() => setSuggestions((l) => l.filter((x) => x !== s))} />
             ))}
 
+            {/* Just crossed out: dust where it was */}
+            {poofs.filter((x) => x.page === page).map((x) => (
+              <span key={x.id} aria-hidden data-poof className="poof pointer-events-none absolute"
+                style={{ left: `${x.box.x * 100}%`, top: `${x.box.y * 100}%`, width: `${x.box.w * 100}%`, height: `${x.box.h * 100}%` }}>
+                {Array.from({ length: 10 }, (_, k) => <i key={k} style={{ "--k": k } as React.CSSProperties} />)}
+              </span>
+            ))}
+
             {/* Redaction marks */}
             {pageMarks.map((m) => (
               <div key={m.id} className="group absolute bg-black/80 outline outline-2 outline-[var(--danger)]"
@@ -1220,6 +1255,9 @@ export function Editor({
           <p className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">
             {t(tool === "erase" || selected?.kind === "erase" ? "ed.eraseHint" : "ed.whiteoutHint")}
           </p>
+        )}
+        {toolId === "edit" && tool === "path" && (
+          <p data-scribble-hint className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">{t("ed.scribbleHint")}</p>
         )}
         {toolId === "edit" && tool === "erase" && (
           <label className="flex items-center gap-2 text-[13px] text-ink-2">
