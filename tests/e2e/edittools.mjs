@@ -56,11 +56,29 @@ await suite(async ({ name, browser, test }) => {
         if ((await b.innerText()).trim() !== t[k]) throw new Error(`"${t[k]}" isn't written on its button`);
       }
 
-      step = "eraser";
-      // Over "99-SECRET-12" (Helvetica 14 pt: x 325–425 of 612, baseline 700 of 792).
+      step = "cursors";
+      // Each tool its own pointer: a pencil, a round eraser, not the same crosshair for all.
+      const cursorOf = () => page.evaluate(() => getComputedStyle(document.querySelector("main div.touch-none")).cursor);
+      await tool("ed.draw").click();
+      const pencil = await cursorOf();
       await tool("ed.erase").click();
-      await drag(at(322 / 612, 1 - 716 / 792), at(440 / 612, 1 - 694 / 792));
+      const eraser = await cursorOf();
+      if (!pencil.startsWith("url(") || !eraser.startsWith("url(") || pencil === eraser) throw new Error(`cursors: ${pencil.slice(0, 40)} / ${eraser.slice(0, 40)}`);
+
+      step = "erase a drawing";
+      await tool("ed.draw").click();
+      await drag(at(0.3, 0.55), at(0.5, 0.6));
+      if ((await page.locator("[data-item=path]").count()) !== 1) throw new Error("no pencil stroke");
+      if (await page.locator("[data-item=path][data-selected]").count()) throw new Error("a fresh stroke is selected");
+      await tool("ed.erase").click();
+      await drag(at(0.4, 0.5), at(0.4, 0.65));
+      if (await page.locator("[data-item=path]").count()) throw new Error("the stroke wasn't erased");
+
+      step = "eraser";
+      // Along "99-SECRET-12" (Helvetica 14 pt: x 325–425 of 612, baseline 700 of 792): a brush stroke, no box left.
+      await drag(at(322 / 612, 1 - 705 / 792), at(430 / 612, 1 - 705 / 792));
       await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
+      if (await page.locator("[data-item=erase]").count()) throw new Error("the eraser left something to pick");
 
       step = "stamp";
       await tool("ed.stampText").click();

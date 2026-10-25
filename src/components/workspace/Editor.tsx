@@ -129,6 +129,10 @@ export function Editor({
   const [sel, setSel] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [style, setStyle] = useState({ color: "#111827", fill: null as string | null, stroke: 2, fontSize: 16, bold: false });
+  // The Eraser's width, in points.
+  const [eraserSize, setEraserSize] = useState(14);
+  // The Eraser stroke under way, drawn as a track until it's lifted.
+  const [erasing, setErasing] = useState<string | null>(null);
   // The stamp the Stamp tool places next.
   const [stampPick, setStampPick] = useState<{ text: string; color: string }>({ text: "", color: STAMPS[0][1] });
   const [pad, setPad] = useState<null | "signature" | "initials" | "stamp">(null);
@@ -385,11 +389,14 @@ export function Editor({
     const it: EditorItem = {
       id: uid(), page, kind, x: p.x, y: p.y, w: 0, h: 0,
       color: tool === "highlight" ? "#facc15" : tool === "link" ? "#2f6fed" : style.color, fill: tool === "rect" || tool === "ellipse" ? style.fill : null, stroke: style.stroke,
-      points: tool === "path" || tool === "line" || tool === "arrow" ? [[p.x, p.y], [p.x, p.y]] : undefined,
+      points: tool === "path" || tool === "line" || tool === "arrow" || tool === "erase" ? [[p.x, p.y], [p.x, p.y]] : undefined,
+      ...(tool === "erase" ? { stroke: eraserSize } : {}),
       ...(isFieldKind(kind) ? newField(kind, items.value.filter((i) => i.kind === kind).length, t) : {}),
     };
     items.set((l) => [...l, it]);
-    setSel(it.id);
+    // A stroke being drawn isn't selected: no frame grows around it as the pen moves.
+    setSel(["path", "line", "arrow", "erase"].includes(kind) ? null : it.id);
+    if (kind === "erase") setErasing(it.id);
     drag.current = { kind: "new", id: it.id, x0: p.x, y0: p.y };
   };
 
@@ -419,7 +426,7 @@ export function Editor({
     if (d.kind === "new" && d.id) {
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
-      if (it.kind === "path") patch(d.id, { points: [...(it.points ?? []), [p.x, p.y]] }, false);
+      if (it.kind === "path" || it.kind === "erase") patch(d.id, { points: [...(it.points ?? []), [p.x, p.y]] }, false);
       else if (it.kind === "line" || it.kind === "arrow") patch(d.id, { points: [[d.x0, d.y0], [p.x, p.y]], ...box }, false);
       else patch(d.id, box, false);
       return;
@@ -442,6 +449,49 @@ export function Editor({
     }
   };
 
+  // The Eraser, once lifted: what was drawn or added here that the stroke
+  // touched goes; if it touched none of that, the stroke erases the page
+  // itself, along its path (saving empties it: edit.ts erase areas), shown
+  // by the preview. Either way it's one step to undo.
+  const finishErase = (it: EditorItem) => {
+    setErasing(null);
+    const pw = size?.w ?? 612, ph = size?.h ?? 792;
+    // Distances in points, so the brush is round on the page.
+    const r = (it.stroke ?? eraserSize) / 2;
+    // The stroke filled in between the points the pointer reported, so a quick swipe can't jump over a thin line.
+    const raw = it.points ?? [];
+    const pts: [number, number][] = raw.slice(0, 1);
+    for (let k = 1; k < raw.length; k++) {
+      const [ax, ay] = raw[k - 1], [bx, by] = raw[k];
+      const steps = Math.max(1, Math.ceil(Math.hypot((bx - ax) * pw, (by - ay) * ph) / Math.max(1, r * 0.5)));
+      for (let j = 1; j <= steps; j++) pts.push([ax + ((bx - ax) * j) / steps, ay + ((by - ay) * j) / steps]);
+    }
+    const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot((ax - bx) * pw, (ay - by) * ph);
+    const segDist = (px: number, py: number, [ax, ay]: [number, number], [bx, by]: [number, number]) => {
+      const vx = (bx - ax) * pw, vy = (by - ay) * ph, wx = (px - ax) * pw, wy = (py - ay) * ph;
+      const len = vx * vx + vy * vy;
+      const k = len ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len)) : 0;
+      return Math.hypot(wx - k * vx, wy - k * vy);
+    };
+    const touches = (o: EditorItem) => {
+      if (o.page !== it.page || o.id === it.id || isContent(o) || o.kind === "erase") return false;
+      if ((o.kind === "path" || o.kind === "line" || o.kind === "arrow") && o.points?.length) {
+        const reach = r + (o.stroke ?? 2) / 2;
+        return pts.some(([px, py]) => o.points!.some((q, k) => (k ? segDist(px, py, o.points![k - 1], q) : dist(px, py, q[0], q[1])) <= reach));
+      }
+      const mx = r / pw, my = r / ph;
+      return pts.some(([px, py]) => px >= o.x - mx && px <= o.x + o.w + mx && py >= o.y - my && py <= o.y + o.h + my);
+    };
+    const hit = items.value.filter(touches).map((o) => o.id);
+    const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+    items.set((l) => {
+      const rest = l.filter((o) => !hit.includes(o.id));
+      if (hit.length) return rest.filter((o) => o.id !== it.id);
+      return rest.map((o) => (o.id === it.id ? { ...o, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) } : o));
+    }, false);
+    if (hit.includes(sel ?? "")) setSel(null);
+  };
+
   const onUp = () => {
     const d = drag.current;
     drag.current = null;
@@ -453,9 +503,13 @@ export function Editor({
     if (d.kind === "new" && d.id) {
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
+      if (it.kind === "erase") {
+        finishErase(it);
+        return;
+      }
       // A click without a drag drops a default-sized shape.
       // A click without a drag: areas (erase, white-out, marks, links) aren't made at all, so a stray click changes nothing.
-      if (["erase", "whiteout", "highlight", "underline", "strike", "link", "line", "arrow"].includes(it.kind) && it.w < 0.01 && it.h < 0.006) {
+      if (["whiteout", "highlight", "underline", "strike", "link", "line", "arrow"].includes(it.kind) && it.w < 0.01 && it.h < 0.006) {
         items.set((l) => l.filter((x) => x.id !== it.id), false);
         setSel(null);
         return;
@@ -765,7 +819,18 @@ export function Editor({
     return [{ id: "crop", icon: <CropIcon size={18} />, label: t("tool.crop.name") }];
   }, [toolId, t]);
 
-  const cursor = tool === "select" || tool === "editText" ? "default" : tool === "text" ? "text" : "crosshair";
+  // Each tool's own pointer: a pencil draws, the Eraser is a circle its size, text gets a caret.
+  const svgCursor = (svg: string, x: number, y: number, fallback: string) => `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${x} ${y}, ${fallback}`;
+  const pen = (paths: string) => svgCursor(`<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='white' stroke='black' stroke-width='1.6' stroke-linejoin='round'>${paths}</svg>`, 2, 22, "crosshair");
+  const eraserPx = Math.max(6, Math.min(120, Math.round(eraserSize * ptToPx)));
+  const cursor =
+    tool === "select" || tool === "editText" ? "default"
+    : tool === "text" ? "text"
+    : tool === "path" ? pen("<path d='M3 21l1.5-5L16 4.5a2.1 2.1 0 013 3L7.5 19z'/><path d='M14 6.5l3 3' fill='none'/>")
+    : tool === "highlight" ? pen("<path d='M3 21l3-1 1-3 9-9 3 3-9 9-3 1z' fill='#facc15'/><path d='M13 6l5 5' fill='none'/>")
+    : tool === "erase" ? svgCursor(`<svg xmlns='http://www.w3.org/2000/svg' width='${eraserPx + 2}' height='${eraserPx + 2}'><circle cx='${eraserPx / 2 + 1}' cy='${eraserPx / 2 + 1}' r='${eraserPx / 2}' fill='rgba(255,255,255,0.35)' stroke='black' stroke-width='1'/></svg>`, eraserPx / 2 + 1, eraserPx / 2 + 1, "cell")
+    : tool === "note" || tool === "stamp" || tool === "check" || tool === "cross" ? "copy"
+    : "crosshair";
 
   const placeLabel = t("ed.placeCentre");
   const runButton = <button className="btn btn-primary btn-lg w-full" disabled={!canRun} onClick={run}>{actionLabel}</button>;
@@ -932,6 +997,16 @@ export function Editor({
                   </div>
                 );
               }
+              // The Eraser leaves nothing on the page to pick: while it moves, its track; afterwards the preview shows the result.
+              if (i.kind === "erase") {
+                if (erasing !== i.id || !i.points) return null;
+                return (
+                  <svg key={i.id} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`}>
+                    <polyline points={i.points.map(([x, y]) => `${x * width},${y * height}`).join(" ")} fill="none" stroke="rgb(120 120 140 / 0.35)"
+                      strokeWidth={(i.stroke ?? eraserSize) * ptToPx} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                );
+              }
               if (i.kind === "path" || i.kind === "line" || i.kind === "arrow") {
                 // A drawing selected shows a light dashed outline, not a box (it isn't one), and no resize handle.
                 return <div key={i.id} {...common} className={`absolute cursor-move rounded-sm ${isSel ? "outline-dashed outline-1 outline-offset-4 outline-[color-mix(in_oklab,var(--accent)_70%,transparent)]" : ""}`} style={{ ...boxStyle, minWidth: 6, minHeight: 6 }} />;
@@ -956,14 +1031,11 @@ export function Editor({
               }
               if (i.kind === "note") inner = <StickyNote className="h-full w-full p-[12%] text-ink" strokeWidth={2.2} />;
               if (i.kind === "link") inner = <Link2 size={14} className="absolute -top-2 -left-2 rounded-full bg-[#2f6fed] p-0.5 text-white" />;
-              if (i.kind === "erase") inner = <Eraser size={14} className="absolute -top-2 -left-2 rounded-full bg-ink p-0.5 text-bg" />;
               const shape: React.CSSProperties =
                 i.kind === "rect" ? { border: `${(i.stroke ?? 2) * ptToPx}px solid ${i.color}`, background: i.fill ?? "transparent" } :
                 i.kind === "ellipse" ? { border: `${(i.stroke ?? 2) * ptToPx}px solid ${i.color}`, background: i.fill ?? "transparent", borderRadius: "50%" } :
                 i.kind === "highlight" ? { background: i.color, opacity: 0.38, mixBlendMode: "multiply" } :
                 i.kind === "whiteout" ? { background: "#fff", boxShadow: isSel ? undefined : "0 0 0 1px rgb(0 0 0 / 0.06)" } :
-                // The page under an eraser is the preview, where it's already gone.
-                i.kind === "erase" ? { outline: "1.5px dashed var(--ink-2)", outlineOffset: -1 } :
                 i.kind === "stamp" ? { border: `${Math.max(1.5, i.h * (size?.h ?? 792) * 0.07) * ptToPx}px solid ${i.color}`, borderRadius: 4, opacity: 0.9 } :
                 i.kind === "note" ? { background: i.color, borderRadius: 4, boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)" } :
                 i.kind === "link" ? { outline: "1.5px dashed #2f6fed", background: "rgb(47 111 237 / 0.1)" } :
@@ -1146,6 +1218,13 @@ export function Editor({
           <p className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">
             {t(tool === "erase" || selected?.kind === "erase" ? "ed.eraseHint" : "ed.whiteoutHint")}
           </p>
+        )}
+        {toolId === "edit" && tool === "erase" && (
+          <label className="flex items-center gap-2 text-[13px] text-ink-2">
+            {t("ed.eraserSize")}
+            <input type="range" min={4} max={60} step={1} className="flex-1 accent-[var(--accent)]" value={eraserSize} onChange={(e) => setEraserSize(Number(e.target.value))} />
+            <span className="tabular w-10 text-end">{eraserSize} pt</span>
+          </label>
         )}
 
         {/* Stamps: pick the words, for the next one or the one selected. */}

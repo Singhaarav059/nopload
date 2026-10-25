@@ -1317,6 +1317,22 @@ async function applyContent(file: File, items: EditorItem[]) {
     const paragraphs: import("./objects").ParagraphChange[] = [];
     const erase: import("./objects").Erase[] = [];
     for (const it of items.filter((i) => i.page === page)) {
+      // An Eraser stroke: small squares along its path, its width across, close enough to leave no gaps.
+      if (it.kind === "erase" && it.points?.length) {
+        const f = frameOf(geom);
+        const r = (it.stroke ?? 14) / 2;
+        const pts = it.points.map(([px, py]) => [px * f.vw, py * f.vh]);
+        const along: number[][] = [pts[0]];
+        for (let k = 1; k < pts.length; k++) {
+          const [ax, ay] = pts[k - 1], [bx, by] = pts[k];
+          const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (r * 0.6)));
+          for (let j = 1; j <= steps; j++) along.push([ax + ((bx - ax) * j) / steps, ay + ((by - ay) * j) / steps]);
+        }
+        for (const [vx, vy] of along.slice(0, 4000)) {
+          erase.push({ box: userBox(geom, { x: (vx - r) / f.vw, y: (vy - r) / f.vh, w: (2 * r) / f.vw, h: (2 * r) / f.vh }), fill: "around" });
+        }
+        continue;
+      }
       if (it.kind === "whiteout" || it.kind === "scanEdit" || it.kind === "erase") {
         const r = it.kind === "scanEdit" ? { x: it.source!.x, y: it.source!.y, w: it.source!.w ?? it.w, h: it.source!.h ?? it.h } : it;
         const fill = it.kind === "scanEdit" && it.fill ? rgbaOf(it.fill) : it.kind === "erase" ? ("around" as const) : undefined;

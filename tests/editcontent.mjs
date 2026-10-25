@@ -376,6 +376,16 @@ await test("the Eraser removes what's under it and leaves no box", async () => {
   return text.slice(0, 50);
 });
 
+await test("an Eraser stroke erases along its path, and nothing beside it", async () => {
+  // Across "quarterly results" on the first body line (baseline 680, 11 pt), a 10 pt brush.
+  const y = 1 - 684 / 792;
+  const out = await save(base, [{ id: "s", page: 0, kind: "erase", x: 0, y: 0, w: 0, h: 0, stroke: 10, points: [[95 / 612, y], [130 / 612, y], [170 / 612, y]] }]);
+  const text = await allText(out);
+  ok(!/quarterly|results/.test(text), `under the stroke: ${text.slice(0, 100)}`);
+  ok(/Our\b/.test(text) && /every region/.test(text) && /show steady growth/.test(text), `beside it: ${text.slice(0, 160)}`);
+  return text.slice(0, 50);
+});
+
 await test("markup: stamp, marks, arrow and lines drawn; notes and links are real annotations", async () => {
   const doc = await PDFDocument.create();
   doc.addPage([612, 792]);
