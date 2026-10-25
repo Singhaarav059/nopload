@@ -117,7 +117,8 @@ export function Editor({
   const items = useHistory<EditorItem[]>([]);
   const marks = useHistory<Mark[]>([]);
   const [crops, setCrops] = useState<Map<number, FracRect>>(new Map());
-  const [tool, setTool] = useState<EdTool>(toolId === "redact" ? "redact" : toolId === "crop" ? "crop" : toolId === "sign" ? "place" : "select");
+  // Edit PDF starts on Edit content: anything on the page, ready to click.
+  const [tool, setTool] = useState<EdTool>(toolId === "redact" ? "redact" : toolId === "crop" ? "crop" : toolId === "sign" ? "place" : toolId === "edit" ? "editText" : "select");
   const [sel, setSel] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [style, setStyle] = useState({ color: "#111827", fill: null as string | null, stroke: 2, fontSize: 16, bold: false });
@@ -680,7 +681,7 @@ export function Editor({
 
   return (
     <div>
-    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0">
         {/* Toolbar */}
         <div className="sticky top-[72px] z-20 mb-3 flex flex-wrap items-center gap-1 rounded-xl border border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-1.5 shadow-card backdrop-blur-md">

@@ -2198,6 +2198,7 @@ const en = {
   "coach.work": "Check the options, then press the button. Nothing changes until you do.",
   "coach.workPages": "Click pages to choose them, then press the button. Nothing changes until you do.",
   "coach.workEditor": "Pick what to add from the toolbar, then click on the page. Press the button when you're happy.",
+  "coach.workEdit": "Click anything on the page to change it, or pick something to add from the toolbar. Press the button when you're happy.",
   "coach.done": "All done! Your original is untouched. You can carry on with another tool below.",
 };
 

@@ -37,18 +37,19 @@ const subscribeTips = (fn: () => void) => {
 };
 
 // One line of help for the step on show, never more.
-function tipFor(view: string, mode: ToolMode) {
+// `edit`: Edit PDF, which starts on Edit content.
+function tipFor(view: string, mode: ToolMode, edit: boolean) {
   if (view === "select") return "coach.select";
   if (view === "done") return "coach.done";
   if (view !== "work") return null;
-  return mode === "pages" ? "coach.workPages" : mode === "editor" ? "coach.workEditor" : "coach.work";
+  return mode === "pages" ? "coach.workPages" : edit ? "coach.workEdit" : mode === "editor" ? "coach.workEditor" : "coach.work";
 }
 
-export function StepTrail({ view, mode, cat }: { view: "select" | "work" | "busy" | "done"; mode: ToolMode; cat: string }) {
+export function StepTrail({ view, mode, cat, edit = false }: { view: "select" | "work" | "busy" | "done"; mode: ToolMode; cat: string; edit?: boolean }) {
   const { t } = useI18n();
   const tips = useSyncExternalStore(subscribeTips, readTips, () => true);
   const current = view === "busy" ? 1 : STEPS.indexOf(view);
-  const tip = tipFor(view, mode);
+  const tip = tipFor(view, mode, edit);
   return (
     <div data-cat={cat} className="mx-auto mb-5 flex max-w-[1040px] flex-col items-center gap-x-4 gap-y-2 lg:flex-row lg:justify-center">
       <ol aria-label={t("ws.steps")} className="flex items-center justify-center gap-1.5 rounded-full border border-line bg-surface p-1.5 shadow-card sm:gap-2">
