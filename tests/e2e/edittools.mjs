@@ -57,9 +57,9 @@ await suite(async ({ name, browser, test }) => {
       }
 
       step = "eraser";
-      // Over "99-SECRET-12" (x 372–466 pt of 612, baseline 700 of 792).
+      // Over "99-SECRET-12" (Helvetica 14 pt: x 325–425 of 612, baseline 700 of 792).
       await tool("ed.erase").click();
-      await drag(at(366 / 612, 1 - 716 / 792), at(474 / 612, 1 - 694 / 792));
+      await drag(at(322 / 612, 1 - 716 / 792), at(440 / 612, 1 - 694 / 792));
       await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
 
       step = "stamp";

@@ -249,7 +249,7 @@ export function Editor({
           editedFile.current = {
             key: previewKey,
             blob: import("@/lib/pdf/edit").then(({ editPdf, contentChanged }) =>
-              list.some(contentChanged) ? editPdf(file, list, "preview").then(([o]) => ({ blob: o.blob, note: o.note })) : { blob: file as Blob }),
+              list.some((i) => i.kind === "erase" || contentChanged(i)) ? editPdf(file, list, "preview").then(([o]) => ({ blob: o.blob, note: o.note })) : { blob: file as Blob }),
           };
         }
         const { blob, note } = await editedFile.current.blob;
@@ -761,23 +761,24 @@ export function Editor({
       <div className="min-w-0">
         {/* Toolbar */}
         <div className="sticky top-[72px] z-20 mb-3 flex flex-wrap items-center gap-1 rounded-xl border border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-1.5 shadow-card backdrop-blur-md">
-          {/* Each tool named under its icon; on a phone the row scrolls sideways. */}
-          <div className="-m-0.5 flex min-w-0 basis-full items-stretch gap-0.5 overflow-x-auto p-0.5 lg:flex-wrap" role="toolbar" aria-label={t("ed.tools")}>
+          {/* Each tool named under its icon, in one row that scrolls sideways when it doesn't fit. */}
+          <ToolRow label={t("ed.tools")}>
             {tools.map((x) => (
               <span key={x.id} className="flex items-stretch">
                 {x.group && <span aria-hidden className="mx-1 my-1.5 w-px shrink-0 bg-line" />}
-                <button className="flex w-[60px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] leading-tight text-ink-2 hover:bg-surface-2 aria-pressed:bg-accent aria-pressed:text-white"
+                <button className="flex w-[60px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[11px] leading-[1.15] text-ink-2 hover:bg-surface-2 aria-pressed:bg-accent aria-pressed:text-white"
                   aria-pressed={tool === x.id} title={x.label}
-                  onClick={() => {
+                  onClick={(e) => {
                     setTool(x.id);
+                    e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
                     if (x.id === "image") imageInput.current?.click();
                   }}>
                   {x.icon}
-                  <span className="line-clamp-2 w-full text-center">{x.label}</span>
+                  <span className="line-clamp-2 w-full break-words text-center">{x.label}</span>
                 </button>
               </span>
             ))}
-          </div>
+          </ToolRow>
           <input ref={imageInput} type="file" accept="image/*" hidden onChange={async (e) => {
             const f = e.target.files?.[0];
             e.target.value = "";
@@ -789,7 +790,8 @@ export function Editor({
           }} />
           <button className="icon-btn" aria-label={t("ed.undo")} title={t("ed.undo")} disabled={!items.canUndo && !marks.canUndo} onClick={() => { items.undo(); marks.undo(); }}><Undo2 size={18} /></button>
           <button className="icon-btn" aria-label={t("ed.redo")} title={t("ed.redo")} disabled={!items.canRedo && !marks.canRedo} onClick={() => { items.redo(); marks.redo(); }}><Redo2 size={18} /></button>
-          <span className="ms-auto flex items-center gap-1">
+          {/* Zoom: on a phone, pinching does it, and the tools need the room. */}
+          <span className="ms-auto hidden items-center gap-1 sm:flex">
             <button className="icon-btn" aria-label={t("ed.zoomOut")} onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}><ZoomOut size={18} /></button>
             <span className="tabular w-11 text-center text-[13px] text-muted">{Math.round(zoom * 100)}%</span>
             <button className="icon-btn" aria-label={t("ed.zoomIn")} onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}><ZoomIn size={18} /></button>
@@ -1263,6 +1265,40 @@ export function Editor({
       <div className="sticky bottom-0 z-30 mt-4 rounded-t-xl border border-b-0 border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-3 shadow-card backdrop-blur-md lg:hidden">
         {runButton}
       </div>
+    </div>
+  );
+}
+
+// The toolbar's tools: one row that scrolls sideways (the mouse wheel scrolls
+// it too), its edge fading where more tools are out of sight.
+function ToolRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const row = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const check = () => setMore({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+    const wheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    el.addEventListener("scroll", check, { passive: true });
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", check);
+      el.removeEventListener("wheel", wheel);
+    };
+  }, []);
+  const fade = `linear-gradient(to right, ${more.left ? "transparent, black 32px" : "black"}, ${more.right ? "black calc(100% - 32px), transparent" : "black"})`;
+  return (
+    <div ref={row} role="toolbar" aria-label={label} className="-my-0.5 flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto py-0.5 [scrollbar-width:none]"
+      style={{ maskImage: fade, WebkitMaskImage: fade }}>
+      {children}
     </div>
   );
 }
