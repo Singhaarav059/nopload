@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Download, Share, PlusSquare, MoreVertical, MonitorDown, X, Zap, WifiOff, FileInput, Feather } from "lucide-react";
+import { Download, Share, PlusSquare, MoreVertical, MonitorDown, X, Zap, WifiOff, FileInput, Feather, Smartphone } from "lucide-react";
 import { useI18n } from "./I18n";
 import { BRAND } from "@/lib/brand";
-import { deviceOs, subscribeDevice, type Os } from "@/lib/device";
+import { deviceOs, inAndroidApp, subscribeDevice, type Os } from "@/lib/device";
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -152,8 +152,33 @@ export function InstallSheet() {
             ))}
           </ol>
         )}
+        {os === "android" && <AndroidApp />}
         <button type="button" className="mt-3 w-full py-2 text-[14px] text-muted hover:text-ink" onClick={() => setOpen(false)}>{t("install.later")}</button>
       </div>
+    </div>
+  );
+}
+
+// Android lists only real apps under "Open with": the Android app (android/,
+// a Trusted Web Activity: this site, full screen) adds Nopload there and to
+// the share sheet. Offered on Android, outside that app.
+export const ANDROID_APK = "/app/nopload.apk";
+export function AndroidApp({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
+  const inside = useSyncExternalStore(subscribeDevice, inAndroidApp, () => true);
+  if (inside) return null;
+  return (
+    <div className={compact ? "" : "mt-4 rounded-[18px] border border-line p-4"} data-android-app>
+      {!compact && (
+        <>
+          <p className="flex items-center gap-2 text-[15px] font-semibold"><Smartphone size={17} strokeWidth={1.8} /> {t("install.androidTitle")}</p>
+          <p className="mt-1 text-pretty text-[13.5px] text-ink-2">{t("install.androidBody", { brand: BRAND.name })}</p>
+        </>
+      )}
+      <a href={ANDROID_APK} download="nopload.apk" className={`btn btn-sm ${compact ? "btn-quiet" : "btn-primary mt-3"}`}>
+        <Download size={15} /> {t("install.androidButton")}
+      </a>
+      {!compact && <p className="mt-2 text-[12.5px] text-muted">{t("install.androidNote")}</p>}
     </div>
   );
 }

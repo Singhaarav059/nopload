@@ -7,7 +7,7 @@ import { Home, LayoutGrid, Workflow, Settings2, Search, X, ChevronDown, BookOpen
 import { useI18n } from "./I18n";
 import { ThemeSwitch } from "./ThemeMenu";
 import { ToolIcon } from "./ToolIcon";
-import { InstallGuide } from "./InstallGuide";
+import { AndroidApp, InstallGuide } from "./InstallGuide";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
@@ -303,6 +303,7 @@ function ToolsList() {
 function SettingsList() {
   const { t, href, locale } = useI18n();
   const pathname = usePathname();
+  const { os } = useDevice();
   return (
     <div className="space-y-6 px-5 pb-8">
       <div>
@@ -316,6 +317,8 @@ function SettingsList() {
         </select>
       </div>
       <InstallGuide />
+      {/* The web app on Android can't be under Open with; the Android app can. */}
+      {os === "android" && <AndroidApp />}
       <ul className="app-group">
         {([["foot.guide", "/guide"], ["foot.privacy", "/privacy"], ["foot.about", "/about"], ["foot.licenses", "/licenses"]] as const).map(([k, p]) => (
           <li key={p}><Link href={href(p)} className="app-row">{t(k)}</Link></li>

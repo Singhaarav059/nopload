@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.pages.nopload",
+      "sha256_cert_fingerprints": ["A3:87:CE:86:ED:CC:8A:40:49:F4:AC:34:12:E0:AC:36:F2:C9:82:60:14:48:A1:43:98:02:A8:FB:83:8D:22:75"]
+    }
+  }
+]

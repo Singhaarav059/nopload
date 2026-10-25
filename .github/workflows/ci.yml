@@ -338,6 +338,8 @@ jobs:
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:highlights
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:android
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:office
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:office-route
