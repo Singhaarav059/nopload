@@ -693,7 +693,7 @@ const en = {
   "tool.pageNumbers.q3": "Do numbers work in other alphabets?",
   "tool.pageNumbers.a3": "Yes. Words like “Page” follow the language you are using {brand} in, and fonts for non-Latin scripts are embedded so the labels display correctly.",
   "tool.pageNumbers.q4": "Can I number several PDFs at once?",
-  "tool.pageNumbers.a4": "Yes. Add several files and each is numbered on its own with the same settings. To number them as one set, turn on Continue numbering across files: each file starts where the one before it ended, in the order listed, and you can add an exhibit index of every file's first and last number.",
+  "tool.pageNumbers.a4": "Yes. Add several files and each is numbered on its own with the same settings. Bates numbers run on as one set: each file starts where the one before it ended, in the order listed (turn off Continue the numbers from file to file to restart them), and you can add an exhibit index of every file's first and last number.",
   "tool.pageNumbers.q5": "Can I change the size and colour of the numbers?",
   "tool.pageNumbers.a5": "Yes. Set the text size and pick any colour, so the numbers can stand out or blend in with the page design.",
   "tool.pageNumbers.private": "The numbers are drawn onto the pages by code in your browser, and the numbered PDF is saved straight to your device. The document isn't uploaded, so manuscripts and reports stay yours.",
