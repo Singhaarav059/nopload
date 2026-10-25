@@ -72,7 +72,6 @@ await suite(async ({ name, browser, test }) => {
     const err = await panel().locator("[role=alert]").count();
     if (err) throw new Error(`preview failed: ${await panel().locator("[role=alert]").innerText()}`);
   };
-  const stage = () => page.locator("main img").first();
 
   let step = "";
   await test("text, pictures and shapes change in place; the page shows the result", async () => {
