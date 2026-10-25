@@ -34,7 +34,6 @@ const spec = {
       set: async (h) => {
         await h.select("numberFormat", "bates");
         await h.fill("batesPrefix", "DOC");
-        await h.toggle("continueNumbers");
         await h.toggle("exhibitIndex");
       },
       check: (r) => {
