@@ -6,7 +6,7 @@ import {
   MousePointer2, Type, ImagePlus, Square, Circle, Minus, Pencil, Highlighter, Eraser, Undo2, Redo2, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Signature as SignatureIcon, CalendarDays, Search, ScanEye, Crop as CropIcon,
   TextCursorInput, SquareCheck, Copy, Bold, Stamp, UserRound, Crosshair, CircleDot, SquareChevronDown, List, PenLine,
-  LetterText, BringToFront, SendToBack, Loader2,
+  LetterText, BringToFront, SendToBack, Loader2, ArrowUpRight, Underline as UnderlineIcon, Strikethrough, StickyNote, Link2, Check, X, Brush,
 } from "lucide-react";
 import { useI18n } from "../I18n";
 import { SignaturePad, type SignatureImage } from "./SignaturePad";
@@ -18,6 +18,7 @@ import type { EditorItem, FieldInfo, FracRect } from "@/lib/pdf/edit";
 import { ContentLayer, itemFor, isFor, type ContentTarget, type PageContent } from "./ContentLayer";
 import { ContentPanel } from "./ContentPanel";
 import { contentChanged } from "@/lib/pdf/contentchange";
+import { linkTarget } from "@/lib/pdf/links";
 import { AutofillPanel } from "./AutofillPanel";
 import type { PresetName } from "@/lib/pdf/security";
 import type { PageText } from "@/lib/pdf/text";
@@ -27,7 +28,12 @@ import { forFile } from "@/lib/pdf/errors";
 import { isFieldKind, type FieldKind } from "@/lib/pdf/formsmeta";
 import type { ToolId } from "@/lib/tools";
 
-type EdTool = "select" | "editText" | "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "redact" | "crop" | FieldKind | "place";
+type EdTool = "select" | "editText" | "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "redact" | "crop" | FieldKind | "place"
+  | "erase" | "arrow" | "underline" | "strike" | "note" | "link" | "stamp" | "check" | "cross";
+// Placed with a click at a fixed size (points): a note's icon, a mark, a stamp.
+const POINT_SIZES: Partial<Record<EdTool, [number, number]>> = { note: [22, 22], check: [14, 14], cross: [14, 14], stamp: [150, 44] };
+// Stamps: their words (in the page's language) and colours.
+const STAMPS = [["approved", "#12a37f"], ["paid", "#12a37f"], ["received", "#2f6fed"], ["draft", "#2f6fed"], ["final", "#7b4fe0"], ["copy", "#e2662b"], ["confidential", "#d33f6a"], ["void", "#d33f6a"]] as const;
 type Size = { w: number; h: number };
 // Marks from a search keep the text matched, the search they came from (and
 // its pattern, to run it again on the result) and how many boxes that text
@@ -40,7 +46,8 @@ const PRESET_NAMES = ["emails", "phones", "numbers", "cards", "ibans", "aadhaar"
 // How an item on the page is announced.
 const ITEM_LABELS: Record<EditorItem["kind"], string> = {
   text: "ed.text", image: "ed.image", rect: "ed.rect", ellipse: "ed.ellipse", line: "ed.line", path: "ed.draw",
-  highlight: "ed.highlight", whiteout: "ed.whiteout", textEdit: "ed.editText", paraEdit: "ed.editText", objEdit: "ed.object", scanEdit: "ed.editText", ...FIELD_LABELS,
+  highlight: "ed.highlight", whiteout: "ed.whiteout", erase: "ed.erase", arrow: "ed.arrow", underline: "ed.underline", strike: "ed.strike",
+  note: "ed.note", link: "ed.link", stamp: "ed.stampText", check: "ed.check", cross: "ed.cross", textEdit: "ed.editText", paraEdit: "ed.editText", objEdit: "ed.object", scanEdit: "ed.editText", ...FIELD_LABELS,
 };
 // Changes to the page's own content (Edit content), drawn by the preview rather than as items on top.
 const isContent = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit" || i.kind === "scanEdit";
@@ -122,6 +129,8 @@ export function Editor({
   const [sel, setSel] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [style, setStyle] = useState({ color: "#111827", fill: null as string | null, stroke: 2, fontSize: 16, bold: false });
+  // The stamp the Stamp tool places next.
+  const [stampPick, setStampPick] = useState<{ text: string; color: string }>({ text: "", color: STAMPS[0][1] });
   const [pad, setPad] = useState<null | "signature" | "initials" | "stamp">(null);
   const [signer, setSigner] = useState(() => {
     try {
@@ -224,7 +233,8 @@ export function Editor({
   // The preview: the file saved with the content changes, this page drawn
   // from it, once changes stop for a moment. A paragraph being typed in is
   // left out (the text box shows it), so typing doesn't redraw the page.
-  const changes = useMemo(() => items.value.filter((i) => isContent(i) && i.source), [items.value]);
+  // The Eraser leaves nothing on top to show, so its result is part of the preview too.
+  const changes = useMemo(() => items.value.filter((i) => (isContent(i) && i.source) || i.kind === "erase"), [items.value]);
   const previewKey = useMemo(() => JSON.stringify(changes.map((i) => (
     { ...i, image: i.image ? `${i.image.length}:${i.image.slice(-64)}` : undefined, ...(i.id === editing ? { removed: true } : {}) }
   ))), [changes, editing]);
@@ -269,7 +279,7 @@ export function Editor({
 
   const pageItems = items.value.filter((i) => i.page === page && !isContent(i));
   const pageContent = content?.page === page ? content : null;
-  const contentItems = changes.filter((i) => i.page === page && i.kind !== "textEdit");
+  const contentItems = changes.filter((i) => i.page === page && isContent(i) && i.kind !== "textEdit");
   const pageMarks = marks.value.filter((m) => m.page === page);
   const selected = items.value.find((i) => i.id === sel) ?? null;
   // The page as it will be saved: the latest preview of this page while there are changes.
@@ -343,6 +353,23 @@ export function Editor({
       setEditing(null);
       return;
     }
+    const fixed = POINT_SIZES[tool];
+    if (fixed) {
+      const [pw, ph] = fixed;
+      const w = pw / (size?.w ?? 612), h = ph / (size?.h ?? 792);
+      const stamp = tool === "stamp" ? { text: stampPick.text || t(`ed.stamp.${STAMPS[0][0]}`), color: stampPick.color } : null;
+      const it: EditorItem = {
+        id: uid(), page, kind: tool as EditorItem["kind"], x: Math.max(0, Math.min(1 - w, p.x - w / 2)), y: Math.max(0, Math.min(1 - h, p.y - h / 2)), w, h,
+        color: stamp?.color ?? (tool === "note" ? "#facc15" : tool === "check" ? "#12a37f" : tool === "cross" ? "#d33f6a" : style.color),
+        text: stamp?.text ?? (tool === "note" ? "" : undefined),
+      };
+      items.set((l) => [...l, it]);
+      setSel(it.id);
+      // A note's text is typed next, in the panel; marks keep the tool for the next one.
+      if (tool === "note" || tool === "stamp") setTool("select");
+      if (tool === "note") focusItem.current = "note-text";
+      return;
+    }
     if (tool === "crop") {
       drag.current = { kind: "new", x0: p.x, y0: p.y };
       setCrops((m) => new Map(m).set(options.cropScope === "current" ? page : -1, { x: p.x, y: p.y, w: 0, h: 0 }));
@@ -357,8 +384,8 @@ export function Editor({
     const kind = tool as EditorItem["kind"];
     const it: EditorItem = {
       id: uid(), page, kind, x: p.x, y: p.y, w: 0, h: 0,
-      color: tool === "highlight" ? "#facc15" : style.color, fill: tool === "rect" || tool === "ellipse" ? style.fill : null, stroke: style.stroke,
-      points: tool === "path" || tool === "line" ? [[p.x, p.y], [p.x, p.y]] : undefined,
+      color: tool === "highlight" ? "#facc15" : tool === "link" ? "#2f6fed" : style.color, fill: tool === "rect" || tool === "ellipse" ? style.fill : null, stroke: style.stroke,
+      points: tool === "path" || tool === "line" || tool === "arrow" ? [[p.x, p.y], [p.x, p.y]] : undefined,
       ...(isFieldKind(kind) ? newField(kind, items.value.filter((i) => i.kind === kind).length, t) : {}),
     };
     items.set((l) => [...l, it]);
@@ -393,7 +420,7 @@ export function Editor({
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
       if (it.kind === "path") patch(d.id, { points: [...(it.points ?? []), [p.x, p.y]] }, false);
-      else if (it.kind === "line") patch(d.id, { points: [[d.x0, d.y0], [p.x, p.y]], ...box }, false);
+      else if (it.kind === "line" || it.kind === "arrow") patch(d.id, { points: [[d.x0, d.y0], [p.x, p.y]], ...box }, false);
       else patch(d.id, box, false);
       return;
     }
@@ -427,11 +454,19 @@ export function Editor({
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
       // A click without a drag drops a default-sized shape.
-      if (it.kind !== "path" && it.kind !== "line" && (it.w < 0.01 || it.h < 0.006)) {
-        const def = isFieldKind(it.kind) ? fieldSize(it, (size?.w ?? 1) / (size?.h ?? 1.414)) : { w: 0.18, h: 0.08 };
+      // A click without a drag: areas (erase, white-out, marks, links) aren't made at all, so a stray click changes nothing.
+      if (["erase", "whiteout", "highlight", "underline", "strike", "link", "line", "arrow"].includes(it.kind) && it.w < 0.01 && it.h < 0.006) {
+        items.set((l) => l.filter((x) => x.id !== it.id), false);
+        setSel(null);
+        return;
+      }
+      if (it.kind !== "path" && it.kind !== "line" && it.kind !== "arrow" && (it.w < 0.01 || it.h < 0.006)) {
+        const def = isFieldKind(it.kind) ? fieldSize(it, (size?.w ?? 1) / (size?.h ?? 1.414))
+          : it.kind === "link" || it.kind === "underline" || it.kind === "strike" ? { w: 0.25, h: 0.025 } : { w: 0.18, h: 0.08 };
         patch(it.id, def, false);
       }
-      if ((it.kind === "path" || it.kind === "line") && it.points) {
+      if (it.kind === "link") focusItem.current = "link-url";
+      if ((it.kind === "path" || it.kind === "line" || it.kind === "arrow") && it.points) {
         const xs = it.points.map((q) => q[0]), ys = it.points.map((q) => q[1]);
         patch(it.id, { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }, false);
       }
@@ -677,18 +712,28 @@ export function Editor({
     toolId === "forms" || (toolId === "sign" && cert) ? true :
     items.value.some((i) => !isContent(i) || contentChanged(i)) && !(previewState.key === previewKey && previewState.error);
 
-  const tools: { id: EdTool; icon: React.ReactNode; label: string }[] = useMemo(() => {
+  // `group` starts a new group in the toolbar.
+  const tools: { id: EdTool; icon: React.ReactNode; label: string; group?: boolean }[] = useMemo(() => {
     const base = [{ id: "select" as EdTool, icon: <MousePointer2 size={18} />, label: t("ed.select") }];
     if (toolId === "edit") return [...base,
       { id: "editText", icon: <LetterText size={18} />, label: t("ed.editContent") },
-      { id: "text", icon: <Type size={18} />, label: t("ed.text") },
+      { id: "text", icon: <Type size={18} />, label: t("ed.text"), group: true },
       { id: "image", icon: <ImagePlus size={18} />, label: t("ed.image") },
-      { id: "rect", icon: <Square size={18} />, label: t("ed.rect") },
+      { id: "stamp", icon: <Stamp size={18} />, label: t("ed.stampText") },
+      { id: "note", icon: <StickyNote size={18} />, label: t("ed.note") },
+      { id: "link", icon: <Link2 size={18} />, label: t("ed.link") },
+      { id: "rect", icon: <Square size={18} />, label: t("ed.rect"), group: true },
       { id: "ellipse", icon: <Circle size={18} />, label: t("ed.ellipse") },
       { id: "line", icon: <Minus size={18} />, label: t("ed.line") },
+      { id: "arrow", icon: <ArrowUpRight size={18} />, label: t("ed.arrow") },
       { id: "path", icon: <Pencil size={18} />, label: t("ed.draw") },
-      { id: "highlight", icon: <Highlighter size={18} />, label: t("ed.highlight") },
-      { id: "whiteout", icon: <Eraser size={18} />, label: t("ed.whiteout") },
+      { id: "highlight", icon: <Highlighter size={18} />, label: t("ed.highlight"), group: true },
+      { id: "underline", icon: <UnderlineIcon size={18} />, label: t("ed.underline") },
+      { id: "strike", icon: <Strikethrough size={18} />, label: t("ed.strike") },
+      { id: "check", icon: <Check size={18} />, label: t("ed.check") },
+      { id: "cross", icon: <X size={18} />, label: t("ed.cross") },
+      { id: "erase", icon: <Eraser size={18} />, label: t("ed.erase"), group: true },
+      { id: "whiteout", icon: <Brush size={18} />, label: t("ed.whiteout") },
     ];
     if (toolId === "sign") return [...base, { id: "text", icon: <Type size={18} />, label: t("ed.text") }];
     if (toolId === "forms") return [...base,
@@ -716,15 +761,23 @@ export function Editor({
       <div className="min-w-0">
         {/* Toolbar */}
         <div className="sticky top-[72px] z-20 mb-3 flex flex-wrap items-center gap-1 rounded-xl border border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-1.5 shadow-card backdrop-blur-md">
-          {tools.map((x) => (
-            <button key={x.id} className="icon-btn" aria-pressed={tool === x.id} aria-label={x.label} title={x.label}
-              onClick={() => {
-                setTool(x.id);
-                if (x.id === "image") imageInput.current?.click();
-              }}>
-              {x.icon}
-            </button>
-          ))}
+          {/* Each tool named under its icon; on a phone the row scrolls sideways. */}
+          <div className="-m-0.5 flex min-w-0 basis-full items-stretch gap-0.5 overflow-x-auto p-0.5 lg:flex-wrap" role="toolbar" aria-label={t("ed.tools")}>
+            {tools.map((x) => (
+              <span key={x.id} className="flex items-stretch">
+                {x.group && <span aria-hidden className="mx-1 my-1.5 w-px shrink-0 bg-line" />}
+                <button className="flex w-[60px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] leading-tight text-ink-2 hover:bg-surface-2 aria-pressed:bg-accent aria-pressed:text-white"
+                  aria-pressed={tool === x.id} title={x.label}
+                  onClick={() => {
+                    setTool(x.id);
+                    if (x.id === "image") imageInput.current?.click();
+                  }}>
+                  {x.icon}
+                  <span className="line-clamp-2 w-full text-center">{x.label}</span>
+                </button>
+              </span>
+            ))}
+          </div>
           <input ref={imageInput} type="file" accept="image/*" hidden onChange={async (e) => {
             const f = e.target.files?.[0];
             e.target.value = "";
@@ -734,7 +787,6 @@ export function Editor({
             setPendingImage({ url, ratio: bmp.height / bmp.width });
             setTool("image");
           }} />
-          <span className="mx-1 h-6 w-px bg-line" />
           <button className="icon-btn" aria-label={t("ed.undo")} title={t("ed.undo")} disabled={!items.canUndo && !marks.canUndo} onClick={() => { items.undo(); marks.undo(); }}><Undo2 size={18} /></button>
           <button className="icon-btn" aria-label={t("ed.redo")} title={t("ed.redo")} disabled={!items.canRedo && !marks.canRedo} onClick={() => { items.redo(); marks.redo(); }}><Redo2 size={18} /></button>
           <span className="ms-auto flex items-center gap-1">
@@ -812,6 +864,21 @@ export function Editor({
                   strokeWidth={(i.stroke ?? 2) * ptToPx} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
               ))}
             </svg>
+            {/* Arrows, in pixels so their heads keep their shape. */}
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`}>
+              {pageItems.filter((i) => i.kind === "arrow" && (i.points?.length ?? 0) > 1).map((i) => {
+                const [[ax, ay], [bx, by]] = [i.points![0], i.points![i.points!.length - 1]].map(([x, y]) => [x * width, y * height]);
+                const sw = (i.stroke ?? 2) * ptToPx, len = Math.hypot(bx - ax, by - ay) || 1;
+                const head = Math.min(len * 0.6, Math.max(8 * ptToPx, sw * 4)), ang = Math.atan2(by - ay, bx - ax);
+                const wing = (k: number) => `${bx + Math.cos(ang + Math.PI + k * 0.45) * head},${by + Math.sin(ang + Math.PI + k * 0.45) * head}`;
+                return (
+                  <g key={i.id} fill={i.color} stroke={i.color}>
+                    <line x1={ax} y1={ay} x2={bx - Math.cos(ang) * head * 0.8} y2={by - Math.sin(ang) * head * 0.8} strokeWidth={sw} strokeLinecap="round" />
+                    <polygon points={`${bx},${by} ${wing(1)} ${wing(-1)}`} stroke="none" />
+                  </g>
+                );
+              })}
+            </svg>
             {pageItems.map((i) => {
               const boxStyle: React.CSSProperties = { left: `${i.x * 100}%`, top: `${i.y * 100}%`, width: `${i.w * 100}%`, height: `${i.h * 100}%` };
               const isSel = sel === i.id;
@@ -848,18 +915,41 @@ export function Editor({
                   </div>
                 );
               }
-              if (i.kind === "path" || i.kind === "line") {
-                return <div key={i.id} {...common} className={`absolute cursor-move ${frame}`} style={{ ...boxStyle, minWidth: 6, minHeight: 6 }} />;
+              if (i.kind === "path" || i.kind === "line" || i.kind === "arrow") {
+                // A drawing selected shows a light dashed outline, not a box (it isn't one), and no resize handle.
+                return <div key={i.id} {...common} className={`absolute cursor-move rounded-sm ${isSel ? "outline-dashed outline-1 outline-offset-4 outline-[color-mix(in_oklab,var(--accent)_70%,transparent)]" : ""}`} style={{ ...boxStyle, minWidth: 6, minHeight: 6 }} />;
               }
               if (i.kind === "image") {
                 // eslint-disable-next-line @next/next/no-img-element
                 inner = <img src={i.image} alt="" draggable={false} className="h-full w-full" />;
               }
+              if (i.kind === "underline" || i.kind === "strike") {
+                inner = <span className="absolute inset-x-0" style={{ top: `${i.kind === "underline" ? 94 : 58}%`, height: Math.max(1, Math.min(3, i.h * (size?.h ?? 792) * 0.07) * ptToPx), background: i.color, transform: "translateY(-50%)" }} />;
+              }
+              if (i.kind === "check" || i.kind === "cross") {
+                inner = (
+                  <svg viewBox="0 0 1 1" className="h-full w-full overflow-visible" fill="none" stroke={i.color} strokeWidth={0.13} strokeLinecap="round">
+                    {i.kind === "check" ? <polyline points="0.12,0.55 0.4,0.82 0.88,0.18" strokeLinejoin="round" /> : <path d="M0.18 0.18L0.82 0.82M0.82 0.18L0.18 0.82" />}
+                  </svg>
+                );
+              }
+              if (i.kind === "stamp") {
+                const sh = i.h * height;
+                inner = <span className="grid h-full w-full place-items-center overflow-hidden whitespace-nowrap font-bold uppercase" style={{ color: i.color, fontSize: Math.min(sh * 0.55, (i.w * width * 0.88) / Math.max(1, (i.text ?? "").length * 0.62)), fontFamily: "Helvetica, Arial, sans-serif" }}>{i.text}</span>;
+              }
+              if (i.kind === "note") inner = <StickyNote className="h-full w-full p-[12%] text-ink" strokeWidth={2.2} />;
+              if (i.kind === "link") inner = <Link2 size={14} className="absolute -top-2 -left-2 rounded-full bg-[#2f6fed] p-0.5 text-white" />;
+              if (i.kind === "erase") inner = <Eraser size={14} className="absolute -top-2 -left-2 rounded-full bg-ink p-0.5 text-bg" />;
               const shape: React.CSSProperties =
                 i.kind === "rect" ? { border: `${(i.stroke ?? 2) * ptToPx}px solid ${i.color}`, background: i.fill ?? "transparent" } :
                 i.kind === "ellipse" ? { border: `${(i.stroke ?? 2) * ptToPx}px solid ${i.color}`, background: i.fill ?? "transparent", borderRadius: "50%" } :
                 i.kind === "highlight" ? { background: i.color, opacity: 0.38, mixBlendMode: "multiply" } :
                 i.kind === "whiteout" ? { background: "#fff", boxShadow: isSel ? undefined : "0 0 0 1px rgb(0 0 0 / 0.06)" } :
+                // The page under an eraser is the preview, where it's already gone.
+                i.kind === "erase" ? { outline: "1.5px dashed var(--ink-2)", outlineOffset: -1 } :
+                i.kind === "stamp" ? { border: `${Math.max(1.5, i.h * (size?.h ?? 792) * 0.07) * ptToPx}px solid ${i.color}`, borderRadius: 4, opacity: 0.9 } :
+                i.kind === "note" ? { background: i.color, borderRadius: 4, boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)" } :
+                i.kind === "link" ? { outline: "1.5px dashed #2f6fed", background: "rgb(47 111 237 / 0.1)" } :
                 isFieldKind(i.kind) ? fieldShape(i.kind) : {};
               return (
                 <div key={i.id} {...common} className={`absolute cursor-move ${frame}`} style={{ ...boxStyle, ...shape }}>
@@ -1030,7 +1120,61 @@ export function Editor({
             }} />
         )}
 
-        {(toolId === "edit" || toolId === "sign" || toolId === "forms") && selected?.kind !== "image" && !(selected && (isContent(selected) || isFieldKind(selected.kind))) && tool !== "editText" && (
+        {toolId === "edit" && (tool === "erase" || tool === "whiteout" || selected?.kind === "erase" || selected?.kind === "whiteout") && (
+          <p className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">
+            {t(tool === "erase" || selected?.kind === "erase" ? "ed.eraseHint" : "ed.whiteoutHint")}
+          </p>
+        )}
+
+        {/* Stamps: pick the words, for the next one or the one selected. */}
+        {toolId === "edit" && (tool === "stamp" || selected?.kind === "stamp") && (
+          <div className="space-y-2" data-stamp-picker>
+            <p className="text-[13px] font-medium text-ink-2">{t("ed.stampPick")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {STAMPS.map(([k, color]) => {
+                const text = t(`ed.stamp.${k}`);
+                const on = (selected?.kind === "stamp" ? selected.text : stampPick.text || t(`ed.stamp.${STAMPS[0][0]}`)) === text;
+                return (
+                  <button key={k} aria-pressed={on} onClick={() => { setStampPick({ text, color }); if (selected?.kind === "stamp") patch(selected.id, { text, color }); }}
+                    className="rounded border-2 px-2 py-0.5 text-[12px] font-bold uppercase aria-pressed:ring-2 aria-pressed:ring-[var(--ink)] aria-pressed:ring-offset-1" style={{ borderColor: color, color }}>
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+            <input className="field h-10 w-full" placeholder={t("ed.stampCustom")} aria-label={t("ed.stampCustom")}
+              value={selected?.kind === "stamp" ? selected.text ?? "" : stampPick.text}
+              onChange={(e) => { setStampPick((p) => ({ ...p, text: e.target.value })); if (selected?.kind === "stamp") patch(selected.id, { text: e.target.value }, false); }} />
+            {tool === "stamp" && <p className="text-[13px] text-muted">{t("ed.clickToPlace")}</p>}
+          </div>
+        )}
+
+        {selected?.kind === "note" && (
+          <label className="block">
+            <span className="mb-1 block text-[13px] font-medium text-ink-2">{t("ed.noteText")}</span>
+            <textarea className="field min-h-[96px] w-full resize-y py-2 text-[14px]" value={selected.text ?? ""} placeholder={t("ed.typeHere")}
+              ref={(el) => { if (el && focusItem.current === "note-text") { focusItem.current = null; el.focus(); } }}
+              onChange={(e) => patch(selected.id, { text: e.target.value }, false)} />
+            <span className="mt-1 block text-[13px] text-muted">{t("ed.noteHint")}</span>
+          </label>
+        )}
+
+        {selected?.kind === "link" && (() => {
+          const target = selected.url ? linkTarget(selected.url, sizes.length) : null;
+          return (
+            <label className="block">
+              <span className="mb-1 block text-[13px] font-medium text-ink-2">{t("ed.linkTo")}</span>
+              <input className="field h-10 w-full" value={selected.url ?? ""} placeholder={t("ed.linkPlaceholder")} inputMode="url"
+                ref={(el) => { if (el && focusItem.current === "link-url") { focusItem.current = null; el.focus(); } }}
+                onChange={(e) => patch(selected.id, { url: e.target.value }, false)} />
+              <span className={`mt-1 block text-[13px] ${selected.url && !target ? "text-danger" : "text-muted"}`}>
+                {!selected.url ? t("ed.linkHint") : !target ? t("ed.linkBad") : "page" in target ? t("ed.linkPage", { n: target.page + 1 }) : t("ed.linkUrl", { url: target.uri })}
+              </span>
+            </label>
+          );
+        })()}
+
+        {(toolId === "edit" || toolId === "sign" || toolId === "forms") && selected?.kind !== "image" && !(selected && (isContent(selected) || isFieldKind(selected.kind) || ["note", "link", "stamp", "erase", "whiteout"].includes(selected.kind))) && !["editText", "stamp", "note", "link", "erase", "whiteout"].includes(tool) && (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-1.5">
               {COLORS.map((c) => (

@@ -365,6 +365,54 @@ await test("a retyped scan line empties its place in the paper's colour; the sca
   return filters.join(",");
 });
 
+await test("the Eraser removes what's under it and leaves no box", async () => {
+  const pt = (x0, y0, x1, y1) => ({ x: x0 / 612, y: 1 - y1 / 792, w: (x1 - x0) / 612, h: (y1 - y0) / 792 });
+  const before = await raw(base);
+  const out = await save(base, [{ id: "e", page: 0, kind: "erase", ...pt(92, 678, 172, 690) }, { id: "e2", page: 0, kind: "erase", ...pt(340, 370, 420, 440) }]);
+  const text = await allText(out);
+  ok(!/quarterly|results/.test(text) && /show steady growth/.test(text), `text: ${text.slice(0, 100)}`);
+  const after = await raw(out);
+  eq(after.filter((o) => o.kind === "path").length, before.filter((o) => o.kind === "path").length, "no box drawn");
+  return text.slice(0, 50);
+});
+
+await test("markup: stamp, marks, arrow and lines drawn; notes and links are real annotations", async () => {
+  const doc = await PDFDocument.create();
+  doc.addPage([612, 792]);
+  doc.addPage([612, 792]);
+  const two = await doc.save();
+  const it = (kind, p) => ({ id: kind + (p.url ?? ""), page: 0, kind, x: 0.1, y: 0.1, w: 0.3, h: 0.05, color: "#d33f6a", ...p });
+  const out = await save(two, [
+    it("stamp", { text: "APPROVED", color: "#12a37f" }), it("check", { y: 0.3, w: 0.03, h: 0.02 }), it("cross", { y: 0.35, w: 0.03, h: 0.02 }),
+    it("underline", { y: 0.4 }), it("strike", { y: 0.45 }), it("arrow", { y: 0.5, points: [[0.1, 0.5], [0.4, 0.55]] }),
+    it("note", { y: 0.6, w: 0.04, h: 0.03, text: "Check this figure" }),
+    it("link", { y: 0.7, url: "example.com/a" }), it("link", { y: 0.75, url: "2" }), it("link", { y: 0.8, url: "javascript:alert(1)" }),
+  ]);
+  ok((await allText(out)).includes("APPROVED"), "stamp text");
+  const lib = await PDFDocument.load(out);
+  const annots = lib.getPages()[0].node.Annots()?.asArray().map((r) => lib.context.lookup(r)) ?? [];
+  const sub = (a) => String(a.get(PDFName.of("Subtype")));
+  const note = annots.find((a) => sub(a) === "/Text");
+  ok(note && note.get(PDFName.of("Contents")).decodeText() === "Check this figure", "note annotation with its text");
+  const links = annots.filter((a) => sub(a) === "/Link");
+  eq(links.length, 2, "links (the javascript: one refused)");
+  const uri = links.map((a) => a.get(PDFName.of("A"))).filter(Boolean).map((a) => lib.context.lookup(a).get(PDFName.of("URI")).decodeText());
+  eq(uri.join(), "https://example.com/a", "web link");
+  ok(links.some((a) => a.get(PDFName.of("Dest"))), "page link");
+  const paths = (await raw(out)).filter((o) => o.kind === "path").length;
+  ok(paths >= 7, `drawn marks: ${paths}`);
+  return `${annots.length} annotations, ${paths} paths`;
+});
+
+await test("link targets: addresses, mail, pages; unsafe schemes refused", async () => {
+  const { linkTarget } = edit;
+  eq(JSON.stringify(linkTarget("nopload.app", 3)), JSON.stringify({ uri: "https://nopload.app" }), "bare domain");
+  eq(JSON.stringify(linkTarget("me@x.org", 3)), JSON.stringify({ uri: "mailto:me@x.org" }), "mail");
+  eq(JSON.stringify(linkTarget("3", 3)), JSON.stringify({ page: 2 }), "page");
+  for (const bad of ["4", "0", "javascript:alert(1)", "data:text/html,x", "file:///etc/passwd", "hello world", "vbscript:x"]) eq(linkTarget(bad, 3), null, bad);
+  return "ok";
+});
+
 await test("every robustness fixture lists without failing", async () => {
   const dir = join(root, "tests/robustness/fixtures");
   let n = 0;
