@@ -4,6 +4,7 @@ import { LIGHT_OFFICE, optionVisible, toolById, type ToolId } from "../tools";
 import { baseName, type Output, type Progress, type Skipped } from "./common";
 import { forFile, PdfError, ServerError, toPdfError } from "./errors";
 import { STATIC } from "../mode";
+import type { Say } from "./compare-export";
 
 type Opts = Record<string, unknown>;
 const s = (v: unknown) => String(v ?? "");
@@ -62,7 +63,9 @@ async function withOcr(f: File, o: Opts, p: Progress, convert: (f: File, p: Prog
 }
 
 // `index`: the exhibit index's title and column headings (Add page numbers).
-export type Labels = { page: string; pageOf: string; nOf: string; index?: { title: string; file: string; numbers: string; pages: string } };
+// `say` and `locale`: the page's language, for words a tool writes into a
+// file (Make PDF accessible's report); without them it is English.
+export type Labels = { page: string; pageOf: string; nOf: string; index?: { title: string; file: string; numbers: string; pages: string }; say?: Say; locale?: string };
 export type FileState = "wait" | "work" | "done" | "fail";
 export type Track = (index: number, state: FileState) => void;
 
@@ -256,7 +259,10 @@ export async function runTool(id: ToolId, files: File[], o: Opts, progress?: Pro
     }
     case "accessible": {
       const { tagPdf } = await import("./tag");
-      return each(files, progress, (f, p) => tagPdf(f, { title: s(o.accTitle), lang: s(o.accLang) }, p), signal);
+      return each(files, progress, async (f, p) => {
+        const out = await tagPdf(f, { title: s(o.accTitle), lang: s(o.accLang) }, (d, t) => p(d / Math.max(1, t) * 0.7, 1));
+        return [...out, ...(await a11yReportFor(f, out[0], labels, (d, t) => p(0.7 + d / Math.max(1, t) * 0.3, 1), signal))];
+      }, signal);
     }
     case "grayscale": {
       const { grayscale } = await import("./gray");
@@ -382,7 +388,7 @@ export async function prepare(id: ToolId): Promise<unknown> {
     case "removeBlank":
       return Promise.all([import("./impose"), (await import("./qpdf")).prepareQpdf(), (await import("./common")).pdfjs()]);
     case "accessible":
-      return Promise.all([import("./tag"), (await import("./qpdf")).prepareQpdf(), (await import("./common")).pdfjs()]);
+      return Promise.all([import("./tag"), import("./a11ycheck"), import("./a11yreport"), (await import("./qpdf")).prepareQpdf(), (await import("./common")).pdfjs()]);
     case "grayscale":
       return Promise.all([import("./gray"), (await import("./qpdf")).prepareQpdf(), (await import("./jpeg")).prepareJpeg()]);
     case "protect":
@@ -397,6 +403,28 @@ export async function prepare(id: ToolId): Promise<unknown> {
       return Promise.all([import("./structure"), (await import("./qpdf")).prepareQpdf(), (await import("./common")).pdfjs()]);
     default:
       return null;
+  }
+}
+
+// Make PDF accessible's report: the check run on the tagged file the user
+// downloads, and on the original to say what tagging fixed. If the check
+// can't run (a file pdf.js can't read), the PDF comes back alone.
+async function a11yReportFor(f: File, tagged: Output, labels: Labels | undefined, p: Progress, signal?: AbortSignal): Promise<Output[]> {
+  try {
+    const { checkA11y } = await import("./a11ycheck");
+    const { a11yOutput } = await import("./a11yreport");
+    const after = await checkA11y(new Uint8Array(await tagged.blob.arrayBuffer()), (d, t) => p(d / Math.max(1, t) * 0.6, 1), signal);
+    let before = null;
+    try {
+      before = await checkA11y(new Uint8Array(await f.arrayBuffer()), (d, t) => p(0.6 + d / Math.max(1, t) * 0.4, 1), signal);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      // The original didn't open as it was (tagging repaired it): the report leaves out what was fixed.
+    }
+    return [a11yOutput(after, { file: f.name, before, t: labels?.say, locale: labels?.locale })];
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    return [];
   }
 }
 

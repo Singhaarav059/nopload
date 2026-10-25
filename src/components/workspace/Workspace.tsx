@@ -69,7 +69,7 @@ const STAMPS: string[] = ["watermark", "pageNumbers", "headerFooter"];
 // `preset`: options to start from instead of the defaults (a landing page's, see src/lib/landings.ts).
 export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<string, unknown> }) {
   const tool = toolById(toolId);
-  const { t, tOr } = useI18n();
+  const { t, tOr, locale } = useI18n();
   const problem = useProblem();
   // Files handed over from the previous tool's result, or from the browser
   // add-on, start the workspace pre-filled, when this tool takes them.
@@ -394,6 +394,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
       return runTool(tool.id, files, { ...options, url }, progress, {
         page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}"),
         index: { title: tOr("pn.indexTitle", "Exhibit index"), file: tOr("pn.indexFile", "File"), numbers: tOr("pn.indexNumbers", "Numbers"), pages: tOr("pn.indexPages", "Pages") },
+        say: t, locale,
       }, signal, track);
     });
   };

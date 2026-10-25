@@ -57,6 +57,7 @@
     "test:office-run": "node tests/office-run.mjs",
     "test:pdfa": "node tests/pdfa.mjs",
     "test:pdfua": "node tests/pdfua.mjs",
+    "test:a11y": "node tests/a11y.mjs",
     "test:ocr-accuracy": "node tests/ocr-accuracy.mjs",
     "test:libreoffice": "node tests/libreoffice.mjs",
     "test:libreoffice-parts": "node tests/libreoffice-parts.mjs",

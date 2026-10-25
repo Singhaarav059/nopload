@@ -44,7 +44,7 @@ const withDefaults = (steps: Step[]) =>
   steps.map((s) => ({ tool: s.tool, options: { ...defaultOptions(toolById(s.tool)), ...sizeFromMb(s.options), ...batesRunOn(s), ...s.options } }));
 
 export function Workflows() {
-  const { t, tOr } = useI18n();
+  const { t, tOr, locale } = useI18n();
   const problem = useProblem();
   const [saved, setSaved] = useState<Saved[]>([]);
   const [name, setName] = useState("");
@@ -169,8 +169,11 @@ export function Workflows() {
       out = await runTool(s.tool, current, s.options, undefined, {
         page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}"),
         index: { title: tOr("pn.indexTitle", "Exhibit index"), file: tOr("pn.indexFile", "File"), numbers: tOr("pn.indexNumbers", "Numbers"), pages: tOr("pn.indexPages", "Pages") },
+        say: t, locale,
       }, signal);
-      current = out.map((o) => new File([o.blob], o.name, { type: "application/pdf" }));
+      // The next step takes the PDFs; a report beside them (Make PDF accessible's) stops here.
+      const pdfs = out.filter((o) => /\.pdf$/i.test(o.name));
+      current = (pdfs.length ? pdfs : out).map((o) => new File([o.blob], o.name, { type: "application/pdf" }));
     }
     return steps.some((s) => s.tool === "protect" || s.tool === "unlock") ? out : markUnrestricted(input, out);
   };
