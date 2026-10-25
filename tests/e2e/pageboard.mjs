@@ -1,7 +1,8 @@
 // The page board in real browsers: Shift-click selects a range, Organize
 // interleaves, reverses and resets pages from several files, and Rotate takes
 // several files (one rotated PDF each) and can turn only the portrait or only
-// the landscape pages.
+// the landscape pages. Swiping a page sideways turns it (Rotate) or throws
+// it out (Remove pages).
 //
 //   node tests/e2e/pageboard.mjs [chromium] [firefox] [webkit]   (see kit.mjs)
 import { PDFDocument } from "pdf-lib";
@@ -116,6 +117,37 @@ await suite(async ({ browser, test }) => {
       return JSON.stringify(got);
     });
   }
+
+  // A page swiped sideways: in Rotate it turns that way; in Remove pages it's thrown out.
+  const swipeCard = async (n, by) => {
+    const b = await cards.nth(n).getByRole("button").first().boundingBox();
+    const y = b.y + b.height / 2, x = b.x + b.width / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + by, y + 4, { steps: 8 });
+    await page.mouse.up();
+  };
+
+  await test("Rotate: a page swiped right turns right, one swiped left turns left", async () => {
+    await ready("rotate-pdf", [mixed], 4);
+    await page.getByLabel(t["opt.angle"], { exact: true }).selectOption("0");
+    await swipeCard(0, 120);
+    await swipeCard(2, -120);
+    const got = await angles(await download(t["tool.rotate.action"]));
+    expect("angles", got, [90, 0, 270, 0]);
+    return JSON.stringify(got);
+  });
+
+  await test("Remove pages: pages swiped sideways are thrown out; swiped again, one comes back", async () => {
+    await ready("remove-pages", [seven], 7);
+    await swipeCard(1, 140);
+    await swipeCard(3, -140);
+    await swipeCard(5, 140);
+    await swipeCard(5, -140);
+    await page.getByText(t["ws.selected"].replace("{n}", "2"), { exact: true }).waitFor({ timeout: 5000 });
+    expect("pages", await widths(await download(t["tool.remove.action"])), [400, 402, 404, 405, 406]);
+    return "2 removed";
+  });
 
   await ctx.close();
 });

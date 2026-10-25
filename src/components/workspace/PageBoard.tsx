@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { haptic } from "@/lib/device";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
@@ -33,22 +34,60 @@ function PageCard({
   // A draggable card drags from anywhere, and its thumbnail is the sortable
   // button for the keyboard, so the rotate and delete buttons aren't inside one.
   const drag = sortable ? listeners : {};
+  // Rotate and Remove pages: a page swiped sideways turns that way, or is
+  // thrown out (swiped again, it comes back). It follows the finger meanwhile.
+  const swipes = mode === "rotate" || mode === "remove";
+  const swipe = useRef<{ x: number; y: number; id: number } | null>(null);
+  const swiped = useRef(false);
+  const [dx, setDx] = useState(0);
+  const onSwipeDown = (e: React.PointerEvent) => {
+    if (!swipes || e.button !== 0) return;
+    swipe.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    swiped.current = false;
+  };
+  const onSwipeMove = (e: React.PointerEvent) => {
+    const s = swipe.current;
+    if (!s || s.id !== e.pointerId) return;
+    const x = e.clientX - s.x, y = e.clientY - s.y;
+    if (Math.abs(x) > 8 && Math.abs(x) > Math.abs(y)) {
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      setDx(x);
+    }
+  };
+  const onSwipeUp = (e: React.PointerEvent) => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || s.id !== e.pointerId) return;
+    const x = e.clientX - s.x, y = e.clientY - s.y;
+    setDx(0);
+    if (Math.abs(x) < 48 || Math.abs(x) < Math.abs(y) * 1.5) return;
+    swiped.current = true;
+    haptic();
+    if (mode === "rotate") onRotate(x > 0 ? 90 : -90);
+    else onToggle(false);
+  };
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : undefined }}
-      className={`group relative flex flex-col items-center rounded-xl p-2 ${sortable ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
+      className={`group relative flex flex-col items-center rounded-xl p-2 ${sortable ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${swipes ? "touch-pan-y" : ""}`}
       {...drag}
+      onPointerDown={swipes ? onSwipeDown : undefined}
+      onPointerMove={swipes ? onSwipeMove : undefined}
+      onPointerUp={swipes ? onSwipeUp : undefined}
+      onPointerCancel={swipes ? () => { swipe.current = null; setDx(0); } : undefined}
     >
       <button
         type="button"
         ref={sortable ? setActivatorNodeRef : undefined}
         {...(sortable ? attributes : {})}
-        onClick={selectable ? (e) => onToggle(e.shiftKey) : undefined}
+        onClick={selectable ? (e) => { if (swiped.current) { swiped.current = false; return; } onToggle(e.shiftKey); } : undefined}
+        data-swiping={dx ? "" : undefined}
+        style={dx ? { translate: `${dx}px 0`, rotate: `${mode === "rotate" ? dx / 6 : dx / 30}deg`, opacity: mode === "remove" ? Math.max(0.35, 1 - Math.abs(dx) / 260) : 1 } : undefined}
         tabIndex={selectable || sortable ? 0 : -1}
         aria-pressed={selectable ? selected : undefined}
         aria-label={t("ws.page", { n: index + 1 })}
-        className={`relative grid h-[180px] w-[136px] place-items-center rounded-lg transition-[box-shadow] ${selectable ? "cursor-pointer" : "cursor-[inherit]"} ${marked ? (mode === "remove" ? "shadow-[0_0_0_3px_var(--danger)]" : "shadow-[0_0_0_3px_var(--accent)]") : "hover:shadow-[0_0_0_2px_var(--line-strong)]"} ${isDragging ? "shadow-card" : ""}`}
+        className={`page-swipe relative grid h-[180px] w-[136px] place-items-center rounded-lg ${selectable ? "cursor-pointer" : "cursor-[inherit]"} ${marked ? (mode === "remove" ? "shadow-[0_0_0_3px_var(--danger)]" : "shadow-[0_0_0_3px_var(--accent)]") : "hover:shadow-[0_0_0_2px_var(--line-strong)]"} ${isDragging ? "shadow-card" : ""}`}
       >
         {item.blank ? (
           <div className="h-[170px] w-[120px] bg-white shadow-[0_0_0_1px_var(--line)]" style={{ transform: `rotate(${rotate}deg)` }} />
@@ -69,7 +108,8 @@ function PageCard({
       {(mode === "rotate" || mode === "organize") && (
         <div
           className="absolute left-1/2 top-[70px] flex -translate-x-1/2 gap-1 rounded-full border border-line bg-surface p-1 shadow-card opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
-          onPointerDown={(e) => e.stopPropagation()}
+          // Not the start of a drag to reorder; a swipe may start here.
+          onPointerDown={sortable ? (e) => e.stopPropagation() : undefined}
         >
           <button className="icon-btn h-8 w-8" aria-label={t("ws.rotateLeft")} title={t("ws.rotateLeft")} onClick={() => onRotate(-90)}><RotateCcw size={15} /></button>
           <button className="icon-btn h-8 w-8" aria-label={t("ws.rotateRight")} title={t("ws.rotateRight")} onClick={() => onRotate(90)}><RotateCw size={15} /></button>
@@ -142,7 +182,7 @@ export function PageBoard({
     const sizes = await Promise.all(files.map((f) => pageSizes(f).catch(() => [])));
     turnBy(90, new Set(byOrientation(pages, sizes, want)));
   };
-  const hint = mode === "remove" ? t("ws.pickPagesRemove") : mode === "rotate" ? t("ws.pickPagesRotate") : mode === "organize" ? t("ws.dragToReorder") : t("ws.pickPages");
+  const hint = mode === "remove" ? `${t("ws.pickPagesRemove")} ${t("ws.swipeRemove")}` : mode === "rotate" ? `${t("ws.pickPagesRotate")} ${t("ws.swipeRotate")}` : mode === "organize" ? t("ws.dragToReorder") : t("ws.pickPages");
 
   return (
     <div>

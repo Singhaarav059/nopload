@@ -176,6 +176,54 @@ await suite(async ({ name, browser, test }) => {
     }
   });
 
+  await test("a loop with the pen picks an area: highlight it, or erase it", async () => {
+    try {
+      step = "open";
+      await open(page, "/en/edit-pdf");
+      await pick(page, [letter]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      const box = await page.locator("main img").first().boundingBox();
+      const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
+      // A loop round a centre in page points, rx by ry.
+      const ring = async (cx, cy, rx, ry) => {
+        await page.mouse.move(...at(cx + rx, cy));
+        await page.mouse.down();
+        for (let k = 1; k <= 36; k++) await page.mouse.move(...at(cx + Math.cos((k / 36) * Math.PI * 2) * rx, cy + Math.sin((k / 36) * Math.PI * 2) * ry));
+        await page.mouse.up();
+      };
+      await tool("ed.draw").click();
+      step = "highlight";
+      // Round "Dear customer," (x 72-170, baseline 700).
+      await ring(120, 704, 60, 14);
+      const bar = page.getByRole("toolbar", { name: t["ed.loopActions"] });
+      await bar.waitFor({ timeout: 3000 });
+      if (await page.locator("[data-item=path]").count()) throw new Error("the loop stayed as a drawing");
+      await bar.getByRole("button", { name: t["ed.highlight"], exact: true }).click();
+      if ((await page.locator("[data-item=highlight]").count()) !== 1) throw new Error("no highlight");
+      step = "erase";
+      await tool("ed.draw").click();
+      // Round "Thank you" (x 72-136, baseline 660).
+      await ring(104, 664, 38, 12);
+      await bar.getByRole("button", { name: t["ed.lassoErase"], exact: true }).click();
+      await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
+      step = "save";
+      const [dl] = await Promise.all([
+        page.waitForEvent("download", { timeout: 60000 }),
+        page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
+      ]);
+      const saved = join(downloads, `${name}-looped.pdf`);
+      await dl.saveAs(saved);
+      const pdf = await getDocument({ data: new Uint8Array(readFileSync(saved)), verbosity: 0 }).promise;
+      const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" ");
+      if (/Thank/.test(text)) throw new Error(`erased words still there: ${text}`);
+      if (!/Dear customer/.test(text) || !/business/.test(text)) throw new Error(`text around it went: ${text}`);
+      return text.slice(0, 70);
+    } catch (e) {
+      await page.screenshot({ path: join(downloads, `${name}-loop-failed.png`) }).catch(() => {});
+      throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
+    }
+  });
+
   await test("Sign PDF and PDF Forms offer ticks, crosses and lines; a tick is saved", async () => {
     try {
       step = "forms";

@@ -121,6 +121,33 @@ await suite(async ({ name, browser, test }) => {
     }
   });
 
+  await test("⌘K / Ctrl+K: say what you want, Enter opens the tool", async () => {
+    const ctx = await browser.newContext({ locale: "en-US", ...DEVICES[4].ctx });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(15000);
+    try {
+      await open(page, "/en");
+      await page.keyboard.press("Control+k");
+      const bar = page.getByRole("dialog", { name: t["cmd.label"] });
+      await bar.waitFor();
+      await bar.getByRole("combobox").fill("make it smaller");
+      const first = bar.getByRole("option").first();
+      if (!(await first.textContent()).includes(t["tool.compress.name"])) throw new Error(`first: ${await first.textContent()}`);
+      await page.keyboard.press("Enter");
+      await page.waitForURL(/\/en\/compress-pdf/);
+      // Opened again, the tool just used is first under Recent.
+      await page.getByRole("button", { name: t["cmd.label"] }).first().click();
+      await bar.getByText(t["cmd.recent"]).waitFor();
+      await bar.getByRole("combobox").fill("join files");
+      if (!(await bar.getByRole("option").first().textContent()).includes(t["tool.merge.name"])) throw new Error("join files isn't Merge");
+      await page.keyboard.press("Escape");
+      await bar.waitFor({ state: "detached" });
+      return "compress, then merge";
+    } finally {
+      await ctx.close();
+    }
+  });
+
   await test("website: no app frame without ?app=1", async () => {
     const ctx = await browser.newContext({ locale: "en-US", ...DEVICES[0].ctx, ...(mobileOk ? {} : { isMobile: undefined }) });
     const page = await ctx.newPage();

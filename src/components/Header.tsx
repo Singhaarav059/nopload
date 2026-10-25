@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Globe2, Menu, X } from "lucide-react";
+import { ChevronDown, Globe2, Menu, Search, X } from "lucide-react";
 import { Logo } from "./Logo";
 import dynamic from "next/dynamic";
 import { useI18n } from "./I18n";
@@ -11,6 +11,7 @@ import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
 import { ThemeMenu, ThemeSwitch } from "./ThemeMenu";
+import { openCommandBar } from "./CommandBar";
 
 // Every tool's icon only shows in the phone menu: loaded when it opens (P3-03).
 const ToolIcon = dynamic(() => import("./ToolIcon").then((m) => m.ToolIcon), { ssr: false });
@@ -140,6 +141,10 @@ export function Header() {
               </div>
             )}
           </div>
+
+          <button type="button" data-command className="icon-btn" aria-label={t("cmd.label")} title={t("cmd.label")} onClick={openCommandBar}>
+            <Search size={18} strokeWidth={1.75} />
+          </button>
 
           <ThemeMenu />
 

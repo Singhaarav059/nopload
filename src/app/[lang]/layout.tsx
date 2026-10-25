@@ -12,6 +12,7 @@ import { ExtensionHandoff } from "@/components/ExtensionHandoff";
 import { PointerLight } from "@/components/PointerLight";
 import { AppShell } from "@/components/AppShell";
 import { PageTransition } from "@/components/PageTransition";
+import { CommandBar } from "@/components/CommandBar";
 import { getDictionary } from "@/lib/i18n/dictionary";
 import { hasLocale, isRtl, LOCALE_CODES } from "@/lib/i18n/locales";
 import { BRAND, SITE_URL } from "@/lib/brand";
@@ -83,6 +84,7 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
           <ServiceWorker />
           <PointerLight />
           <AppShell />
+          <CommandBar />
         </I18nProvider>
       </body>
     </html>
