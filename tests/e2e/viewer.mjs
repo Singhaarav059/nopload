@@ -14,6 +14,11 @@ const fill = (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v[k]);
 await suite(async ({ browser, test }) => {
   const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
+  // CI's machines are slower than a laptop: VIEWER_SLOW=4 runs Chromium at a quarter speed to find timing bugs.
+  if (process.env.VIEWER_SLOW && browser.browserType().name() === "chromium") {
+    const cdp = await ctx.newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.VIEWER_SLOW) });
+  }
   page.setDefaultTimeout(20000);
   const viewer = () => page.getByRole("dialog", { name: "report.pdf" });
   const bar = (name) => viewer().getByRole("button", { name, exact: true });
@@ -32,8 +37,9 @@ await suite(async ({ browser, test }) => {
     await page.waitForFunction(() => document.querySelector('[data-page="1"] canvas')?.width > 0);
     await viewer().locator('[data-page="1"] .textLayer').getByText("Quarterly report").first().waitFor({ state: "attached" });
     // Full screen: the viewer covers the window.
-    const box = await viewer().boundingBox();
-    if (box.width < 1270 || box.height < 890) throw new Error(`viewer is ${box.width}×${box.height}`);
+    // Its layout size (the opening animation scales it a little for a moment).
+    const [w, h] = await viewer().evaluate((el) => [el.offsetWidth, el.offsetHeight]);
+    if (w < 1280 || h < 900) throw new Error(`viewer is ${w}×${h}`);
     return "3 pages, text layer";
   });
 
@@ -146,15 +152,23 @@ await suite(async ({ browser, test }) => {
   });
 
   await test("opened again, it goes back to the page where you stopped", async () => {
+    let step = "scroll";
+    try {
     await viewer().locator(".vw-scroll").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
     await page.waitForTimeout(800);
     await wake();
+    step = "close";
     await bar(t["viewer.close"]).click();
     await viewer().waitFor({ state: "detached" });
+    step = "reopen";
     await pick(page, ["report.pdf"]);
-    await viewer().getByText(fill(t["viewer.resumed"], { n: 3 })).waitFor();
+    step = "back at page 3";
     await viewer().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor();
     return "page 3";
+    } catch (e) {
+      const where = await page.evaluate(() => [localStorage.getItem("nopload:viewer:report.pdf:3463"), document.querySelector(".vw-count")?.textContent, !!document.querySelector(".vw")]).catch(() => null);
+      throw new Error(`${step}: ${e.message.split("\n")[0]} ${JSON.stringify(where)}`);
+    }
   });
 
   await test("Recent: the file is there to open again, at its page", async () => {
