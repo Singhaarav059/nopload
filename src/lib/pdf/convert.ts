@@ -333,23 +333,35 @@ export function sheetName(stem: string) {
   return !name ? "Sheet1" : name.toLowerCase() === "history" ? `${name} 1` : name;
 }
 
-export async function pdfToExcel(file: File, o: { sheetPer: string }, progress?: Progress): Promise<Output[]> {
-  const ExcelJS = (await import("exceljs")).default;
+type ExcelOptions = { sheetPer: string; excelMode?: string; excelFormat?: string; totalsCheck?: boolean };
+
+export async function pdfToExcel(file: File, o: ExcelOptions, progress?: Progress): Promise<Output[]> {
+  const [ExcelJS, { joinTables, checkTable }] = await Promise.all([import("exceljs").then((m) => m.default), import("./sheets")]);
   const doc = await openPdf(await file.arrayBuffer());
   const layouts = await documentLayout(doc, (i) => progress?.(i, doc.numPages));
   await closePdf(doc);
   const wb = new ExcelJS.Workbook();
   wb.creator = "Nopload";
   const thin = { style: "thin" as const };
+  const textRows = (t: Table) => grid(t).map((r) => r.map((c) => c?.text.replace(/\s*\n\s*/g, " ") ?? ""));
+  // Checked cells: green when they add up, red with the right figure in a note when they don't.
+  const checks: (import("./sheets").Check & { sheet: string; cell: string })[] = [];
+  const mark = (ws: import("exceljs").Worksheet, row: number, col: number, c: import("./sheets").Check) => {
+    const cell = ws.getCell(row, col);
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: c.ok ? "FFD9F2E6" : "FFFAD4D4" } };
+    if (!c.ok) cell.note = `${c.kind === "total" ? "Adds up to" : "Expected"} ${Math.round(c.computed * 100) / 100}`;
+    checks.push({ ...c, sheet: ws.name, cell: cell.address });
+  };
+  const put = (cell: import("exceljs").Cell, text: string, bold: boolean) => {
+    const v = asNumber(text);
+    cell.value = v ?? text;
+    if (bold) cell.font = { bold: true };
+    if (v !== null && /%\)?$/.test(text)) cell.numFmt = "0.##%";
+  };
+  let tableNo = 0;
   const write = (ws: import("exceljs").Worksheet, layout: Layout) => {
     const widths: number[] = [];
     const fit = (k: number, chars: number) => (widths[k] = Math.max(widths[k] ?? 8, Math.min(60, chars + 2)));
-    const put = (cell: import("exceljs").Cell, text: string, bold: boolean) => {
-      const v = asNumber(text);
-      cell.value = v ?? text;
-      if (bold) cell.font = { bold: true };
-      if (v !== null && /%\)?$/.test(text)) cell.numFmt = "0.##%";
-    };
     for (const part of flow(layout)) {
       if (part.kind === "lines") {
         for (const row of toGrid(part.lines)) {
@@ -376,12 +388,36 @@ export async function pdfToExcel(file: File, o: { sheetPer: string }, progress?:
         if (c.rowSpan > 1 || c.colSpan > 1) ws.mergeCells(top + c.row, c.col + 1, top + c.row + c.rowSpan - 1, c.col + c.colSpan);
         if (c.colSpan === 1) fit(c.col, Math.max(...c.lines.map((l) => l.text.length), 0));
       }
+      if (o.totalsCheck) for (const c of checkTable(textRows(t), tableNo)) mark(ws, top + c.row, c.col + 1, c);
+      tableNo++;
       ws.addRow([]);
     }
     widths.forEach((w, k) => (ws.getColumn(k + 1).width = w));
   };
-  if (o.sheetPer === "document") {
-    const ws = wb.addWorksheet(sheetName(baseName(file.name)));
+  const stem = baseName(file.name);
+  if (o.excelMode === "tables") {
+    // Each table as data, joined where it runs on to the next page: one sheet each, its header frozen and filterable.
+    const perPage = layouts.flatMap((l, page) => l.tables.map((t, k) => ({ page, rows: textRows(t), first: k === 0, last: k === l.tables.length - 1 })));
+    const tables = joinTables(perPage);
+    tables.forEach((t, n) => {
+      const pages = t.pages.length > 1 ? `p${t.pages[0] + 1}-${t.pages[t.pages.length - 1] + 1}` : `p${t.pages[0] + 1}`;
+      const ws = wb.addWorksheet(sheetName(`Table ${n + 1} (${pages})`));
+      const head = t.rows[0].every((c) => !c.trim() || asNumber(c) === null);
+      t.rows.forEach((r, i) => {
+        const added = ws.addRow([]);
+        r.forEach((text, k) => text && put(added.getCell(k + 1), text, head && i === 0));
+      });
+      if (head) {
+        ws.views = [{ state: "frozen", ySplit: 1 }];
+        ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: Math.max(1, t.rows[0].length) } };
+      }
+      t.rows[0].forEach((_, k) => (ws.getColumn(k + 1).width = Math.min(60, Math.max(8, ...t.rows.map((r) => (r[k] ?? "").length + 2)))));
+      if (o.totalsCheck) for (const c of checkTable(t.rows, n)) mark(ws, c.row + 1, c.col + 1, c);
+    });
+    // No tables at all: the page as it is, rather than an empty workbook.
+    if (!tables.length) layouts.forEach((l, i) => write(wb.addWorksheet(`Page ${i + 1}`), l));
+  } else if (o.sheetPer === "document") {
+    const ws = wb.addWorksheet(sheetName(stem));
     layouts.forEach((l, i) => {
       write(ws, l);
       if (i < layouts.length - 1) ws.addRow([]);
@@ -389,10 +425,33 @@ export async function pdfToExcel(file: File, o: { sheetPer: string }, progress?:
   } else {
     layouts.forEach((l, i) => write(wb.addWorksheet(`Page ${i + 1}`), l));
   }
+  // The checks, listed: where, what kind, the figure given, the right one.
+  if (checks.length) {
+    const ws = wb.addWorksheet("Checks");
+    ws.addRow(["Sheet", "Cell", "Check", "In the PDF", "Adds up to", "Result"]).font = { bold: true };
+    for (const c of checks) {
+      const row = ws.addRow([c.sheet, c.cell, c.kind === "total" ? "Total" : "Running balance", c.stated, Math.round(c.computed * 100) / 100, c.ok ? "OK" : "Doesn't add up"]);
+      row.getCell(6).font = { bold: !c.ok, color: { argb: c.ok ? "FF12763F" : "FFC0262D" } };
+    }
+    [16, 8, 16, 14, 14, 16].forEach((w, k) => (ws.getColumn(k + 1).width = w));
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+  }
+  const note = checks.length ? `totals:${checks.length}:${checks.filter((c) => !c.ok).length}` : undefined;
+  if (o.excelFormat === "csv") {
+    // One CSV per sheet (Excel opens UTF-8 with its byte-order mark), zipped by the workspace when there are several.
+    const out: Output[] = [];
+    for (const ws of wb.worksheets) {
+      const buf = await wb.csv.writeBuffer({ sheetName: ws.name, formatterOptions: { writeBOM: true } });
+      const name = wb.worksheets.length > 1 ? `${stem}-${ws.name.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "")}.csv` : `${stem}.csv`;
+      out.push({ name, blob: new Blob([buf], { type: "text/csv" }), note });
+    }
+    return out;
+  }
   const buf = await wb.xlsx.writeBuffer();
   return [{
-    name: `${baseName(file.name)}.xlsx`,
+    name: `${stem}.xlsx`,
     blob: new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    note,
   }];
 }
 

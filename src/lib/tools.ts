@@ -319,7 +319,15 @@ const ALL: Tool[] = [
   {
     id: "pdfToExcel", slug: "pdf-to-excel", category: "convertFrom", icon: "Table", mode: "files",
     runtime: "browser", accept: PDF, multiple: true,
-    options: [{ key: "sheetPer", type: "select", choices: ["page", "document"], default: "page" }, ...AUTO_OCR],
+    options: [
+      // Layout: everything on the page, where it is. Tables: only the tables, joined across pages, as data (sheets.ts).
+      { key: "excelMode", type: "select", choices: ["layout", "tables"], default: "layout" },
+      { key: "sheetPer", type: "select", choices: ["page", "document"], default: "page", when: { key: "excelMode", is: ["layout"] } },
+      { key: "excelFormat", type: "select", choices: ["xlsx", "csv"], default: "xlsx" },
+      // Rows that say they're totals must add up; a statement's balance must follow from its money in and out.
+      { key: "totalsCheck", type: "toggle", default: true },
+      ...AUTO_OCR,
+    ],
   },
   {
     id: "pdfToPdfa", slug: "pdf-to-pdfa", category: "convertFrom", icon: "Archive", mode: "files",

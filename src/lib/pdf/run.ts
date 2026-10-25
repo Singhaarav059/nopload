@@ -140,7 +140,7 @@ export async function runTool(id: ToolId, files: File[], o: Opts, progress?: Pro
     }
     case "pdfToExcel": {
       const { pdfToExcel } = await import("./convert");
-      return each(files, progress, (f, p) => withOcr(f, o, p, (g, q) => pdfToExcel(g, { sheetPer: s(o.sheetPer) }, q), signal), signal);
+      return each(files, progress, (f, p) => withOcr(f, o, p, (g, q) => pdfToExcel(g, { sheetPer: s(o.sheetPer), excelMode: s(o.excelMode), excelFormat: s(o.excelFormat), totalsCheck: o.totalsCheck !== false }, q), signal), signal);
     }
     case "pdfToPdfa": {
       const { pdfToPdfa } = await import("./convert");

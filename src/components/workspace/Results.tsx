@@ -176,6 +176,10 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
           {t(cloud ? "res.translateServer" : first.note.startsWith("translate:builtin") ? "res.translateBuiltin" : "res.translateModel")}
         </p>
       )}
+      {first?.note?.startsWith("totals:") && (() => {
+        const [, n, bad] = first.note!.split(":").map(Number);
+        return <p className={`mt-2 text-[15px] ${bad ? "font-medium text-danger" : "text-ink-2"}`} data-totals={bad ? "bad" : "ok"}>{t(bad ? "res.totalsBad" : "res.totalsOk", { n, bad })}</p>;
+      })()}
       {first?.note === "ocrNone" && <p className="mt-2 text-[15px] text-muted">{t("res.ocrNone")}</p>}
       {first?.note === "ocrDoubtful" && <p className="mt-2 text-[15px] text-muted">{t("res.ocrDoubtful")}</p>}
       {first?.note === "ocrUsed" && <p className="mt-2 text-[15px] text-muted">{t("res.ocrUsed")}</p>}
