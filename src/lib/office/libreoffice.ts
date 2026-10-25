@@ -137,21 +137,26 @@ export async function officeToPdf(file: File, progress?: Progress, options: Reco
   if (!officeAvailable()) throw new OfficeError("office_isolation", "This page isn't cross-origin isolated");
   signal?.throwIfAborted();
   const current = load(progress, signal);
-  const { converter, died } = await abortable(current, signal);
   const input = new Uint8Array(await file.arrayBuffer());
   const limit = officeLimits.convertMs + (input.length / 1e6) * officeLimits.perMbMs;
-  const convert: Convert = async (data, outputFormat, name, filterOptions) =>
-    (await settle(converter.convert(data, { outputFormat, filterOptions }, name), died, limit, signal)).data;
-  let pdf;
-  try {
-    pdf = await exportPdf(convert, input, file.name, options);
-  } catch (e) {
-    // A LibreOffice that hung, died or was stopped is no use to the next job: that one starts afresh.
-    if (isStalled(e) || signal?.aborted) {
-      abandon(converter);
-      if (loading === current) loading = null;
+  // LibreOffice now and then stops responding on a file it converts fine the
+  // next time: a stalled conversion is tried once more with a fresh one, and
+  // only a second stall gives up (and the caller prints instead).
+  for (let attempt = 0, office = current; ; attempt++) {
+    const { converter, died } = await abortable(office, signal);
+    const convert: Convert = async (data, outputFormat, name, filterOptions) =>
+      (await settle(converter.convert(data, { outputFormat, filterOptions }, name), died, limit, signal)).data;
+    try {
+      const pdf = await exportPdf(convert, input, file.name, options);
+      return { name: `${baseName(file.name)}.pdf`, blob: new Blob([pdf as BlobPart], { type: "application/pdf" }) };
+    } catch (e) {
+      // A LibreOffice that hung, died or was stopped is no use to the next job: that one starts afresh.
+      if (isStalled(e) || signal?.aborted) {
+        abandon(converter);
+        if (loading === office) loading = null;
+      }
+      if (attempt || !isStalled(e) || signal?.aborted) throw e;
+      office = load(progress, signal);
     }
-    throw e;
   }
-  return { name: `${baseName(file.name)}.pdf`, blob: new Blob([pdf as BlobPart], { type: "application/pdf" }) };
 }
