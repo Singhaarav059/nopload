@@ -69,7 +69,7 @@ const STAMPS: string[] = ["watermark", "pageNumbers", "headerFooter"];
 // `preset`: options to start from instead of the defaults (a landing page's, see src/lib/landings.ts).
 export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<string, unknown> }) {
   const tool = toolById(toolId);
-  const { t, tOr } = useI18n();
+  const { t, tOr, locale } = useI18n();
   const problem = useProblem();
   // Files handed over from the previous tool's result, or from the browser
   // add-on, start the workspace pre-filled, when this tool takes them.
@@ -391,7 +391,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
     }
     void execute(async (progress, signal, track) => {
       const { runTool } = await import("@/lib/pdf/run");
-      return runTool(tool.id, files, { ...options, url }, progress, { page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}") }, signal, track);
+      return runTool(tool.id, files, { ...options, url }, progress, { page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}"), say: t, locale }, signal, track);
     });
   };
 

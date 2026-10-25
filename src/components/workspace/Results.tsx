@@ -110,6 +110,10 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
   // Sanitize: what was taken out of any of the files (src/lib/pdf/structure.ts).
   // A count summed over a batch's outputs: "blankRemoved:3".
   const total = (prefix: string) => outputs.reduce((sum, o) => sum + (o.note?.startsWith(prefix) ? Number(o.note.slice(prefix.length)) || 0 : 0), 0);
+  // Make PDF accessible's check (src/lib/pdf/a11yreport.ts), a11y:<passed>:<warnings>:<failed>
+  // on each report; a batch's are added up.
+  const a11yNotes = outputs.flatMap((o) => (o.note?.startsWith("a11y:") ? [o.note.split(":").slice(1).map(Number)] : []));
+  const a11y = a11yNotes.length ? [0, 1, 2].map((k) => a11yNotes.reduce((n, x) => n + (x[k] || 0), 0)) : null;
   const sanitized = outputs.some((o) => o.note?.startsWith("sanitized:"))
     ? [...new Set(outputs.flatMap((o) => (o.note?.startsWith("sanitized:") ? o.note.slice(10).split(",").filter(Boolean) : [])))]
     : null;
@@ -163,6 +167,7 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
         </p>
       )}
       {first?.note === "tagKept" && <p className="mt-2 text-[15px] text-ink-2">{t("res.tagKept")}</p>}
+      {a11y && <p className="tabular mt-2 text-[15px] text-ink-2" data-a11y>{t("res.a11y", { passed: a11y[0], warnings: a11y[1], failed: a11y[2] })}</p>}
       {total("grayPartial:") > 0 && <p className="mt-2 text-[15px] text-muted">{t("res.grayPartial", { n: total("grayPartial:") })}</p>}
       {kind === "attached" && <p className="mt-2 text-[15px] text-ink-2">{t("res.attached", { n: n1 })}</p>}
       {sanitized && (
