@@ -1,7 +1,7 @@
 // Page numbers, Bates numbers and watermarks (src/lib/pdf/edit.ts): custom
-// templates and number styles, a Bates counter that runs on across a batch,
-// the font families, CJK marks that extract as one string, and a page whose
-// content ends inside an inline image.
+// templates and number styles, numbers that run on across a set of files
+// (run.ts) and its exhibit index, the font families, CJK marks that extract
+// as one string, and a page whose content ends inside an inline image.
 //
 //   node tests/stamps.mjs
 import { spawnSync } from "node:child_process";
@@ -11,7 +11,8 @@ import { join } from "node:path";
 import { load, refOpen, fileOf, ROOT } from "./robustness/env.mjs";
 
 const { PDFDocument, PDFDict, PDFName, PDFRawStream, PDFArray, StandardFonts, decodePDFRawStream } = await import("pdf-lib");
-const { pageNumbers, watermark } = await load("edit");
+const { pageNumbers, watermark, exhibitIndex } = await load("edit");
+const { runTool } = await load("run");
 const { pdfium } = await load("pdfium");
 const results = { failed: 0 };
 async function test(name, fn) {
@@ -117,18 +118,126 @@ await test("skip the first 1 and last 2 pages", async () => {
   eq(JSON.stringify(t.map((s) => s.match(/<(\d+)>/)?.[1] ?? null)), JSON.stringify([null, "1", "2", null, null]), "labels");
 });
 
-await test("Bates: prefix ABC across two 3-page files stamps ABC000001 to ABC000006", async () => {
-  const counter = { next: 1 };
-  const opts = { ...NUM, numberFormat: "bates", batesPrefix: "ABC", batesDigits: 6, counter };
-  const all = [];
-  for (const name of ["a.pdf", "b.pdf"]) {
-    const [o] = await pageNumbers(await blank(3, name), opts);
-    all.push(...(await texts(await bytesOf(o))));
+await test("Bates: an offset of 3 starts a 3-page file at ABC000004", async () => {
+  const [o] = await pageNumbers(await blank(3), { ...NUM, numberFormat: "bates", batesPrefix: "ABC", batesDigits: 6, offset: 3 });
+  eq(JSON.stringify(await texts(await bytesOf(o))), JSON.stringify(["BODY1 ABC000004", "BODY2 ABC000005", "BODY3 ABC000006"]), "labels");
+});
+
+// ── A set numbered as one (run.ts, continueNumbers), and its exhibit index.
+// The options as the workspace sends them: every default, then the test's own.
+const RUN = {
+  position: "bottom-center", numberFormat: "n", startAt: 1, pageRange: "", skipFirstPages: 0, skipLastPages: 0, fontSize: 11,
+  color: "#1f2937", facing: false, template: "{page} / {pages}", numberStyle: "1", margin: "normal", font: "helvetica",
+  batesPrefix: "", batesDigits: 6, continueNumbers: false, exhibitIndex: false,
+};
+const BATES = { ...RUN, numberFormat: "bates", batesPrefix: "DOC", batesDigits: 6, continueNumbers: true };
+const set = async () => [await blank(3, "a.pdf"), await blank(2, "b.pdf")];
+// Each output's pages, with the body text taken out: just the labels.
+const labelsOf = async (outs) => Promise.all(outs.map(async (o) => (await texts(await bytesOf(o))).map((t) => t.replace(/^BODY\d+\s*/, ""))));
+const json = (v) => JSON.stringify(v);
+
+await test("continue numbering: files of 3 and 2 pages get DOC000001-3 and DOC000004-5", async () => {
+  const out = await runTool("pageNumbers", await set(), BATES);
+  eq(json(out.map((o) => o.name)), json(["a-numbered.pdf", "b-numbered.pdf"]), "outputs");
+  eq(json(await labelsOf(out)), json([["DOC000001", "DOC000002", "DOC000003"], ["DOC000004", "DOC000005"]]), "labels");
+});
+
+await test("continue numbering: the first file starts at First number", async () => {
+  const out = await runTool("pageNumbers", await set(), { ...BATES, startAt: 10 });
+  eq(json(await labelsOf(out)), json([["DOC000010", "DOC000011", "DOC000012"], ["DOC000013", "DOC000014"]]), "labels");
+});
+
+await test("continue numbering: pages left unnumbered don't use up numbers", async () => {
+  const out = await runTool("pageNumbers", await set(), { ...RUN, numberFormat: "custom", template: "<{page}>", skipFirstPages: 1, continueNumbers: true });
+  eq(json(await labelsOf(out)), json([["", "<1>", "<2>"], ["", "<3>"]]), "labels");
+});
+
+await test("continue numbering: 'of total' and {pages} count the whole set", async () => {
+  const of = await runTool("pageNumbers", await set(), { ...RUN, numberFormat: "nOfTotal", continueNumbers: true });
+  eq(json(await labelsOf(of)), json([["1 of 5", "2 of 5", "3 of 5"], ["4 of 5", "5 of 5"]]), "n of total");
+  const custom = await runTool("pageNumbers", await set(), { ...RUN, numberFormat: "custom", template: "{page}/{pages}", startAt: 3, continueNumbers: true });
+  eq(json(await labelsOf(custom)), json([["3/7", "4/7", "5/7"], ["6/7", "7/7"]]), "custom");
+});
+
+await test("off: each file is numbered on its own, Bates included", async () => {
+  const out = await runTool("pageNumbers", await set(), { ...BATES, continueNumbers: false });
+  eq(json(await labelsOf(out)), json([["DOC000001", "DOC000002", "DOC000003"], ["DOC000001", "DOC000002"]]), "labels");
+});
+
+await test("a job saved before the choice existed: Bates still runs on", async () => {
+  const old = { ...BATES };
+  delete old.continueNumbers;
+  delete old.exhibitIndex;
+  const out = await runTool("pageNumbers", await set(), old);
+  eq(json(await labelsOf(out)), json([["DOC000001", "DOC000002", "DOC000003"], ["DOC000004", "DOC000005"]]), "labels");
+});
+
+await test("exhibit index: one more PDF listing each file, its numbers and page count", async () => {
+  const files = [await blank(3, "a.pdf"), await blank(2, "合同.pdf"), await blank(1, "c.pdf")];
+  const out = await runTool("pageNumbers", files, { ...BATES, exhibitIndex: true });
+  eq(json(out.map((o) => o.name)), json(["a-numbered.pdf", "合同-numbered.pdf", "c-numbered.pdf", "exhibit-index.pdf"]), "outputs");
+  const [index] = await texts(await bytesOf(out[3]));
+  for (const want of ["Exhibit index", "# File Numbers Pages", "1 a.pdf DOC000001 – DOC000003 3", "3 c.pdf DOC000006 1"]) {
+    if (!index.includes(want)) throw new Error(`missing ${JSON.stringify(want)} in ${JSON.stringify(index)}`);
   }
-  all.forEach((t, i) => {
-    const want = `ABC${String(i + 1).padStart(6, "0")}`;
-    if (!t.includes(want)) throw new Error(`page ${i + 1}: expected ${want}, got ${JSON.stringify(t)}`);
+  // The Chinese name is drawn with an embedded Noto font, not as an image, so it can be found.
+  if (!/2 合同\s*\.pdf DOC000004 – DOC000005 2/.test(index)) throw new Error(`row 2: ${JSON.stringify(index)}`);
+});
+
+await test("exhibit index: translated headings, and off unless asked for", async () => {
+  const labels = { page: "Seite {n}", pageOf: "Seite {n} von {total}", nOf: "{n} von {total}", index: { title: "Anlagenverzeichnis", file: "Datei", numbers: "Nummern", pages: "Seiten" } };
+  const out = await runTool("pageNumbers", await set(), { ...BATES, exhibitIndex: true }, undefined, labels);
+  const [index] = await texts(await bytesOf(out[2]));
+  if (!index.startsWith("Anlagenverzeichnis # Datei Nummern Seiten")) throw new Error(JSON.stringify(index));
+  eq((await runTool("pageNumbers", await set(), BATES)).length, 2, "outputs without the index");
+  // Hidden with continueNumbers off, so it does nothing then even if set.
+  eq((await runTool("pageNumbers", await set(), { ...BATES, continueNumbers: false, exhibitIndex: true })).length, 2, "outputs with numbering per file");
+});
+
+await test("exhibit index: a long set runs onto more pages, the headings on each", async () => {
+  const rows = Array.from({ length: 80 }, (_, i) => ({ name: `file-${i + 1}.pdf`, pages: 2, first: 2 * i + 1, last: 2 * i + 2 }));
+  const index = await exhibitIndex(rows, { numberFormat: "bates", batesPrefix: "X", batesDigits: 4 });
+  const pages = await texts(await bytesOf(index));
+  if (pages.length < 2) throw new Error(`${pages.length} page`);
+  pages.forEach((t, i) => {
+    if (!t.includes("# File Numbers Pages")) throw new Error(`page ${i + 1} has no headings`);
+    if (!t.endsWith(`Page ${i + 1} of ${pages.length}`)) throw new Error(`page ${i + 1} footer: ${JSON.stringify(t.slice(-30))}`);
   });
+  const all = pages.join(" ");
+  if (!all.includes("80 file-80.pdf X0159 – X0160 2")) throw new Error("last row missing");
+  eq(all.match(/file-\d+\.pdf/g).length, 80, "rows");
+});
+
+await test("continue numbering: a file that can't be read stops the run, naming it", async () => {
+  const bad = fileOf(new TextEncoder().encode("%PDF-1.7\nnot really"), "broken.pdf");
+  const seen = [];
+  const files = [await blank(3, "a.pdf"), bad, await blank(2, "b.pdf")];
+  let err;
+  try {
+    await runTool("pageNumbers", files, BATES, undefined, undefined, undefined, (i, state) => seen.push(`${i}:${state}`));
+  } catch (e) {
+    err = e;
+  }
+  if (!err) throw new Error("no error");
+  eq(err.fileName, "broken.pdf", "file named");
+  eq(json(seen), json(["1:fail"]), "file states");
+  // Numbered per file, the batch leaves it out and goes on, as before.
+  const out = await runTool("pageNumbers", files, { ...BATES, continueNumbers: false });
+  eq(json(out.map((o) => o.name)), json(["a-numbered.pdf", "b-numbered.pdf"]), "per file");
+});
+
+await test("one file: the same with continue numbering on or off, and as pageNumbers alone", async () => {
+  for (const format of ["bates", "nOfTotal", "custom"]) {
+    const o = { ...RUN, numberFormat: format, batesPrefix: "DOC", template: "{page}/{pages}", startAt: 4, skipFirstPages: 1 };
+    const off = await runTool("pageNumbers", [await blank(3, "a.pdf")], o);
+    const on = await runTool("pageNumbers", [await blank(3, "a.pdf")], { ...o, continueNumbers: true });
+    const [alone] = await pageNumbers(await blank(3, "a.pdf"), {
+      ...NUM, numberFormat: format, batesPrefix: "DOC", batesDigits: 6, template: "{page}/{pages}", startAt: 4, skipFirst: 1,
+    });
+    eq(json(on.map((x) => x.name)), json(["a-numbered.pdf"]), `${format}: outputs`);
+    eq(json(await labelsOf(on)), json(await labelsOf(off)), `${format}: on and off`);
+    eq(json(await labelsOf(off)), json(await labelsOf([alone])), `${format}: runTool and pageNumbers`);
+  }
 });
 
 await test("margins: large sits further from the edge than small", async () => {

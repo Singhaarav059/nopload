@@ -275,7 +275,7 @@ export async function markLayer(
       position: s(o.position), numberFormat: s(o.numberFormat), startAt: n(o.startAt) || 1, pageRange: s(o.pageRange),
       skipFirst: n(o.skipFirstPages), skipLast: n(o.skipLastPages), fontSize: n(o.fontSize), color: s(o.color), facing: !!o.facing,
       template: s(o.template), numberStyle: s(o.numberStyle) || "1", margin: s(o.margin), font: s(o.font),
-      batesPrefix: s(o.batesPrefix), batesDigits: n(o.batesDigits), counter: { next: n(o.startAt) || 1 }, labels,
+      batesPrefix: s(o.batesPrefix), batesDigits: n(o.batesDigits), labels,
     }, onto);
   } else {
     await headerFooter(file, {
@@ -289,6 +289,21 @@ export async function markLayer(
 }
 
 // ── Page numbers
+// The pages (0-based, in order) that get a number: those in the range, less
+// the ones left unnumbered at each end (true means 1, as the old toggle did).
+export function numberedPages(total: number, o: { pageRange: string; skipFirst: number | boolean; skipLast?: number }) {
+  const skipFirst = o.skipFirst === true ? 1 : Math.max(0, Number(o.skipFirst) || 0);
+  const skipLast = Math.max(0, Number(o.skipLast) || 0);
+  return [...pageSet(o.pageRange, total)].filter((i) => i >= skipFirst && i < total - skipLast).sort((a, b) => a - b);
+}
+
+// A number as the index shows it: the Bates label, or the number in its style.
+export function numberText(n: number, o: { numberFormat: string; numberStyle?: string; batesPrefix?: string; batesDigits?: number }) {
+  if (o.numberFormat !== "bates") return formatNumber(n, o.numberStyle ?? "1");
+  const digits = Math.min(12, Math.max(1, Math.round(o.batesDigits ?? 6)));
+  return `${o.batesPrefix ?? ""}${String(n).padStart(digits, "0")}`;
+}
+
 export async function pageNumbers(
   file: File,
   o: {
@@ -298,9 +313,12 @@ export async function pageNumbers(
     fontSize: number; color: string; facing: boolean;
     // Custom: {page} and {pages}, plus {filename} and {date}.
     template?: string; numberStyle?: string; margin?: string; font?: string;
-    // Bates: prefix and a zero-padded counter. Pass the same counter to every
-    // file of a batch so the numbers run on.
-    batesPrefix?: string; batesDigits?: number; counter?: { next: number };
+    // Bates: prefix and a zero-padded number.
+    batesPrefix?: string; batesDigits?: number;
+    // Files numbered as one set (run.ts): how many numbers the files before
+    // this one used, and how many the whole set uses, which {pages} and
+    // "of total" then count to.
+    offset?: number; setCount?: number;
     // Translated templates: "Page {n}", "Page {n} of {total}", "{n} of {total}".
     labels?: { page: string; pageOf: string; nOf: string };
   },
@@ -310,26 +328,22 @@ export async function pageNumbers(
   const family = fontChoice(o.font);
   const pages = doc.getPages();
   const total = pages.length;
-  const chosen = pageSet(o.pageRange, total);
-  const skipFirst = o.skipFirst === true ? 1 : Math.max(0, Number(o.skipFirst) || 0);
-  const skipLast = Math.max(0, Number(o.skipLast) || 0);
-  const numbered = [...chosen].filter((i) => i >= skipFirst && i < total - skipLast).sort((a, b) => a - b);
-  const count = numbered.length;
+  const numbered = numberedPages(total, o);
+  const first = o.startAt + (o.offset ?? 0);
+  const last = o.startAt + (o.setCount ?? numbered.length) - 1;
   const labels = o.labels ?? { page: "Page {n}", pageOf: "Page {n} of {total}", nOf: "{n} of {total}" };
   const style = o.numberStyle ?? "1";
   const fill = (tpl: string, n: number, total: number) =>
     tpl.replace("{n}", formatNumber(n, style)).replace("{total}", formatNumber(total, style));
-  const digits = Math.min(12, Math.max(1, Math.round(o.batesDigits ?? 6)));
   const [mMin, mFrac] = MARGINS[o.margin ?? "normal"] ?? MARGINS.normal;
   const [vert, horiz] = o.position.split("-");
   for (let k = 0; k < numbered.length; k++) {
     const i = numbered[k];
     const page = pages[i];
-    const n = o.numberFormat === "bates" && o.counter ? o.counter.next++ : o.startAt + k;
+    const n = first + k;
     if (onto && i !== onto.only) continue;
-    const last = o.startAt + count - 1;
     const text =
-      o.numberFormat === "bates" ? `${o.batesPrefix ?? ""}${String(n).padStart(digits, "0")}`
+      o.numberFormat === "bates" ? numberText(n, o)
       : o.numberFormat === "custom" ? fillVariables(o.template ?? "{page}", file).replaceAll("{page}", formatNumber(n, style)).replaceAll("{pages}", formatNumber(last, style))
       : o.numberFormat === "pageN" ? fill(labels.page, n, last)
       : o.numberFormat === "nOfTotal" ? fill(labels.nOf, n, last)
@@ -350,6 +364,70 @@ export async function pageNumbers(
   }
   if (onto) return [];
   return [{ name: `${baseName(file.name)}-numbered.pdf`, blob: await save(doc) }];
+}
+
+// ── Exhibit index: a table of the files in a set numbered as one, each
+// with its first and last number and its page count. US Letter, the header
+// row repeated on every page. A file with no numbered page has last < first.
+export type IndexRow = { name: string; pages: number; first: number; last: number };
+export type IndexLabels = { title: string; file: string; numbers: string; pages: string; pageOf: string };
+
+export async function exhibitIndex(
+  rows: IndexRow[],
+  o: { numberFormat: string; numberStyle?: string; batesPrefix?: string; batesDigits?: number; font?: string; labels?: Partial<IndexLabels> },
+): Promise<Output> {
+  const doc = await PDFDocument.create();
+  const family = fontChoice(o.font);
+  const labels = { title: "Exhibit index", file: "File", numbers: "Numbers", pages: "Pages", pageOf: "Page {n} of {total}", ...o.labels };
+  const [W, H, M] = [612, 792, 54];
+  const size = 10, row = 22;
+  const ink = "#1f2937", muted = "#6b7280";
+  const rule = (page: PDFPage, y: number, strong: boolean) =>
+    page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: strong ? 0.8 : 0.4, color: strong ? rgb(0.12, 0.16, 0.22) : rgb(0.82, 0.84, 0.87) });
+  // Columns: exhibit number, file name, numbers, and the page count against the right margin.
+  const cols = { no: M, file: M + 30, numbers: M + 300, pages: W - M };
+  const cells = async (page: PDFPage, y: number, text: [string, string, string, string], bold: boolean) => {
+    await drawLabel(doc, page, family, text[0], { vx: cols.no, vy: y, size, color: muted, anchor: "left", bold, maxWidth: 26 });
+    await drawLabel(doc, page, family, text[1], { vx: cols.file, vy: y, size, color: ink, anchor: "left", bold, maxWidth: cols.numbers - cols.file - 12 });
+    await drawLabel(doc, page, family, text[2], { vx: cols.numbers, vy: y, size, color: ink, anchor: "left", bold, maxWidth: cols.pages - cols.numbers - 50 });
+    await drawLabel(doc, page, family, text[3], { vx: cols.pages, vy: y, size, color: ink, anchor: "right", bold, maxWidth: 44 });
+  };
+  const pages: PDFPage[] = [];
+  let page!: PDFPage;
+  let y = 0;
+  const startPage = async () => {
+    page = doc.addPage([W, H]);
+    pages.push(page);
+    y = H - M - 16;
+    // The title on the first page only.
+    if (pages.length === 1) {
+      await drawLabel(doc, page, family, labels.title, { vx: M, vy: y, size: 16, color: ink, anchor: "left", bold: true, maxWidth: W - 2 * M });
+      y -= 34;
+    }
+    await cells(page, y, ["#", labels.file, labels.numbers, labels.pages], true);
+    rule(page, y - 7, true);
+    y -= row;
+  };
+  await startPage();
+  for (let i = 0; i < rows.length; i++) {
+    if (y < M + row) await startPage();
+    const r = rows[i];
+    const range = r.last < r.first ? "—" : r.last === r.first ? numberText(r.first, o) : `${numberText(r.first, o)} – ${numberText(r.last, o)}`;
+    // A long name keeps its start and end, so it stays readable rather than shrinking to fit.
+    const chars = Array.from(r.name);
+    const name = chars.length > 48 ? `${chars.slice(0, 32).join("")}…${chars.slice(-15).join("")}` : r.name;
+    await cells(page, y, [String(i + 1), name, range, String(r.pages)], false);
+    rule(page, y - 7, false);
+    y -= row;
+  }
+  // Page numbers at the foot once the index runs to more than one page.
+  if (pages.length > 1) {
+    for (let k = 0; k < pages.length; k++) {
+      const text = labels.pageOf.replace("{n}", String(k + 1)).replace("{total}", String(pages.length));
+      await drawLabel(doc, pages[k], family, text, { vx: W / 2, vy: M / 2, size: 9, color: muted, anchor: "center" });
+    }
+  }
+  return { name: "exhibit-index.pdf", blob: await save(doc) };
 }
 
 // ── Header and footer: a line of text at the top and/or bottom of each

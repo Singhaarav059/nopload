@@ -397,6 +397,10 @@ const ALL: Tool[] = [
       { key: "pageRange", type: "text", default: "", placeholder: "all" },
       { key: "skipFirstPages", type: "number", min: 0, max: 9999, default: 0 },
       { key: "skipLastPages", type: "number", min: 0, max: 9999, default: 0 },
+      // Several files numbered as one set, in the order given (run.ts), and a
+      // table of each file's first and last number as one more PDF.
+      { key: "continueNumbers", type: "toggle", default: false, when: { key: "numberFormat", is: ["bates", "n", "pageN", "nOfTotal", "pageNOfTotal", "custom"] } },
+      { key: "exhibitIndex", type: "toggle", default: false, when: { key: "continueNumbers", is: [true] } },
       { key: "font", type: "select", choices: ["helvetica", "arimo", "tinos", "cousine", "noto"], default: "helvetica" },
       { key: "fontSize", type: "range", min: 6, max: 36, default: 11, unit: "pt" },
       { key: "color", type: "color", default: "#1f2937" },

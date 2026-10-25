@@ -391,7 +391,10 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
     }
     void execute(async (progress, signal, track) => {
       const { runTool } = await import("@/lib/pdf/run");
-      return runTool(tool.id, files, { ...options, url }, progress, { page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}") }, signal, track);
+      return runTool(tool.id, files, { ...options, url }, progress, {
+        page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}"),
+        index: { title: tOr("pn.indexTitle", "Exhibit index"), file: tOr("pn.indexFile", "File"), numbers: tOr("pn.indexNumbers", "Numbers"), pages: tOr("pn.indexPages", "Pages") },
+      }, signal, track);
     });
   };
 

@@ -36,9 +36,12 @@ function writeLocal(list: Saved[]) {
     /* storage blocked: workflow still runs this session */
   }
 }
+// Bates numbers always ran on from file to file before that became a choice.
+const batesRunOn = (s: Step) =>
+  s.tool === "pageNumbers" && s.options.numberFormat === "bates" && !("continueNumbers" in s.options) ? { continueNumbers: true } : {};
 // Saved, imported and linked steps, filled out with the options added since.
 const withDefaults = (steps: Step[]) =>
-  steps.map((s) => ({ tool: s.tool, options: { ...defaultOptions(toolById(s.tool)), ...sizeFromMb(s.options), ...s.options } }));
+  steps.map((s) => ({ tool: s.tool, options: { ...defaultOptions(toolById(s.tool)), ...sizeFromMb(s.options), ...batesRunOn(s), ...s.options } }));
 
 export function Workflows() {
   const { t, tOr } = useI18n();
@@ -163,7 +166,10 @@ export function Workflows() {
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i];
       onStep?.(i);
-      out = await runTool(s.tool, current, s.options, undefined, { page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}") }, signal);
+      out = await runTool(s.tool, current, s.options, undefined, {
+        page: tOr("ws.page", "Page {n}"), pageOf: tOr("ws.processingPage", "Page {n} of {total}"), nOf: tOr("fmt.nOfTotal", "{n} of {total}"),
+        index: { title: tOr("pn.indexTitle", "Exhibit index"), file: tOr("pn.indexFile", "File"), numbers: tOr("pn.indexNumbers", "Numbers"), pages: tOr("pn.indexPages", "Pages") },
+      }, signal);
       current = out.map((o) => new File([o.blob], o.name, { type: "application/pdf" }));
     }
     return steps.some((s) => s.tool === "protect" || s.tool === "unlock") ? out : markUnrestricted(input, out);
