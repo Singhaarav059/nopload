@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Third-party files copied in on install (scripts/vendor.mjs).
     "public/vendor/**",
+    // Other checkouts made while working (git worktrees), each linted on its own.
+    ".claude/**",
   ]),
 ]);
 

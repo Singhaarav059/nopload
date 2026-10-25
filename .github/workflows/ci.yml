@@ -1,8 +1,10 @@
 name: CI
 
+# Every push, on any branch, so a problem shows before it reaches main;
+# main only takes changes whose run is green (branch protection, see
+# docs/ci.md), and the site deploys from main.
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
