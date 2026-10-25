@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, BringToFront, FlipHorizontal2, FlipVertical2, ImageUp, Loader2,
-  RotateCcw, RotateCcwSquare, RotateCwSquare, SendToBack, Trash2, Undo2,
+  Replace, RotateCcw, RotateCcwSquare, RotateCwSquare, SendToBack, Trash2, Undo2,
 } from "lucide-react";
 import type { Align, EditorItem } from "@/lib/pdf/edit";
 import { colorKey } from "@/lib/colors";
@@ -35,7 +35,7 @@ const wrapAngle = (d: number) => ((((d % 360) + 540) % 360) - 180);
 // or object can have changed, and a list of everything on the page (for
 // things hidden under others, or too small to click).
 export function ContentPanel({
-  content, item, items, status, pageAspect, scan, ocrLang, onOcrLang, onReadScan, onPick, update, restore,
+  content, item, items, status, pageAspect, scan, ocrLang, onOcrLang, onReadScan, onReplaceAll, onPick, update, restore,
 }: {
   content: PageContent | "busy" | null;
   item: EditorItem | null; // the selected paraEdit or objEdit
@@ -48,6 +48,8 @@ export function ContentPanel({
   ocrLang: string;
   onOcrLang: (v: string) => void;
   onReadScan: () => void;
+  // Find and replace in every page's text: how many replacements, on how many pages.
+  onReplaceAll: (find: string, replace: string, o: { matchCase: boolean; wholeWord: boolean }) => Promise<{ n: number; pages: number }>;
   onPick: (t: ContentTarget, edit: boolean) => void;
   update: (p: Partial<EditorItem>, record?: boolean) => void;
   restore: () => void;
@@ -246,7 +248,7 @@ export function ContentPanel({
         </div>
       )}
 
-      {status.busy && <p role="status" className="text-[13px] text-muted"><Loader2 size={13} className="me-1.5 inline animate-spin" />{t("ed.previewing")}</p>}
+      {status.busy && <p role="status" data-previewing className="text-[13px] text-muted"><Loader2 size={13} className="me-1.5 inline animate-spin" />{t("ed.previewing")}</p>}
       {status.error && <p role="alert" className="rounded-xl bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] p-3 text-[13px] text-danger">{status.error}</p>}
       {status.note && <p className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">{status.note}</p>}
       {item?.kind === "paraEdit" && content && content !== "busy" && (() => {
@@ -258,6 +260,8 @@ export function ContentPanel({
           </>
         );
       })()}
+
+      {!item && content !== "busy" && <FindReplace onReplaceAll={onReplaceAll} />}
 
       {list.length > 0 && (
         <details className="border-t border-line pt-4" open={list.length <= 12}>
@@ -279,5 +283,48 @@ export function ContentPanel({
         </details>
       )}
     </div>
+  );
+}
+
+function FindReplace({ onReplaceAll }: { onReplaceAll: (find: string, replace: string, o: { matchCase: boolean; wholeWord: boolean }) => Promise<{ n: number; pages: number }> }) {
+  const { t } = useI18n();
+  const [find, setFind] = useState("");
+  const [replace, setReplace] = useState("");
+  const [matchCase, setMatchCase] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
+  const [state, setState] = useState<null | "busy" | { n: number; pages: number }>(null);
+  return (
+    <details className="border-t border-line pt-4" data-find-replace>
+      <summary className="cursor-pointer text-[13px] font-medium text-ink-2">{t("ed.findReplace")}</summary>
+      <form className="mt-3 space-y-2" onSubmit={async (e) => {
+        e.preventDefault();
+        if (!find.trim() || state === "busy") return;
+        setState("busy");
+        try {
+          setState(await onReplaceAll(find, replace, { matchCase, wholeWord }));
+        } catch {
+          setState(null);
+        }
+      }}>
+        <input className="field h-10 w-full" value={find} onChange={(e) => { setFind(e.target.value); setState(null); }} placeholder={t("ed.find")} aria-label={t("ed.find")} />
+        <input className="field h-10 w-full" value={replace} onChange={(e) => { setReplace(e.target.value); setState(null); }} placeholder={t("ed.replaceWith")} aria-label={t("ed.replaceWith")} />
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          <label className="flex items-center gap-2 text-[13px] text-ink-2">
+            <input type="checkbox" className="accent-[var(--accent)]" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} />
+            {t("ed.redactMatchCase")}
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-ink-2">
+            <input type="checkbox" className="accent-[var(--accent)]" checked={wholeWord} onChange={(e) => setWholeWord(e.target.checked)} />
+            {t("ed.redactWholeWords")}
+          </label>
+        </div>
+        <button className="btn btn-quiet btn-sm" disabled={!find.trim() || state === "busy"}>
+          {state === "busy" ? <Loader2 size={15} className="animate-spin" /> : <Replace size={15} />} {t("ed.replaceAll")}
+        </button>
+        {state && state !== "busy" && (
+          <p role="status" className="text-[13px] text-ink-2">{state.n ? t("ed.replaced", { n: state.n, pages: state.pages }) : t("ed.replaceNone")}</p>
+        )}
+      </form>
+    </details>
   );
 }

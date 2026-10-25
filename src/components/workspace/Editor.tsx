@@ -577,6 +577,37 @@ export function Editor({
     }
   };
 
+  // Find and replace: every page's paragraphs (scans aside), each changed one
+  // becoming a change to it, all in one step to undo. A paragraph already
+  // changed is searched as it is now.
+  const replaceAll = async (find: string, replace: string, o: { matchCase: boolean; wholeWord: boolean }) => {
+    const [{ listContent }, { searchPattern }] = await Promise.all([import("@/lib/pdf/edit"), import("@/lib/pdf/security")]);
+    const re = searchPattern(find, o);
+    const now = items.value;
+    const add: EditorItem[] = [];
+    const texts = new Map<string, string>();
+    let n = 0;
+    const pages = new Set<number>();
+    for (let p = 0; p < sizes.length; p++) {
+      const c = pageContent?.page === p ? pageContent : await listContent(file, p).catch(() => null);
+      for (const para of c?.paragraphs ?? []) {
+        if (para.invisible) continue;
+        const have = now.find((i) => i.page === p && isFor(i, { para }));
+        if (have?.removed) continue;
+        const was = have?.text ?? para.text;
+        let hits = 0;
+        const next = was.replace(re, () => (hits++, replace));
+        if (!hits) continue;
+        n += hits;
+        pages.add(p);
+        if (have) texts.set(have.id, next);
+        else add.push({ ...itemFor(p, { para }), text: next });
+      }
+    }
+    if (n) items.set((l) => [...l.map((i) => (texts.has(i.id) ? { ...i, text: texts.get(i.id) } : i)), ...add]);
+    return { n, pages: pages.size };
+  };
+
   // ── Edit content: picking a paragraph or object starts a change to it
   // (one that changes nothing until something is changed).
   const pickContent = (x: ContentTarget, edit: boolean) => {
@@ -986,7 +1017,7 @@ export function Editor({
             item={selected && isContent(selected) ? selected : null} items={contentItems}
             status={previewState.key === previewKey ? previewState : { busy: changes.length > 0, error: null, note: null }}
             pageAspect={size ? size.h / size.w : 1.414}
-            scan={scanRead?.page === page ? scanRead.state : "idle"} ocrLang={scanLang} onOcrLang={setScanLang} onReadScan={() => void readScan()}
+            scan={scanRead?.page === page ? scanRead.state : "idle"} ocrLang={scanLang} onOcrLang={setScanLang} onReadScan={() => void readScan()} onReplaceAll={replaceAll}
             onPick={(x, edit) => { setTool("editText"); pickContent(x, edit); }}
             update={(p, record = true) => selected && patch(selected.id, p, record)}
             restore={() => {

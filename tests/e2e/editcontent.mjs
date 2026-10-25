@@ -3,7 +3,8 @@
 //  - a paragraph is retyped in place (wrapping in its own font) and centred
 //  - a picture is moved, replaced by a portrait photo, and turned
 //  - a rectangle is recoloured; another shape is deleted from the objects list
-//  - undo and redo step through it, restore puts one thing back
+//  - undo and redo step through it
+//  - find and replace changes a word wherever it is
 // A scanned page is read with OCR and one of its lines retyped.
 // The saved file is read back: the new text is there and the old gone, the
 // picture is the replacement's size, the colour is in the content stream and
@@ -67,7 +68,7 @@ await suite(async ({ name, browser, test }) => {
   const panel = () => page.locator("aside");
   // The page shown is the edited file once its preview has caught up.
   const settled = async () => {
-    await page.waitForFunction(() => !document.querySelector("aside [role=status]"), null, { timeout: 30000 });
+    await page.waitForFunction(() => !document.querySelector("aside [data-previewing]"), null, { timeout: 30000 });
     const err = await panel().locator("[role=alert]").count();
     if (err) throw new Error(`preview failed: ${await panel().locator("[role=alert]").innerText()}`);
   };
@@ -139,6 +140,14 @@ await suite(async ({ name, browser, test }) => {
       await page.getByRole("button", { name: t["ed.redo"], exact: true }).click();
       await page.locator("[data-removed]").waitFor();
       await settled();
+      step = "find and replace";
+      await page.keyboard.press("Escape");
+      await panel().getByText(t["ed.findReplace"]).click();
+      await panel().getByRole("textbox", { name: t["ed.find"] }).fill("annual");
+      await panel().getByRole("textbox", { name: t["ed.replaceWith"] }).fill("Yearly");
+      await panel().getByRole("button", { name: t["ed.replaceAll"] }).click();
+      await panel().getByText(/^1 replacement on 1 page/).waitFor();
+      await settled();
       await page.screenshot({ path: join(downloads, `${name}-editor.png`) });
 
       step = "save";
@@ -151,8 +160,8 @@ await suite(async ({ name, browser, test }) => {
 
       step = "result";
       const text = await textOf(saved);
-      for (const w of ["Quarterly income held steady", "renewals carrying the year", "Annual report"]) if (!text.includes(w)) throw new Error(`no "${w}" in ${text}`);
-      if (/revenue rose|subscription/.test(text)) throw new Error(`old text still there: ${text}`);
+      for (const w of ["Quarterly income held steady", "renewals carrying the year", "Yearly report"]) if (!text.includes(w)) throw new Error(`no "${w}" in ${text}`);
+      if (/revenue rose|subscription|Annual/.test(text)) throw new Error(`old text still there: ${text}`);
       const { content, images } = await pageOf(saved);
       if (!images.some(([w, h]) => w === 120 && h === 200)) throw new Error(`images: ${JSON.stringify(images)}`);
       if (images.some(([w, h]) => w === 200 && h === 120)) throw new Error(`old picture still there: ${JSON.stringify(images)}`);

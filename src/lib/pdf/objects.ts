@@ -467,7 +467,7 @@ const inside = (b: Box, x: number, y: number) => x >= b.x0 && x <= b.x1 && y >= 
 const overlap = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 const within = (a: Box, b: Box, tol = 0.5) => a.x0 >= b.x0 - tol && a.x1 <= b.x1 + tol && a.y0 >= b.y0 - tol && a.y1 <= b.y1 + tol;
 // The most pixels a picture is repainted at; bigger ones are only covered.
-const ERASE_PIXELS = 40e6;
+const ERASE_PIXELS = 25e6; // a letter page at 500 dpi: 100 MB of pixels while it lasts
 
 // Empties `areas` on the page (see Erase). Letters go through PDFium's
 // redaction with a pinpoint at each letter's centre, so a letter that only
@@ -544,6 +544,9 @@ async function eraseAreas(x: Mem, page: number, areas: Erase[]) {
 
 async function repaint(x: Mem, page: number, o: number, areas: Erase[]) {
   const { m } = x;
+  // The size from the image's dictionary, before anything is decoded (a decompression bomb stays shut).
+  const [pw, ph] = values(x, 2, "i32", (p) => m.FPDFImageObj_GetImagePixelSize(o, p, p + 4)) ?? [0, 0];
+  if (!pw || !ph || (pw >>> 0) * (ph >>> 0) > ERASE_PIXELS) return;
   const bmp = m.FPDFImageObj_GetBitmap(o) as number;
   if (!bmp) return;
   try {
