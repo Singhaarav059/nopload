@@ -126,6 +126,8 @@ await suite(async ({ browser, test }) => {
     await page.mouse.down();
     await page.mouse.move(x + by, y + 4, { steps: 8 });
     await page.mouse.up();
+    // Let it spring back into place before the next swipe measures it.
+    await page.waitForTimeout(600);
   };
 
   await test("Rotate: a page swiped right turns right, one swiped left turns left", async () => {
