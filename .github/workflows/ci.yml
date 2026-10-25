@@ -183,6 +183,9 @@ jobs:
       - name: Installed app frame on each device
         if: success() || failure()
         run: npm run test:e2e:appshell -- ${{ matrix.browser }}
+      - name: PDF viewer
+        if: success() || failure()
+        run: npm run test:e2e:viewer -- ${{ matrix.browser }}
       - name: Office to PDF with LibreOffice, first visit
         if: matrix.browser == 'chromium'
         run: npm run test:e2e-office
@@ -332,6 +335,10 @@ jobs:
         run: npm run test:scanner
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:gestures
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:highlights
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:android
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:office
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}

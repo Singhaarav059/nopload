@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertTriangle, ArrowRight, Download, Loader2, X } from "lucide-react";
+import { RecentFiles } from "../RecentFiles";
 import { useI18n } from "../I18n";
 import type { Stamp } from "./StampPreview";
 import { Dropzone, useFileIntake } from "./Dropzone";
@@ -42,6 +43,7 @@ const load = {
   SignatureCheck: () => import("./SignatureCheck"),
   ChatView: () => import("./ChatView"),
   ListenView: () => import("./ListenView"),
+  ViewerView: () => import("./ViewerView"),
   PrintResults: () => import("./PrintResults"),
   PasteHtml: () => import("./PasteHtml"),
   Results: () => import("./Results"),
@@ -54,6 +56,7 @@ const CompareView = dynamic(() => load.CompareView().then((m) => m.CompareView),
 const SignatureCheck = dynamic(() => load.SignatureCheck().then((m) => m.SignatureCheck), { ssr: false });
 const ChatView = dynamic(() => load.ChatView().then((m) => m.ChatView), { ssr: false });
 const ListenView = dynamic(() => load.ListenView().then((m) => m.ListenView), { ssr: false });
+const ViewerView = dynamic(() => load.ViewerView().then((m) => m.ViewerView), { ssr: false });
 const PrintResults = dynamic(() => load.PrintResults().then((m) => m.PrintResults), { ssr: false });
 const PasteHtml = dynamic(() => load.PasteHtml().then((m) => m.PasteHtml), { ssr: false });
 const Results = dynamic(() => load.Results().then((m) => m.Results), { ssr: false });
@@ -63,6 +66,7 @@ const prepareCompare = () => load.CompareView().then((m) => m.prepareCompare());
 const prepareCheck = () => load.SignatureCheck().then((m) => m.prepareCheck());
 const prepareChat = () => load.ChatView().then((m) => m.prepareChat());
 const prepareListen = () => load.ListenView().then((m) => m.prepareListen());
+const prepareViewer = () => load.ViewerView().then((m) => m.prepareViewer());
 // The tools with a live preview (StampPreview.tsx).
 const STAMPS: string[] = ["watermark", "pageNumbers", "headerFooter"];
 
@@ -159,6 +163,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
       : tool.mode === "check" ? prepareCheck
       : tool.mode === "chat" ? prepareChat
       : tool.mode === "listen" ? prepareListen
+      : tool.mode === "view" ? prepareViewer
       : () => import("@/lib/pdf/run").then((m) => m.prepare(tool.id));
     // The views this tool shows load on demand too (the dynamic imports above),
     // so they're fetched with its code, for offline use.
@@ -499,6 +504,8 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
             <Scanner onCapture={(f) => addFiles([f])} />
           </div>
         )}
+        {/* The reader's library comes first: what was read lately, one tap away. */}
+        {tool.mode === "view" && <RecentFiles onOpen={(f) => void addFiles([f])} className="mx-auto mb-8 max-w-[760px]" />}
         <Dropzone tool={tool} onFiles={addFiles} over={over} />
         {tool.id === "htmlToPdf" && <PasteHtml onFile={(f) => void addFiles([f])} />}
       </div>
@@ -532,6 +539,18 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         {errorBox}
         <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
         <ListenView key={items[0].id} file={files[0]} onError={(e) => void drop(items[0].id, files[0], e)} />
+      </div>
+    );
+  }
+
+  // The viewer opens full screen as soon as the file is in; closing it starts over.
+  if (tool.mode === "view") {
+    return (
+      <div>
+        {dropHint}
+        {errorBox}
+        <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
+        <ViewerView key={items[0].id} file={files[0]} onClose={reset} onError={(e) => void drop(items[0].id, files[0], e)} />
       </div>
     );
   }
@@ -633,7 +652,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         </aside>
       </div>
       {/* Phones: the action stays in reach at the bottom. */}
-      <div className="sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-[color-mix(in_oklab,var(--bg)_92%,transparent)] px-4 py-3 backdrop-blur lg:hidden">
+      <div data-sticky-action className="sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-[color-mix(in_oklab,var(--bg)_92%,transparent)] px-4 py-3 backdrop-blur lg:hidden">
         <button className="btn btn-primary btn-lg w-full" onClick={start}>
           {t(`tool.${tool.id}.action`)} <ArrowRight size={18} className="rtl:rotate-180" />
         </button>
@@ -643,7 +662,8 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   })();
   return (
     <>
-      <StepTrail view={view} mode={tool.mode} cat={tool.category} edit={tool.id === "edit"} />
+      {/* The viewer has nothing to set up or download: no steps. */}
+      {tool.mode !== "view" && <StepTrail view={view} mode={tool.mode} cat={tool.category} edit={tool.id === "edit"} />}
       {body}
     </>
   );

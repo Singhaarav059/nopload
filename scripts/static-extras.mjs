@@ -48,6 +48,10 @@ const rules = [
   ["/_next/static/*", ["Cache-Control: public, max-age=31536000, immutable"]],
   // Content-hashed by scripts/vendor.mjs.
   ["/vendor/*", ["Cache-Control: public, max-age=31536000, immutable"]],
+  // The Android app (android/): served as a package Android offers to install,
+  // always the latest. Digital Asset Links, as JSON, for the app to open full screen.
+  ["/app/*.apk", ["Content-Type: application/vnd.android.package-archive", "Content-Disposition: attachment", "Cache-Control: no-cache"]],
+  ["/.well-known/assetlinks.json", ["Content-Type: application/json", "Access-Control-Allow-Origin: *"]],
 ];
 writeFileSync(join(out, "_headers"), rules.map(([path, lines]) => [path, ...lines.map((l) => `  ${l}`)].join("\n")).join("\n\n") + "\n");
 writeFileSync(join(out, ".nojekyll"), "");

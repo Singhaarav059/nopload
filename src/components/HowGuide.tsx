@@ -114,7 +114,7 @@ export function HowGuide() {
           role="tabpanel"
           aria-labelledby={`how-tab-${step}`}
           data-cat={STEPS[step].cat}
-          className="relative aspect-[5/4] w-full overflow-hidden rounded-[32px] bg-(--tint) transition-colors duration-700"
+          className="relative aspect-[4/3] max-h-[420px] w-full overflow-hidden rounded-[32px] lg:aspect-[5/4] lg:max-h-none bg-(--tint) transition-colors duration-700"
         >
           <div aria-hidden className="absolute inset-0">
             <AddScene on={step === 0} />

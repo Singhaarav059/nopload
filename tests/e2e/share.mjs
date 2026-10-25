@@ -147,18 +147,16 @@ await suite(async ({ name, browser, test }) => {
       Object.defineProperty(window, "launchQueue", { value: queue, configurable: true });
     }, names.map((n) => ({ name: n, bytes: [...readFileSync(fixture(n))] })));
 
-  await test("Open with: a launched PDF lands on /en/open", async () => {
+  await test("Open with: a launched PDF opens in the viewer", async () => {
     const { ctx, foreign } = await context(browser);
     const page = await ctx.newPage();
     try {
       await launch(page, [PDF]);
       await page.goto(base + "/en/open");
-      await listed(page, [PDF]);
-      await pickTool(page, "split");
-      await page.waitForURL("**/en/split-pdf");
-      await inTool(page, PDF);
+      await page.waitForURL("**/en/pdf-viewer");
+      await page.getByRole("dialog", { name: PDF }).waitFor({ timeout: 20000 });
       noForeign(foreign);
-      return "launchQueue file → /en/open → Split PDF";
+      return "launchQueue file → /en/open → the viewer";
     } finally {
       await ctx.close();
     }
@@ -172,10 +170,9 @@ await suite(async ({ name, browser, test }) => {
       await until(page, () => localStorage.getItem("locale") === "fr", null, "the language to be remembered");
       await launch(page, [PDF]);
       await page.goto(base + "/en/open");
-      await page.waitForURL("**/fr/open**");
-      const fr = dict("fr");
-      await page.getByRole("list", { name: fr["open.files"] }).getByText(PDF, { exact: true }).waitFor({ timeout: 20000 });
-      return "/en/open → /fr/open with the file";
+      await page.waitForURL("**/fr/lecteur-pdf");
+      await page.getByRole("dialog", { name: PDF }).waitFor({ timeout: 20000 });
+      return "/en/open → /fr/open → the viewer, in French";
     } finally {
       await ctx.close();
     }

@@ -39,6 +39,7 @@ const SAYINGS: Partial<Record<ToolId, string[]>> = {
   crop: ["trim", "margins", "cut edges"],
   repair: ["broken", "corrupt", "won't open", "damaged", "fix pdf"],
   scan: ["camera", "photo of document", "scanner"],
+  view: ["view", "open", "read", "viewer", "reader", "look at"],
   listen: ["read aloud", "audio", "speak", "text to speech"],
   accessible: ["screen reader", "tags", "accessibility", "a11y"],
   grayscale: ["black and white", "grey", "gray", "no colour", "no color"],

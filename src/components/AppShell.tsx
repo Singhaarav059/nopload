@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Home, LayoutGrid, Workflow, Settings2, Search, X, ChevronDown } from "lucide-react";
+import { Home, LayoutGrid, Workflow, Settings2, Search, X, ChevronDown, BookOpenText } from "lucide-react";
 import { useI18n } from "./I18n";
 import { ThemeSwitch } from "./ThemeMenu";
 import { ToolIcon } from "./ToolIcon";
-import { InstallGuide } from "./InstallGuide";
+import { AndroidApp, InstallGuide } from "./InstallGuide";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
@@ -64,7 +64,9 @@ function useTabs() {
   const at = (p: string) => pathname === p || pathname === `${p}/`;
   return [
     { id: "home", label: t("nav.home"), icon: Home, href: home, current: at(home) },
-    { id: "tools", label: t("app.tools"), icon: LayoutGrid, sheet: "tools" as const, current: TOOLS.some((x) => at(href(`/${x.slug}`))) },
+    // The reader: recent files and the viewer, as a reader app's library.
+    { id: "reader", label: t("app.reader"), icon: BookOpenText, href: href("/pdf-viewer"), current: at(href("/pdf-viewer")) },
+    { id: "tools", label: t("app.tools"), icon: LayoutGrid, sheet: "tools" as const, current: TOOLS.some((x) => x.id !== "view" && at(href(`/${x.slug}`))) },
     { id: "flows", label: t("nav.workflows"), icon: Workflow, href: href("/workflows"), current: at(href("/workflows")) },
     { id: "settings", label: t("app.settings"), icon: Settings2, sheet: "settings" as const, current: false },
   ];
@@ -77,7 +79,8 @@ function TabBar({ os, open, sheet }: { os: Os | null; open: (s: Sheet) => void; 
   return (
     <nav aria-label={t("app.nav")} data-tabbar={material ? "material" : "ios"} className="app-tabbar">
       {tabs.map((tab) => {
-        const on = tab.sheet ? sheet === tab.sheet : tab.current && !sheet;
+        // A sheet tab is lit while its sheet is open, or while on one of its pages (Tools on a tool page).
+        const on = sheet ? sheet === tab.sheet : !!tab.current;
         const body = (
           <>
             <span className="app-tab-icon"><tab.icon size={material ? 22 : 24} strokeWidth={on ? 2.1 : 1.75} /></span>
@@ -301,6 +304,7 @@ function ToolsList() {
 function SettingsList() {
   const { t, href, locale } = useI18n();
   const pathname = usePathname();
+  const { os } = useDevice();
   return (
     <div className="space-y-6 px-5 pb-8">
       <div>
@@ -314,6 +318,8 @@ function SettingsList() {
         </select>
       </div>
       <InstallGuide />
+      {/* The web app on Android can't be under Open with; the Android app can. */}
+      {os === "android" && <AndroidApp />}
       <ul className="app-group">
         {([["foot.guide", "/guide"], ["foot.privacy", "/privacy"], ["foot.about", "/about"], ["foot.licenses", "/licenses"]] as const).map(([k, p]) => (
           <li key={p}><Link href={href(p)} className="app-row">{t(k)}</Link></li>

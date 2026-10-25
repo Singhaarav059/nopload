@@ -8,7 +8,7 @@ import { ToolIcon } from "./ToolIcon";
 import { handOffTo, stashShared, takeShared, toolsFor } from "@/lib/handoff";
 import { hasLocale } from "@/lib/i18n/locales";
 import { BRAND } from "@/lib/brand";
-import type { Tool } from "@/lib/tools";
+import { toolById, type Tool } from "@/lib/tools";
 
 // What Chrome hands an installed app opened from a file ("Open with"), per
 // the manifest's file_handlers.
@@ -20,6 +20,7 @@ declare global {
 }
 
 const ACCEPT = ".pdf,image/*,.heic,.docx";
+const LAUNCHED = "nopload:launched";
 
 function lastLocale() {
   try {
@@ -38,16 +39,21 @@ export function OpenFiles() {
   const [files, setFiles] = useState<File[] | null>(null);
   // The language used last, read before this page remembers its own.
   const [saved] = useState(lastLocale);
-  const tools = useMemo(() => toolsFor(files ?? []), [files]);
+  // The viewer first: opening a PDF is most often to read it.
+  const tools = useMemo(() => toolsFor(files ?? []).sort((a, b) => Number(b.id === "view") - Number(a.id === "view")), [files]);
 
   useEffect(() => {
     let live = true;
-    const arrive = async (incoming: File[]) => {
+    // launched: opened with the app from the file manager ("Open with"). One
+    // PDF opened that way goes straight to the viewer.
+    const arrive = async (incoming: File[], launched = false) => {
       if (!live || !incoming.length) return;
       // "Open with" always lands on /en/open: follow the visitor's language.
       if (saved && saved !== locale && hasLocale(saved)) {
         live = false;
         await stashShared(incoming);
+        // Still opened with the app after the move: it goes on to the viewer there.
+        if (launched) try { sessionStorage.setItem(LAUNCHED, "1"); } catch { /* storage blocked */ }
         try {
           localStorage.setItem("locale", saved);
         } catch {
@@ -56,17 +62,32 @@ export function OpenFiles() {
         location.replace(`/${saved}/open`);
         return;
       }
+      if (launched && incoming.length === 1 && /\.pdf$/i.test(incoming[0].name)) {
+        live = false;
+        await handOffTo("view", incoming);
+        router.replace(href(`/${toolById("view").slug}`));
+        return;
+      }
       setFiles(incoming);
     };
-    void takeShared().then((shared) => (shared.length ? arrive(shared) : live && setFiles((f) => f ?? [])));
+    void takeShared().then((shared) => {
+      let launched = false;
+      try {
+        launched = sessionStorage.getItem(LAUNCHED) === "1";
+        sessionStorage.removeItem(LAUNCHED);
+      } catch {
+        // Storage blocked: the tools are offered instead.
+      }
+      return shared.length ? arrive(shared, launched) : live && setFiles((f) => f ?? []);
+    });
     window.launchQueue?.setConsumer((params) => {
       const handles = params.files.filter((h): h is FileSystemFileHandle => h.kind === "file");
-      void Promise.all(handles.map((h) => h.getFile())).then(arrive);
+      void Promise.all(handles.map((h) => h.getFile())).then((f) => arrive(f, true));
     });
     return () => {
       live = false;
     };
-  }, [locale, saved]);
+  }, [locale, saved, router, href]);
 
   const open = async (tool: Tool) => {
     if (!files) return;
@@ -95,7 +116,7 @@ export function OpenFiles() {
         ) : (
           files && <p className="text-pretty text-[15px] text-ink-2">{t("open.empty", { brand: BRAND.name })}</p>
         )}
-        <label className="btn btn-quiet btn-sm mt-4 inline-flex cursor-pointer">
+        <label className={`btn mt-4 inline-flex cursor-pointer ${files?.length ? "btn-quiet btn-sm" : "btn-primary"}`}>
           <Upload size={15} aria-hidden /> {t("ws.select")}
           <input
             type="file"

@@ -117,11 +117,11 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
   const Badge = cloudAi ? Cloud : tool.runtime === "browser" ? ShieldCheck : Server;
   return (
     <div data-cat={tool.category} className="mx-auto max-w-[1240px] px-4 sm:px-6">
-      <header className="relative isolate mx-auto flex max-w-[760px] flex-col items-center pb-5 pt-6 text-center sm:pt-8">
+      <header data-app-toolhead className="relative isolate mx-auto flex max-w-[760px] flex-col items-center pb-5 pt-6 text-center sm:pt-8">
         <div aria-hidden className="pointer-events-none absolute start-1/2 -top-10 -z-10 h-[360px] w-[min(760px,100%)] -translate-x-1/2 bg-[radial-gradient(closest-side,var(--tint),transparent)] rtl:translate-x-1/2" />
         <Sparkle className="absolute start-[8%] top-16 hidden w-5 text-coral md:block" delay="-0.5s" />
         <Sparkle className="absolute end-[10%] top-28 hidden w-3.5 text-(--tint-ink) md:block" delay="-1.4s" />
-        <nav aria-label={t["nav.breadcrumb"]} className="flex items-center gap-1.5 text-[13px]">
+        <nav data-web-only aria-label={t["nav.breadcrumb"]} className="flex items-center gap-1.5 text-[13px]">
           <Link href={`/${lang}`} className="rounded-full px-2.5 py-1 font-medium text-muted transition-colors hover:bg-surface hover:text-ink">{t["nav.allTools"]}</Link>
           <span aria-hidden className="text-line-strong">/</span>
           <span className="pill h-7">{k(`cat.${tool.category}`)}</span>
@@ -134,8 +134,8 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
           </span>
           <h1 className="display text-start text-[2.1rem] sm:text-[3rem]"><Words text={k(`tool.${tool.id}.name`)} /></h1>
         </div>
-        <p className="fade-up mt-3 max-w-[540px] text-pretty text-[17px] leading-relaxed text-ink-2">{k(descKey(tool))}</p>
-        <div className="fade-up mt-4 flex flex-wrap items-center justify-center gap-2" style={{ "--d": "420ms" } as React.CSSProperties}>
+        <p data-web-only className="fade-up mt-3 max-w-[540px] text-pretty text-[17px] leading-relaxed text-ink-2">{k(descKey(tool))}</p>
+        <div data-web-only className="fade-up mt-4 flex flex-wrap items-center justify-center gap-2" style={{ "--d": "420ms" } as React.CSSProperties}>
           <p data-cat={tool.runtime === "browser" && !cloudAi ? "organize" : "optimize"} className="pill">
             <Badge size={14} strokeWidth={2} aria-hidden />
             {cloudAi ? t["home.aiBadge"] : tool.runtime === "browser" ? t["home.privateBadge"] : t["home.serverBadge"]}
@@ -146,7 +146,8 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
 
       <Workspace toolId={tool.id} />
 
-      <section className="mx-auto mt-28 max-w-[960px]">
+      {/* What the page says to search engines and first-time visitors: not in the app. */}
+      <section data-web-only className="mx-auto mt-20 max-w-[960px] sm:mt-28">
         <ToolContent tool={tool} t={t} lang={lang} />
         {related.length > 0 && (
           <div className="mt-14">

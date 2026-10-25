@@ -72,6 +72,16 @@
   },
   "shortcuts": [
     {
+      "name": "PDF viewer",
+      "url": "/en/pdf-viewer",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
       "name": "Merge PDF",
       "url": "/en/merge-pdf",
       "icons": [
@@ -94,16 +104,6 @@
     {
       "name": "Edit PDF",
       "url": "/en/edit-pdf",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192"
-        }
-      ]
-    },
-    {
-      "name": "Sign PDF",
-      "url": "/en/sign-pdf",
       "icons": [
         {
           "src": "/icon-192.png",
