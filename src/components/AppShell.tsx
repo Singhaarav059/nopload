@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Home, LayoutGrid, Workflow, Settings2, Search, X, ChevronDown } from "lucide-react";
+import { Home, LayoutGrid, Workflow, Settings2, Search, X, ChevronDown, BookOpenText } from "lucide-react";
 import { useI18n } from "./I18n";
 import { ThemeSwitch } from "./ThemeMenu";
 import { ToolIcon } from "./ToolIcon";
@@ -64,7 +64,9 @@ function useTabs() {
   const at = (p: string) => pathname === p || pathname === `${p}/`;
   return [
     { id: "home", label: t("nav.home"), icon: Home, href: home, current: at(home) },
-    { id: "tools", label: t("app.tools"), icon: LayoutGrid, sheet: "tools" as const, current: TOOLS.some((x) => at(href(`/${x.slug}`))) },
+    // The reader: recent files and the viewer, as a reader app's library.
+    { id: "reader", label: t("app.reader"), icon: BookOpenText, href: href("/pdf-viewer"), current: at(href("/pdf-viewer")) },
+    { id: "tools", label: t("app.tools"), icon: LayoutGrid, sheet: "tools" as const, current: TOOLS.some((x) => x.id !== "view" && at(href(`/${x.slug}`))) },
     { id: "flows", label: t("nav.workflows"), icon: Workflow, href: href("/workflows"), current: at(href("/workflows")) },
     { id: "settings", label: t("app.settings"), icon: Settings2, sheet: "settings" as const, current: false },
   ];

@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
-  X, Search, ZoomIn, ZoomOut, Moon, Sun, BookOpenText, LayoutList, ListTree, ChevronUp, ChevronDown, Sparkles, Loader2,
+  X, Search, ZoomIn, ZoomOut, BookOpenText, LayoutList, ListTree, ChevronUp, ChevronDown, Sparkles, Loader2,
+  SlidersHorizontal, Maximize2, Minimize2, Share2, Printer, Download,
 } from "lucide-react";
 import { useI18n } from "../I18n";
 import { ToolIcon } from "../ToolIcon";
@@ -13,6 +14,7 @@ import { docFor, thumbUrl } from "@/lib/pdf/thumbs";
 import { handOffTo } from "@/lib/handoff";
 import { toolById, type ToolId } from "@/lib/tools";
 import type { Passage } from "@/lib/ai/speak";
+import { remember, rememberPage } from "@/lib/library";
 
 export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), import("pdfjs-dist"), import("@/lib/ai/speak")]);
 
@@ -25,7 +27,11 @@ export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), impo
 const MORE: ToolId[] = ["edit", "sign", "compress", "pdfToWord", "listen", "summarize", "split", "protect"];
 const GAP = 14;
 const placeKey = (f: File) => `nopload:viewer:${f.name}:${f.size}`;
-type Panel = null | "pages" | "contents" | "search" | "more";
+type Panel = null | "pages" | "contents" | "search" | "more" | "display";
+type Theme = "paper" | "sepia" | "night";
+const THEMES: Theme[] = ["paper", "sepia", "night"];
+// Two pages side by side once the window is wide enough for both.
+const SPREAD_MIN = 900;
 type Outline = { title: string; page: number | null; items: Outline[] };
 
 export function ViewerView({ file, onClose, onError }: { file: File; onClose: () => void; onError: (e: unknown) => void }) {
@@ -33,11 +39,15 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   const router = useRouter();
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [ratios, setRatios] = useState<number[]>([]);
-  const [fit, setFit] = useState(800);
-  // The margin beside the pages: narrow on phones.
-  const [pad, setPad] = useState(12);
+  // The space the pages have (the scroller's size).
+  const [view, setView] = useState({ w: 900, h: 800 });
   const [zoom, setZoom] = useState(1);
-  const [night, setNight] = useState(false);
+  const [theme, setTheme] = useState<Theme>("paper");
+  const night = theme === "night";
+  const [layout, setLayout] = useState<"scroll" | "spread">("scroll");
+  const [fitMode, setFitMode] = useState<"width" | "page">("width");
+  const [full, setFull] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
   const [reading, setReading] = useState<null | "loading" | "none" | Passage[]>(null);
   const [readSize, setReadSize] = useState(19);
   const [panel, setPanel] = useState<Panel>(null);
@@ -55,16 +65,33 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     failed.current = onError;
   });
 
+  // The margin beside the pages: narrow on phones.
+  const pad = view.w < 640 ? 6 : 12;
+  const spread = layout === "spread" && view.w >= SPREAD_MIN;
+  const fit = useMemo(() => {
+    let w = spread ? Math.min((view.w - 48 - GAP) / 2, 720) : Math.min(view.w - (view.w < 640 ? 12 : 48), 880);
+    // Fit the page: the whole of the tallest page on screen at once.
+    if (fitMode === "page" && ratios.length) w = Math.min(w, (view.h - 84) / Math.max(...ratios));
+    return Math.max(160, w);
+  }, [view, spread, fitMode, ratios]);
   const width = Math.round(fit * zoom);
-  const tops = useMemo(() => {
-    const out: number[] = [];
+  // Where each page sits: one column, or rows of two.
+  const pos = useMemo(() => {
+    const out: { top: number; left: number }[] = [];
     let y = GAP;
-    for (const r of ratios) {
-      out.push(y);
-      y += width * r + GAP;
+    for (let i = 0; i < ratios.length; i++) {
+      if (spread) {
+        const pair = i % 2 === 0;
+        out.push({ top: y, left: pair ? pad : pad + width + GAP });
+        if (!pair || i === ratios.length - 1) y += width * Math.max(ratios[i], pair ? 0 : ratios[i - 1]) + GAP;
+      } else {
+        out.push({ top: y, left: pad });
+        y += width * ratios[i] + GAP;
+      }
     }
-    return out;
-  }, [ratios, width]);
+    return { at: out, height: y, width: (spread ? width * 2 + GAP : width) + pad * 2 };
+  }, [ratios, width, spread, pad]);
+  const tops = useMemo(() => pos.at.map((p) => p.top), [pos]);
 
   // Open the file, measure its pages, and go back to where it was left.
   useEffect(() => {
@@ -78,6 +105,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
       }
       if (!live) return;
       setDoc(d);
+      void remember(file, d.numPages);
       setRatios(rs);
     })().catch((e) => live && failed.current(e));
     return () => {
@@ -89,11 +117,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const measure = () => {
-      const narrow = el.clientWidth < 640;
-      setPad(narrow ? 6 : 12);
-      setFit(Math.max(240, Math.min(el.clientWidth - (narrow ? 12 : 48), 880)));
-    };
+    const measure = () => setView({ w: el.clientWidth, h: el.clientHeight });
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -147,14 +171,20 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   const mouse = useRef<{ x: number; y: number } | null>(null);
 
   const lastY = useRef(0);
+  const input = useRef(-1e9);
+  const touched = () => {
+    input.current = performance.now();
+  };
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
     const y = el.scrollTop;
-    // Scrolling down reads on; scrolling up looks for something.
-    if (y > lastY.current + 6 && !panel) setChrome(false);
-    else if (y < lastY.current - 24) wake();
+    // Scrolling down reads on; scrolling up looks for something. Only the
+    // reader's own scrolling counts, not a jump to a page or a resize.
+    const own = performance.now() - input.current < 600;
+    if (own && y > lastY.current + 6 && !panel) setChrome(false);
+    else if (own && y < lastY.current - 24) wake();
     lastY.current = y;
     if (reading) return;
     const mid = y + el.clientHeight * 0.4;
@@ -168,6 +198,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
       } catch {
         // Storage blocked: the place isn't kept.
       }
+      void rememberPage(file, p);
     }, 400);
   };
 
@@ -240,13 +271,39 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   const onPointerDown = (e: React.PointerEvent) => {
     down.current = { x: e.clientX, y: e.clientY };
   };
+  // On a touch screen: a sideways swipe turns the page (when the page fits
+  // the width), a double tap zooms in there and back, a single tap shows or
+  // hides the controls (after a moment, in case a second tap follows).
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPointerUp = (e: React.PointerEvent) => {
     const d = down.current;
     down.current = null;
-    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8 || String(getSelection() ?? "")) return;
-    if (panel) setPanel(null);
-    else if (shown) setChrome(false);
-    else wake();
+    if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    const prev = lastTap.current;
+    const now = performance.now();
+    // A double tap (or double click) zooms, rather than selecting a word.
+    if (!reading && prev && now - prev.t < 300 && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 30 && Math.hypot(dx, dy) < 8) {
+      lastTap.current = null;
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      getSelection()?.removeAllRanges();
+      zoomTo(zoomRef.current > 1.05 ? 1 : 2, e.clientX, e.clientY);
+      return;
+    }
+    if (String(getSelection() ?? "")) return;
+    if (e.pointerType === "touch" && !reading && zoomRef.current <= 1 && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2) {
+      goTo(current + (dx < 0 ? 1 : -1) * (spread ? 2 : 1) * (document.dir === "rtl" ? -1 : 1));
+      return;
+    }
+    if (Math.hypot(dx, dy) > 8) return;
+    lastTap.current = { t: now, x: e.clientX, y: e.clientY };
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => {
+      if (panel) setPanel(null);
+      else if (shown) setChrome(false);
+      else wake();
+    }, e.pointerType === "touch" ? 260 : 0);
   };
 
   const toggleReading = () => {
@@ -329,6 +386,10 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
       } else if (e.key === "Escape") {
         if (panel) setPanel(null);
         else onClose();
+      } else if (!typing && !reading && (e.key === "ArrowRight" || e.key === "ArrowLeft") && zoomRef.current <= 1) {
+        // Page by page, two at a time side by side.
+        e.preventDefault();
+        goTo(current + (e.key === "ArrowRight" ? 1 : -1) * (spread ? 2 : 1));
       } else if (!typing && (e.key === "+" || e.key === "=")) zoomTo(zoomRef.current * 1.2);
       else if (!typing && e.key === "-") zoomTo(zoomRef.current / 1.2);
       else if (!typing && e.key === "0") zoomTo(1);
@@ -336,13 +397,72 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
      
-  }, [panel, onClose]);
+    // goTo reads the same state listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel, onClose, current, spread, reading, tops]);
+
+  // Full screen (where the browser allows it): the viewer alone on the display.
+  useEffect(() => {
+    const on = () => setFull(document.fullscreenElement === root.current);
+    document.addEventListener("fullscreenchange", on);
+    return () => {
+      document.removeEventListener("fullscreenchange", on);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  const toggleFull = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await root.current?.requestFullscreen();
+    } catch {
+      // Refused (an iframe, an old browser): nothing changes.
+    }
+  };
+
+  // Share, print or save the file as it is, from the viewer.
+  const canShare = useMemo(() => {
+    try {
+      return !!navigator.canShare?.({ files: [file] });
+    } catch {
+      return false;
+    }
+  }, [file]);
+  const shareFile = async () => {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+    } catch {
+      // Cancelled, or not allowed here.
+    }
+  };
+  const printFile = () => {
+    const url = URL.createObjectURL(file);
+    const frame = document.createElement("iframe");
+    frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0";
+    frame.src = url;
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      } catch {
+        // The browser can't print from a frame (some phones): the PDF opens, to print from there.
+        window.open(url, "_blank", "noopener");
+      }
+      setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60_000);
+    };
+    document.body.append(frame);
+  };
+  const downloadFile = () => {
+    const url = URL.createObjectURL(file);
+    const a = Object.assign(document.createElement("a"), { href: url, download: file.name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
 
   const total = ratios.length;
   const iconBtn = "vw-btn";
 
   return createPortal(
-    <div role="dialog" aria-modal aria-label={file.name} className="vw" data-night={night || undefined} data-chrome={shown || undefined}
+    <div ref={root} role="dialog" aria-modal aria-label={file.name} className="vw" data-theme={theme} data-night={night || undefined} data-chrome={shown || undefined}
       onMouseMove={(e) => {
         // Real moves only: some browsers send one when the page scrolls under a still mouse.
         const m = mouse.current;
@@ -354,7 +474,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         <p className="min-w-0 flex-1 truncate text-[15px] font-medium">{file.name}</p>
         <button type="button" className={iconBtn} aria-label={t("viewer.search")} aria-pressed={panel === "search"} onClick={() => setPanel(panel === "search" ? null : "search")}><Search size={19} /></button>
         <button type="button" className={iconBtn} aria-label={t("viewer.reading")} aria-pressed={!!reading} onClick={toggleReading}><BookOpenText size={19} /></button>
-        <button type="button" className={iconBtn} aria-label={t("viewer.night")} aria-pressed={night} onClick={() => setNight((n) => !n)}>{night ? <Sun size={19} /> : <Moon size={19} />}</button>
+        <button type="button" className={iconBtn} aria-label={t("viewer.display")} aria-pressed={panel === "display"} onClick={() => setPanel(panel === "display" ? null : "display")}><SlidersHorizontal size={18} /></button>
         <button type="button" className={`${iconBtn} vw-more`} aria-label={t("viewer.more")} aria-pressed={panel === "more"} onClick={() => setPanel(panel === "more" ? null : "more")}><Sparkles size={18} /> <span className="max-sm:hidden">{t("viewer.moreShort")}</span></button>
       </header>
 
@@ -379,6 +499,16 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
             <button type="button" role="tab" aria-selected={panel === "contents"} onClick={() => setPanel("contents")}><ListTree size={15} /> {t("viewer.contents")}</button>
           </div>
           {panel === "pages" && doc && (
+            <form className="vw-jump" onSubmit={(e) => {
+              e.preventDefault();
+              const n = Number(new FormData(e.currentTarget).get("page"));
+              if (n >= 1 && n <= total) { goTo(n - 1); if (window.innerWidth < 760) setPanel(null); }
+            }}>
+              <label>{t("viewer.goTo")} <input name="page" type="number" inputMode="numeric" min={1} max={total} placeholder={String(current + 1)} /></label>
+              <span className="opacity-60">/ {total}</span>
+            </form>
+          )}
+          {panel === "pages" && doc && (
             <ol className="vw-thumbs">
               {ratios.map((r, i) => (
                 <li key={i}>
@@ -399,8 +529,29 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         </aside>
       )}
 
+      {panel === "display" && (
+        <div className="vw-sheet vw-display" role="group" aria-label={t("viewer.display")}>
+          <Choice label={t("viewer.theme")} value={theme} onChange={(v) => setTheme(v as Theme)}
+            options={THEMES.map((k) => [k, t(`viewer.theme.${k}`)])} />
+          <Choice label={t("viewer.layout")} value={spread ? "spread" : "scroll"} onChange={(v) => { setLayout(v as "scroll" | "spread"); setZoom(1); }}
+            options={[["scroll", t("viewer.layout.scroll")], ["spread", t("viewer.layout.spread"), view.w < SPREAD_MIN]]} />
+          <Choice label={t("viewer.fitTo")} value={fitMode} onChange={(v) => { setFitMode(v as "width" | "page"); setZoom(1); requestAnimationFrame(() => goTo(current, false)); }}
+            options={[["width", t("viewer.fit.width")], ["page", t("viewer.fit.page")]]} />
+          {typeof document !== "undefined" && document.fullscreenEnabled && (
+            <button type="button" className="vw-row" aria-pressed={full} onClick={() => void toggleFull()}>
+              {full ? <Minimize2 size={17} /> : <Maximize2 size={17} />} {t(full ? "viewer.exitFullscreen" : "viewer.fullscreen")}
+            </button>
+          )}
+        </div>
+      )}
+
       {panel === "more" && (
         <div className="vw-sheet" role="menu" aria-label={t("viewer.more")}>
+          <div className="vw-actions">
+            {canShare && <button type="button" role="menuitem" onClick={() => void shareFile()}><Share2 size={18} /> {t("viewer.share")}</button>}
+            <button type="button" role="menuitem" onClick={printFile}><Printer size={18} /> {t("viewer.print")}</button>
+            <button type="button" role="menuitem" onClick={downloadFile}><Download size={18} /> {t("viewer.download")}</button>
+          </div>
           <p className="vw-sheet-title">{t("viewer.more")}</p>
           <ul>
             {MORE.map((id, i) => (
@@ -415,7 +566,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         </div>
       )}
 
-      <div ref={scroller} className="vw-scroll" tabIndex={-1} onScroll={onScroll} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+      <div ref={scroller} className="vw-scroll" data-zoomed={zoom > 1 || undefined} tabIndex={-1} onScroll={onScroll} onWheel={touched} onTouchMove={touched} onKeyDown={touched} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
         {!doc && <p className="vw-loading"><Loader2 size={22} className="animate-spin" /> {t("viewer.loading")}</p>}
         {reading ? (
           <article className="vw-read" style={{ fontSize: readSize }}>
@@ -424,9 +575,9 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
                 : reading.map((p, i) => p.kind === "heading" ? <h2 key={i}>{p.text}</h2> : <p key={i} data-list={p.kind === "list" || undefined}>{p.kind === "list" ? p.text.replace(/^[-–•*·▪◦]\s*/, "") : p.text}</p>)}
           </article>
         ) : doc && (
-          <div className="vw-pages" style={{ width: width + pad * 2, height: (tops[total - 1] ?? 0) + width * (ratios[total - 1] ?? 0) + GAP }}>
+          <div className="vw-pages" style={{ width: pos.width, height: pos.height }}>
             {ratios.map((r, i) => (
-              <PageView key={i} doc={doc} index={i} width={width} ratio={r} top={tops[i]} left={pad} query={query.trim().toLowerCase()} />
+              <PageView key={i} doc={doc} index={i} width={width} ratio={r} top={pos.at[i].top} left={pos.at[i].left} query={query.trim().toLowerCase()} />
             ))}
           </div>
         )}
@@ -574,5 +725,19 @@ function ContentsList({ items, onPick }: { items: Outline[]; onPick: (page: numb
         </li>
       ))}
     </ul>
+  );
+}
+
+// A row of choices that reads as one control (a segmented button).
+function Choice({ label, value, options, onChange }: { label: string; value: string; options: [string, string, boolean?][]; onChange: (v: string) => void }) {
+  return (
+    <div className="vw-choice" role="radiogroup" aria-label={label}>
+      <span>{label}</span>
+      <div>
+        {options.map(([k, text, off]) => (
+          <button key={k} type="button" role="radio" aria-checked={value === k} disabled={off} onClick={() => onChange(k)}>{text}</button>
+        ))}
+      </div>
+    </div>
   );
 }

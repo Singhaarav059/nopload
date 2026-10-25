@@ -12,6 +12,7 @@ import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
 import { ThemeMenu, ThemeSwitch } from "./ThemeMenu";
 import { openCommandBar } from "./CommandBar";
+import { InstallButton } from "./InstallGuide";
 
 // Every tool's icon only shows in the phone menu: loaded when it opens (P3-03).
 const ToolIcon = dynamic(() => import("./ToolIcon").then((m) => m.ToolIcon), { ssr: false });
@@ -141,6 +142,8 @@ export function Header() {
               </div>
             )}
           </div>
+
+          <InstallButton />
 
           <button type="button" data-command className="icon-btn" aria-label={t("cmd.label")} title={t("cmd.label")} onClick={openCommandBar}>
             <Search size={18} strokeWidth={1.75} />

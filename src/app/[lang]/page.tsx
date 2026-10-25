@@ -7,6 +7,8 @@ import { ToolIcon } from "@/components/ToolIcon";
 import { Words } from "@/components/Motion";
 import { HeroDrop } from "@/components/HeroDrop";
 import { HowGuide } from "@/components/HowGuide";
+import { RecentFiles } from "@/components/RecentFiles";
+import { InstallBanner } from "@/components/InstallGuide";
 import { Friend, HeroScene, SleepyCloud, Sparkle } from "@/components/Studio";
 import { format, getDictionary } from "@/lib/i18n/dictionary";
 import { hasLocale } from "@/lib/i18n/locales";
@@ -76,6 +78,9 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
           <HeroScene badge={t["home.privateBadge"]} />
         </div>
       </section>
+
+      <RecentFiles className="mb-10 mt-8" />
+      <InstallBanner />
 
       <div data-web-only className="mt-20 sm:mt-28">
         <HowGuide />

@@ -49,7 +49,7 @@ await suite(async ({ browser, test }) => {
     return "found, then none";
   });
 
-  await test("zoom in makes the page larger; night mode darkens it", async () => {
+  await test("zoom; night and sepia pages; two pages side by side", async () => {
     let step = "zoom in";
     try {
       await wake();
@@ -65,14 +65,31 @@ await suite(async ({ browser, test }) => {
       await viewer().getByRole("button", { name: t["viewer.fit"] }).click();
       step = "night";
       await wake();
-      await bar(t["viewer.night"]).click();
+      await bar(t["viewer.display"]).click();
+      const display = viewer().getByRole("group", { name: t["viewer.display"] });
+      await display.getByRole("radio", { name: t["viewer.theme.night"] }).click();
       const filter = await viewer().locator('[data-page="1"] .vw-art').evaluate((e) => getComputedStyle(e).filter);
       if (!filter.includes("invert")) throw new Error(`filter: ${filter}`);
-      step = "night off";
-      await bar(t["viewer.night"]).click();
+      step = "sepia";
+      await display.getByRole("radio", { name: t["viewer.theme.sepia"] }).click();
+      if ((await viewer().getAttribute("data-theme")) !== "sepia") throw new Error("not sepia");
+      step = "two pages";
+      await display.getByRole("radio", { name: t["viewer.layout.spread"] }).click();
+      await page.waitForTimeout(300);
+      const [a, b] = await Promise.all([1, 2].map((n) => viewer().locator(`[data-page="${n}"]`).boundingBox()));
+      if (Math.abs(a.y - b.y) > 1 || b.x <= a.x + a.width) throw new Error(`pages 1 and 2 at ${a.x},${a.y} and ${b.x},${b.y}`);
+      step = "back";
+      await display.getByRole("radio", { name: t["viewer.layout.scroll"] }).click();
+      await display.getByRole("radio", { name: t["viewer.theme.paper"] }).click();
+      await page.keyboard.press("Escape");
       return `${Math.round(before)} → ${Math.round(after)} px`;
     } catch (e) {
-      throw new Error(`${step}: ${e.message.split("\n")[0]}`);
+      const state = await page.evaluate(() => {
+        const x = document.querySelector('[aria-label="Do more with this file"]');
+        const r = x?.getBoundingClientRect();
+        return r ? [document.querySelectorAll(".vw").length, document.querySelector(".vw")?.hasAttribute("data-chrome"), document.elementFromPoint(r.x + 5, r.y + 5)?.outerHTML.slice(0, 90)] : "no button";
+      }).catch((x) => String(x));
+      throw new Error(`${step}: ${e.message.split("\n")[0]} ${JSON.stringify(state)}`);
     }
   });
 
@@ -98,6 +115,37 @@ await suite(async ({ browser, test }) => {
     return "page 3";
   });
 
+  await test("Recent: the file is there to open again, at its page", async () => {
+    let step = "close";
+    try {
+    await wake();
+    await bar(t["viewer.close"]).click();
+    await viewer().waitFor({ state: "detached" });
+    const recent = page.getByRole("region", { name: t["recent.title"] });
+    const card = recent.locator(".recent-card", { hasText: "report.pdf" });
+    await card.getByText(fill(t["recent.where"], { n: 3, total: 3 }), { exact: false }).waitFor();
+    step = "open";
+    await card.click();
+    await viewer().waitFor();
+    // Download hands over the file as it is.
+    await wake();
+    step = "more";
+    await bar(t["viewer.more"]).click();
+    step = "download";
+    const [dl] = await Promise.all([page.waitForEvent("download"), viewer().getByRole("menuitem", { name: t["viewer.download"] }).click()]);
+    if (dl.suggestedFilename() !== "report.pdf") throw new Error(`downloaded ${dl.suggestedFilename()}`);
+    await page.keyboard.press("Escape");
+    return "listed at page 3, opened, downloaded";
+    } catch (e) {
+      const state = await page.evaluate(() => {
+        const x = document.querySelector('[aria-label="Do more with this file"]');
+        const r = x?.getBoundingClientRect();
+        return r ? [document.querySelectorAll(".vw").length, document.querySelector(".vw")?.hasAttribute("data-chrome"), document.elementFromPoint(r.x + 5, r.y + 5)?.outerHTML.slice(0, 90)] : "no button";
+      }).catch((x) => String(x));
+      throw new Error(`${step}: ${e.message.split("\n")[0]} ${JSON.stringify(state)}`);
+    }
+  });
+
   await test("Do more: Compress opens with the file", async () => {
     await wake();
     await bar(t["viewer.more"]).click();
@@ -121,11 +169,18 @@ await suite(async ({ browser, test }) => {
       await p.waitForFunction(() => !document.querySelector(".vw")?.hasAttribute("data-chrome"), null, { timeout: 8000 });
       await p.mouse.click(195, 500);
       await p.waitForFunction(() => document.querySelector(".vw")?.hasAttribute("data-chrome"));
+      // Apart enough not to be a double tap (which zooms).
+      await p.waitForTimeout(450);
       await p.mouse.click(195, 500);
       await p.waitForFunction(() => !document.querySelector(".vw")?.hasAttribute("data-chrome"));
       const wide = await p.evaluate(() => document.querySelector(".vw-scroll").scrollWidth - innerWidth);
       if (wide > 1) throw new Error(`${wide}px sideways at fit width`);
-      return "hidden, shown, hidden";
+      // A double tap zooms in, another zooms back out.
+      await p.mouse.dblclick(195, 400);
+      await v.getByRole("button", { name: t["viewer.fit"] }).getByText("200%").waitFor({ state: "attached" });
+      await p.mouse.dblclick(195, 400);
+      await v.getByRole("button", { name: t["viewer.fit"] }).getByText("100%").waitFor({ state: "attached" });
+      return "hidden, shown, hidden; double tap 200% and back";
     } finally {
       await phone.close();
     }

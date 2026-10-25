@@ -87,7 +87,7 @@
   bottom: 0;
   z-index: 45;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   animation: app-rise 420ms var(--ease-out) both;
@@ -561,6 +561,9 @@ html[data-viewer] body { overflow: hidden; }
 @keyframes vw-in { from { opacity: 0; transform: scale(0.985); } }
 .vw-scroll { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; outline: none; padding-top: calc(env(safe-area-inset-top) + 56px); padding-bottom: 96px; }
 .vw-pages { position: relative; margin: 0 auto; }
+/* At fit width the browser keeps vertical scrolling and leaves sideways swipes to the viewer (page turns). */
+.vw-scroll { touch-action: pan-y; }
+.vw-scroll[data-zoomed] { touch-action: pan-x pan-y; }
 .vw-page {
   position: absolute; background: #fff; border-radius: 3px; overflow: hidden;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 6px 22px rgb(0 0 0 / 0.08);
@@ -652,6 +655,27 @@ html[data-viewer] body { overflow: hidden; }
 .vw-read p[data-list] { padding-inline-start: 1.1em; text-indent: -0.8em; }
 .vw-read p[data-list]::before { content: "•  "; }
 
+/* Sepia: warm paper for long reading. */
+.vw[data-theme="sepia"] { --vw-bg: #e9dfc8; --vw-glass: rgb(248 241 226 / 0.82); color: #4a3b28; }
+.vw[data-theme="sepia"] .vw-page { background: #f6efdd; }
+.vw[data-theme="sepia"] .vw-art { filter: sepia(0.45) saturate(0.9) brightness(0.97); mix-blend-mode: multiply; }
+.vw[data-theme="sepia"] .vw-read { color: #3d2f1f; }
+.vw-display { display: grid; gap: 12px; padding: 12px; }
+.vw-choice { display: grid; gap: 6px; }
+.vw-choice > span { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6; padding-inline: 2px; }
+.vw-choice > div { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: color-mix(in oklab, currentColor 7%, transparent); }
+.vw-choice button { flex: 1; height: 34px; border-radius: 9px; font-size: 14px; transition: background 180ms, color 180ms, box-shadow 180ms; }
+.vw-choice button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); font-weight: 600; }
+.vw[data-night] .vw-choice button[aria-checked="true"] { background: #3a3a40; color: #fff; }
+.vw-choice button:disabled { opacity: 0.35; }
+.vw-row { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 12px; font-size: 14px; background: color-mix(in oklab, currentColor 7%, transparent); }
+.vw-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px; padding: 4px 4px 10px; margin-bottom: 4px; border-bottom: 1px solid color-mix(in oklab, currentColor 12%, transparent); }
+.vw-actions button { display: grid; justify-items: center; gap: 4px; padding: 10px 4px; border-radius: 12px; font-size: 12.5px; background: color-mix(in oklab, currentColor 6%, transparent); }
+.vw-actions button:hover { background: color-mix(in oklab, currentColor 11%, transparent); }
+.vw-jump { display: flex; align-items: center; gap: 8px; padding: 2px 14px 8px; font-size: 13px; }
+.vw-jump input { width: 64px; height: 30px; margin-inline-start: 6px; padding: 0 8px; border-radius: 8px; background: color-mix(in oklab, currentColor 8%, transparent); outline: none; }
+.vw-jump input:focus { box-shadow: 0 0 0 2px var(--accent); }
+
 /* Phones: panels come up from the bottom as sheets. */
 @media (max-width: 759px) {
   .vw-side, .vw-sheet { top: auto; left: 8px; right: 8px; width: auto; bottom: calc(env(safe-area-inset-bottom) + 72px); max-height: 62vh; animation-name: vw-rise; }
@@ -677,3 +701,63 @@ html[data-viewer] body { overflow: hidden; }
 .textLayer ::selection { background: color-mix(in srgb, AccentColor, transparent 60%); color: transparent; }
 .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 @media (prefers-reduced-motion: reduce) { .vw, .vw-search, .vw-side, .vw-sheet, .vw-sheet li { animation: none; } }
+
+/* Recent files (src/components/RecentFiles.tsx): the app's library. */
+.recent-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.recent-list > li { position: relative; animation: vw-drop 360ms var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.recent-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 36px 12px 12px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-card, 0 1px 2px rgb(0 0 0 / 0.04));
+  transition: translate 300ms var(--ease-spring), box-shadow 300ms, border-color 200ms;
+}
+.recent-card:hover { translate: 0 -2px; border-color: var(--line-strong); box-shadow: 0 10px 24px rgb(0 0 0 / 0.08); }
+.recent-card:active { scale: 0.985; }
+.recent-icon { display: grid; place-items: center; width: 40px; height: 48px; border-radius: 8px; background: color-mix(in oklab, var(--accent) 10%, var(--surface-2)); color: var(--accent); flex-shrink: 0; }
+.recent-bar { display: block; height: 3px; margin-top: 6px; border-radius: 3px; background: color-mix(in oklab, currentColor 10%, transparent); overflow: hidden; }
+.recent-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.recent-x { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; color: var(--muted); opacity: 0; transition: opacity 160ms, background 160ms; }
+.recent-list > li:hover .recent-x, .recent-x:focus-visible { opacity: 1; }
+.recent-x:hover { background: var(--surface-2); color: var(--ink); }
+@media (hover: none) { .recent-x { opacity: 0.7; } }
+
+/* Install: the header's pill, the home banner and the sheet (InstallGuide.tsx). */
+.install-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600; color: #fff; background: var(--accent);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 35%, transparent);
+  transition: translate 300ms var(--ease-spring), box-shadow 300ms; position: relative; overflow: hidden;
+}
+.install-pill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%); translate: -120% 0; animation: install-shine 4.5s 2s ease-in-out infinite; }
+.install-pill:hover { translate: 0 -1px; box-shadow: 0 10px 24px color-mix(in oklab, var(--accent) 45%, transparent); }
+@keyframes install-shine { 0%, 70% { translate: -120% 0; } 100% { translate: 120% 0; } }
+@media (max-width: 420px) { .install-pill { padding: 0 11px; } .install-pill span { display: none; } }
+html[data-app] .install-pill { display: none; }
+.install-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; margin: 0 0 12px; padding: 16px 18px; border-radius: 24px;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 12%, var(--surface)), var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--line));
+  animation: vw-drop 500ms 900ms var(--ease-spring) both;
+}
+.install-wrap { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 16px; }
+.install-sheet {
+  position: relative; width: min(420px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px;
+  border-radius: 28px; background: var(--surface); box-shadow: 0 30px 80px rgb(0 0 0 / 0.25);
+  animation: install-in 420ms var(--ease-spring) both;
+}
+@keyframes install-in { from { opacity: 0; translate: 0 24px; scale: 0.97; } }
+@media (max-width: 640px) {
+  .install-wrap { place-items: end center; padding: 0; }
+  .install-sheet { width: 100%; border-radius: 28px 28px 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); animation-name: install-up; }
+  @keyframes install-up { from { translate: 0 100%; } }
+}
+.install-why { display: flex; align-items: center; gap: 10px; font-size: 14.5px; animation: vw-drop 400ms var(--ease-spring) both; animation-delay: calc(120ms + var(--i, 0) * 70ms); }
+.install-why svg { color: var(--accent); flex-shrink: 0; }
+.install-art { display: grid; place-items: center; height: 120px; margin: -4px 0 14px; border-radius: 20px; background: radial-gradient(circle at 50% 120%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%); }
+.install-art-sm { height: 64px; width: 64px; margin: 0; border-radius: 18px; }
+.install-phone { position: relative; display: grid; grid-template-columns: repeat(2, 14px); gap: 6px; padding: 18px 10px; width: 56px; height: 96px; border-radius: 14px; background: var(--surface); border: 2px solid var(--ink); animation: install-float 4s ease-in-out infinite; }
+.install-art-sm .install-phone { scale: 0.55; }
+.install-phone > span { width: 14px; height: 14px; border-radius: 4px; background: color-mix(in oklab, var(--accent) 30%, var(--surface-2)); }
+.install-phone > span:first-child { background: var(--accent); animation: install-pop 4s ease-in-out infinite; }
+@keyframes install-float { 50% { translate: 0 -5px; rotate: -3deg; } }
+@keyframes install-pop { 0%, 30% { scale: 0; } 40% { scale: 1.25; } 50%, 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) { .install-pill::after, .install-phone, .install-phone > span, .install-sheet, .install-why, .install-banner { animation: none; } }

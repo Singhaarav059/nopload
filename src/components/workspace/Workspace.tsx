@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertTriangle, ArrowRight, Download, Loader2, X } from "lucide-react";
+import { RecentFiles } from "../RecentFiles";
 import { useI18n } from "../I18n";
 import type { Stamp } from "./StampPreview";
 import { Dropzone, useFileIntake } from "./Dropzone";
@@ -503,6 +504,8 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
             <Scanner onCapture={(f) => addFiles([f])} />
           </div>
         )}
+        {/* The reader's library comes first: what was read lately, one tap away. */}
+        {tool.mode === "view" && <RecentFiles onOpen={(f) => void addFiles([f])} className="mx-auto mb-8 max-w-[760px]" />}
         <Dropzone tool={tool} onFiles={addFiles} over={over} />
         {tool.id === "htmlToPdf" && <PasteHtml onFile={(f) => void addFiles([f])} />}
       </div>
@@ -659,7 +662,8 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   })();
   return (
     <>
-      <StepTrail view={view} mode={tool.mode} cat={tool.category} edit={tool.id === "edit"} />
+      {/* The viewer has nothing to set up or download: no steps. */}
+      {tool.mode !== "view" && <StepTrail view={view} mode={tool.mode} cat={tool.category} edit={tool.id === "edit"} />}
       {body}
     </>
   );
