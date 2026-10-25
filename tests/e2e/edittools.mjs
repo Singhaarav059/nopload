@@ -49,6 +49,18 @@ await suite(async ({ name, browser, test }) => {
     const pdf = await getDocument({ data: bytes.slice(), verbosity: 0 }).promise;
     return { text: (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" "), size: bytes.length };
   };
+  // The page image's box once the layout has stopped moving: picking a tool
+  // changes the side panel, which can resize the page a moment later.
+  const settledBox = async () => {
+    let last = null;
+    for (let i = 0; i < 40; i++) {
+      const b = await page.locator("main img").first().boundingBox();
+      if (last && b && Math.abs(b.x - last.x) < 0.5 && Math.abs(b.y - last.y) < 0.5 && Math.abs(b.width - last.width) < 0.5) return b;
+      last = b;
+      await page.waitForTimeout(150);
+    }
+    return last;
+  };
   const evidence = async (first) => {
     const items = await page.evaluate(() => [...document.querySelectorAll("[data-item]")].map((e) => e.dataset.item).join(",") || "none");
     return `saved ${first.size} B of ${readFileSync(letter).length} B, items on page: ${items}`;
@@ -165,11 +177,11 @@ await suite(async ({ name, browser, test }) => {
       await open(page, "/en/edit-pdf");
       await pick(page, [letter]);
       await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
-      const box = await page.locator("main img").first().boundingBox();
-      const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
       step = "scribble";
       // Back and forth over "business." (Helvetica 14 pt, x 202-262, baseline 660), as a hand would.
       await tool("ed.draw").click();
+      const box = await settledBox();
+      const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
       await page.mouse.move(...at(200, 664));
       await page.mouse.down();
       for (let k = 0; k < 7; k++) await page.mouse.move(...at(k % 2 ? 200 : 264, 662 + (k % 3) * 2), { steps: 6 });
@@ -195,7 +207,7 @@ await suite(async ({ name, browser, test }) => {
       await open(page, "/en/edit-pdf");
       await pick(page, [letter]);
       await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
-      const box = await page.locator("main img").first().boundingBox();
+      let box;
       const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
       // A loop round a centre in page points, rx by ry.
       const ring = async (cx, cy, rx, ry) => {
@@ -205,6 +217,7 @@ await suite(async ({ name, browser, test }) => {
         await page.mouse.up();
       };
       await tool("ed.draw").click();
+      box = await settledBox();
       step = "highlight";
       // Round "Dear customer," (x 72-170, baseline 700).
       await ring(120, 704, 60, 14);
@@ -215,6 +228,7 @@ await suite(async ({ name, browser, test }) => {
       if ((await page.locator("[data-item=highlight]").count()) !== 1) throw new Error("no highlight");
       step = "erase";
       await tool("ed.draw").click();
+      box = await settledBox();
       // Round "Thank you" (x 72-136, baseline 660).
       await ring(104, 664, 38, 12);
       await bar.getByRole("button", { name: t["ed.lassoErase"], exact: true }).click();
