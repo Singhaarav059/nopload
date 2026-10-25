@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   X, Search, ZoomIn, ZoomOut, BookOpenText, LayoutList, ListTree, ChevronUp, ChevronDown, Sparkles, Loader2,
-  SlidersHorizontal, Maximize2, Minimize2, Share2, Printer, Download,
+  SlidersHorizontal, Maximize2, Minimize2, Share2, Printer, Download, Highlighter, Copy, Trash2,
 } from "lucide-react";
 import { useI18n } from "../I18n";
 import { ToolIcon } from "../ToolIcon";
@@ -15,6 +15,7 @@ import { handOffTo } from "@/lib/handoff";
 import { toolById, type ToolId } from "@/lib/tools";
 import type { Passage } from "@/lib/ai/speak";
 import { remember, rememberPage } from "@/lib/library";
+import type { Box, Highlight } from "@/lib/pdf/highlights";
 
 export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), import("pdfjs-dist"), import("@/lib/ai/speak")]);
 
@@ -27,7 +28,10 @@ export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), impo
 const MORE: ToolId[] = ["edit", "sign", "compress", "pdfToWord", "listen", "summarize", "split", "protect"];
 const GAP = 14;
 const placeKey = (f: File) => `nopload:viewer:${f.name}:${f.size}`;
-type Panel = null | "pages" | "contents" | "search" | "more" | "display";
+type Panel = null | "pages" | "contents" | "marks" | "search" | "more" | "display";
+const HL_COLORS = ["yellow", "green", "blue", "pink"] as const;
+const hlKey = (f: File) => `nopload:viewer:hl:${f.name}:${f.size}`;
+const isSide = (p: Panel) => p === "pages" || p === "contents" || p === "marks";
 type Theme = "paper" | "sepia" | "night";
 const THEMES: Theme[] = ["paper", "sepia", "night"];
 // Two pages side by side once the window is wide enough for both.
@@ -58,6 +62,24 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   const [hits, setHits] = useState<{ page: number }[] | null>(null);
   const [hit, setHit] = useState(0);
   const [outline, setOutline] = useState<Outline[] | null>(null);
+  // Highlights: kept with the file on this device, saved into a copy on request.
+  const [marks, setMarks] = useState<Highlight[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(hlKey(file)) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const saveMarks = (next: Highlight[]) => {
+    setMarks(next);
+    try {
+      localStorage.setItem(hlKey(file), JSON.stringify(next));
+    } catch {
+      // Storage blocked or full: kept until the viewer closes.
+    }
+  };
+  // The text selected on the pages (or a highlight tapped), and where to offer what to do with it.
+  const [picked, setPicked] = useState<null | { at: { x: number; y: number }; text: string; boxes: { page: number; box: Box }[] } | { at: { x: number; y: number }; mark: string }>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const texts = useRef<Map<number, string>>(new Map());
   const failed = useRef(onError);
@@ -300,10 +322,77 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     lastTap.current = { t: now, x: e.clientX, y: e.clientY };
     if (tapTimer.current) clearTimeout(tapTimer.current);
     tapTimer.current = setTimeout(() => {
-      if (panel) setPanel(null);
+      if (picked) setPicked(null);
+      else if (panel) setPanel(null);
       else if (shown) setChrome(false);
       else wake();
     }, e.pointerType === "touch" ? 260 : 0);
+  };
+
+  // A selection on the pages: its lines as boxes on each page, for a highlight.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const read = () => {
+      const sel = getSelection();
+      const pages = scroller.current?.querySelector(".vw-pages");
+      if (!sel || sel.isCollapsed || !sel.rangeCount || !pages || !pages.contains(sel.anchorNode)) {
+        setPicked((p) => (p && "text" in p ? null : p));
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const lines = new Map<string, { page: number; l: number; t: number; r: number; b: number }>();
+      for (const rc of range.getClientRects()) {
+        if (rc.width < 1 || rc.height < 1) continue;
+        const el = document.elementFromPoint(rc.left + rc.width / 2, rc.top + rc.height / 2)?.closest<HTMLElement>("[data-page]")
+          ?? [...pages.querySelectorAll<HTMLElement>("[data-page]")].find((p) => { const b = p.getBoundingClientRect(); return rc.top >= b.top - 2 && rc.bottom <= b.bottom + 2; });
+        if (!el) continue;
+        const page = Number(el.dataset.page) - 1;
+        // One box per line: rectangles at the same height join up.
+        const key = `${page}:${Math.round((rc.top + rc.bottom) / 2 / 4)}`;
+        const cur = lines.get(key);
+        lines.set(key, cur ? { page, l: Math.min(cur.l, rc.left), t: Math.min(cur.t, rc.top), r: Math.max(cur.r, rc.right), b: Math.max(cur.b, rc.bottom) } : { page, l: rc.left, t: rc.top, r: rc.right, b: rc.bottom });
+      }
+      const boxes: { page: number; box: Box }[] = [];
+      for (const ln of lines.values()) {
+        const pb = pages.querySelector<HTMLElement>(`[data-page="${ln.page + 1}"]`)!.getBoundingClientRect();
+        boxes.push({ page: ln.page, box: { x: (ln.l - pb.left) / pb.width, y: (ln.t - pb.top) / pb.height, w: (ln.r - ln.l) / pb.width, h: (ln.b - ln.t) / pb.height } });
+      }
+      if (!boxes.length) return;
+      const last = range.getBoundingClientRect();
+      setPicked({ at: { x: last.left + last.width / 2, y: last.bottom }, text: sel.toString().trim(), boxes });
+    };
+    const onChange = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(read, 280);
+    };
+    document.addEventListener("selectionchange", onChange);
+    return () => {
+      document.removeEventListener("selectionchange", onChange);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  const addMark = (color: string) => {
+    if (!picked || !("text" in picked)) return;
+    const byPage = new Map<number, Box[]>();
+    for (const { page, box } of picked.boxes) byPage.set(page, [...(byPage.get(page) ?? []), box]);
+    const added = [...byPage].map(([page, boxes]) => ({ id: crypto.randomUUID(), page, boxes, color, text: picked.text }));
+    saveMarks([...marks, ...added]);
+    getSelection()?.removeAllRanges();
+    setPicked(null);
+  };
+  const copyPicked = async () => {
+    if (picked && "text" in picked) await navigator.clipboard?.writeText(picked.text).catch(() => {});
+    getSelection()?.removeAllRanges();
+    setPicked(null);
+  };
+  const saveWithMarks = async () => {
+    const { withHighlights } = await import("@/lib/pdf/highlights");
+    const out = await withHighlights(await file.arrayBuffer(), marks);
+    const url = URL.createObjectURL(new Blob([out as BlobPart], { type: "application/pdf" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: file.name.replace(/\.pdf$/i, "") + "-highlighted.pdf" });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   const toggleReading = () => {
@@ -492,11 +581,12 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         </div>
       )}
 
-      {(panel === "pages" || panel === "contents") && (
-        <aside className="vw-side" aria-label={t(panel === "pages" ? "viewer.pages" : "viewer.contents")}>
+      {isSide(panel) && (
+        <aside className="vw-side" aria-label={t(panel === "pages" ? "viewer.pages" : panel === "marks" ? "viewer.highlights" : "viewer.contents")}>
           <div className="vw-tabs" role="tablist">
             <button type="button" role="tab" aria-selected={panel === "pages"} onClick={() => setPanel("pages")}><LayoutList size={15} /> {t("viewer.pages")}</button>
             <button type="button" role="tab" aria-selected={panel === "contents"} onClick={() => setPanel("contents")}><ListTree size={15} /> {t("viewer.contents")}</button>
+            <button type="button" role="tab" aria-selected={panel === "marks"} aria-label={t("viewer.highlights")} onClick={() => setPanel("marks")}><Highlighter size={15} />{marks.length ? <span className="tabular-nums">{marks.length}</span> : null}</button>
           </div>
           {panel === "pages" && doc && (
             <form className="vw-jump" onSubmit={(e) => {
@@ -520,6 +610,24 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
                 </li>
               ))}
             </ol>
+          )}
+          {panel === "marks" && (
+            marks.length ? (
+              <ul className="vw-toc">
+                {marks.map((m) => (
+                  <li key={m.id}>
+                    <button type="button" className="vw-mark-row" onClick={() => { goTo(m.page); if (window.innerWidth < 760) setPanel(null); }}>
+                      <span aria-hidden className="vw-dot" data-color={m.color} />
+                      <span className="min-w-0 flex-1 line-clamp-2">{m.text || "…"}</span>
+                      <span className="tabular-nums opacity-60">{m.page + 1}</span>
+                    </button>
+                  </li>
+                ))}
+                <li className="p-2">
+                  <button type="button" className="vw-row w-full" onClick={() => void saveWithMarks()}><Download size={16} /> {t("viewer.saveHighlights")}</button>
+                </li>
+              </ul>
+            ) : <p className="p-4 text-[14px] opacity-70">{t("viewer.noHighlights")}</p>
           )}
           {panel === "contents" && (
             outline === null ? <p className="p-4 opacity-70"><Loader2 size={16} className="animate-spin" /></p>
@@ -551,6 +659,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
             {canShare && <button type="button" role="menuitem" onClick={() => void shareFile()}><Share2 size={18} /> {t("viewer.share")}</button>}
             <button type="button" role="menuitem" onClick={printFile}><Printer size={18} /> {t("viewer.print")}</button>
             <button type="button" role="menuitem" onClick={downloadFile}><Download size={18} /> {t("viewer.download")}</button>
+            {!!marks.length && <button type="button" role="menuitem" onClick={() => void saveWithMarks()}><Highlighter size={18} /> {t("viewer.saveHighlights")}</button>}
           </div>
           <p className="vw-sheet-title">{t("viewer.more")}</p>
           <ul>
@@ -577,7 +686,8 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         ) : doc && (
           <div className="vw-pages" style={{ width: pos.width, height: pos.height }}>
             {ratios.map((r, i) => (
-              <PageView key={i} doc={doc} index={i} width={width} ratio={r} top={pos.at[i].top} left={pos.at[i].left} query={query.trim().toLowerCase()} />
+              <PageView key={i} doc={doc} index={i} width={width} ratio={r} top={pos.at[i].top} left={pos.at[i].left} query={query.trim().toLowerCase()}
+                marks={marks.filter((m) => m.page === i)} onMark={(id, at) => setPicked({ mark: id, at })} />
             ))}
           </div>
         )}
@@ -585,8 +695,8 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
 
       {doc && (
         <footer className="vw-dock" {...holdProps}>
-          <button type="button" className="vw-count" aria-label={t("viewer.pages")} aria-pressed={panel === "pages" || panel === "contents"}
-            onClick={() => setPanel(panel === "pages" || panel === "contents" ? null : "pages")}>
+          <button type="button" className="vw-count" aria-label={t("viewer.pages")} aria-pressed={isSide(panel)}
+            onClick={() => setPanel(isSide(panel) ? null : "pages")}>
             {reading ? t("viewer.reading") : t("viewer.page", { n: current + 1, total })}
           </button>
           <span className="vw-sep" />
@@ -598,6 +708,26 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         </footer>
       )}
 
+      {picked && (
+        <div className="vw-pick" role="toolbar" aria-label={t("viewer.highlight")}
+          style={{ left: Math.min(Math.max(picked.at.x, 120), window.innerWidth - 120), top: Math.min(picked.at.y + 10, window.innerHeight - 70) }}
+          onPointerDown={(e) => e.preventDefault()}>
+          {"text" in picked ? (
+            <>
+              {HL_COLORS.map((c) => (
+                <button key={c} type="button" className="vw-swatch" data-color={c} aria-label={`${t("viewer.highlight")}: ${t(`viewer.color.${c}`)}`} onClick={() => addMark(c)} />
+              ))}
+              <span className="vw-sep" />
+              <button type="button" className="vw-btn" aria-label={t("viewer.copy")} onClick={() => void copyPicked()}><Copy size={16} /></button>
+            </>
+          ) : (
+            <button type="button" className="vw-btn" onClick={() => { saveMarks(marks.filter((m) => m.id !== picked.mark)); setPicked(null); }}>
+              <Trash2 size={16} /> {t("viewer.removeHighlight")}
+            </button>
+          )}
+        </div>
+      )}
+
       {resumed !== null && <p className="vw-toast" role="status">{t("viewer.resumed", { n: resumed + 1 })}</p>}
     </div>,
     document.body,
@@ -606,7 +736,10 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
 
 // One page: drawn when it comes near the screen, sharp at the size it's
 // shown, with its text laid over it so it can be selected, copied and found.
-function PageView({ doc, index, width, ratio, top, left, query }: { doc: PDFDocumentProxy; index: number; width: number; ratio: number; top: number; left: number; query: string }) {
+function PageView({ doc, index, width, ratio, top, left, query, marks, onMark }: {
+  doc: PDFDocumentProxy; index: number; width: number; ratio: number; top: number; left: number; query: string;
+  marks: Highlight[]; onMark: (id: string, at: { x: number; y: number }) => void;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const art = useRef<HTMLDivElement>(null);
   const words = useRef<HTMLDivElement>(null);
@@ -674,6 +807,11 @@ function PageView({ doc, index, width, ratio, top, left, query }: { doc: PDFDocu
   return (
     <div ref={box} data-page={index + 1} className="vw-page" style={{ top, left, width, height: width * ratio }}>
       <div ref={art} className="vw-art" />
+      {marks.flatMap((m) => m.boxes.map((b, k) => (
+        <button key={`${m.id}:${k}`} type="button" tabIndex={k ? -1 : 0} aria-label={m.text} className="vw-hl" data-color={m.color}
+          style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }}
+          onPointerUp={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onMark(m.id, { x: r.left + r.width / 2, y: r.bottom }); }} />
+      )))}
       <div ref={words} className="textLayer" />
     </div>
   );

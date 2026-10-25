@@ -32,6 +32,7 @@
     "test:e2e-office": "node tests/e2e-office.mjs",
     "test:sheets": "node tests/sheets.mjs",
     "test:gestures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/gestures.mjs",
+    "test:highlights": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/highlights.mjs",
     "test:tables": "node tests/tables.mjs",
     "test:organize": "node tests/organize.mjs",
     "test:plural": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/plural.mjs",

@@ -93,6 +93,36 @@ await suite(async ({ browser, test }) => {
     }
   });
 
+  await test("select text, highlight it, and save a copy with the highlight in it", async () => {
+    // Select a line of page 1's text the way a drag would.
+    await page.evaluate(() => {
+      const span = [...document.querySelectorAll('[data-page="1"] .textLayer span')].find((s) => s.textContent.includes("Revenue grew"));
+      const r = document.createRange();
+      r.selectNodeContents(span);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+    });
+    const bar = viewer().getByRole("toolbar", { name: t["viewer.highlight"] });
+    await bar.waitFor();
+    await bar.getByRole("button", { name: `${t["viewer.highlight"]}: ${t["viewer.color.yellow"]}` }).click();
+    await viewer().locator('[data-page="1"] .vw-hl').first().waitFor();
+    // Listed, and saved into a copy as a real annotation.
+    await wake();
+    await viewer().getByRole("button", { name: t["viewer.pages"] }).click();
+    await viewer().getByRole("tab", { name: t["viewer.highlights"] }).click();
+    await viewer().getByText(/Revenue grew/).first().waitFor();
+    const [dl] = await Promise.all([page.waitForEvent("download"), viewer().getByRole("button", { name: t["viewer.saveHighlights"] }).click()]);
+    const path = await dl.path();
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const { readFileSync } = await import("node:fs");
+    const pdf = await getDocument({ data: new Uint8Array(readFileSync(path)), verbosity: 0 }).promise;
+    const annots = await (await pdf.getPage(1)).getAnnotations();
+    if (!annots.some((a) => a.subtype === "Highlight" && /Revenue grew/.test(a.contentsObj?.str ?? ""))) throw new Error(`annotations: ${annots.map((a) => a.subtype)}`);
+    if (!/highlighted\.pdf$/.test(dl.suggestedFilename())) throw new Error(dl.suggestedFilename());
+    await page.keyboard.press("Escape");
+    return dl.suggestedFilename();
+  });
+
   await test("reading mode lays the text out again", async () => {
     await wake();
     await bar(t["viewer.reading"]).click();
