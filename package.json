@@ -49,6 +49,7 @@
     "test:ocr": "node tests/ocr.mjs",
     "test:ocr-langs": "node tests/ocr-langs.mjs",
     "test:auto-ocr": "node tests/auto-ocr.mjs",
+    "test:cleanscan": "node tests/cleanscan.mjs",
     "test:redact": "node tests/redact.mjs",
     "test:redact-trust": "node tests/redact-trust.mjs",
     "test:stamps": "node tests/stamps.mjs",

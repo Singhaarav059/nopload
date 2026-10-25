@@ -168,6 +168,9 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
       )}
       {first?.note === "tagKept" && <p className="mt-2 text-[15px] text-ink-2">{t("res.tagKept")}</p>}
       {a11y && <p className="tabular mt-2 text-[15px] text-ink-2" data-a11y>{t("res.a11y", { passed: a11y[0], warnings: a11y[1], failed: a11y[2] })}</p>}
+      {outputs.some((o) => o.note?.startsWith("cleaned:")) && (
+        <p className="mt-2 text-[15px] text-ink-2">{total("cleaned:") ? t("res.cleaned", { n: total("cleaned:") }) : t("res.cleanedNone")}</p>
+      )}
       {total("grayPartial:") > 0 && <p className="mt-2 text-[15px] text-muted">{t("res.grayPartial", { n: total("grayPartial:") })}</p>}
       {kind === "attached" && <p className="mt-2 text-[15px] text-ink-2">{t("res.attached", { n: n1 })}</p>}
       {sanitized && (
