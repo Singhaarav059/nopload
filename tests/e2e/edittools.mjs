@@ -116,5 +116,38 @@ await suite(async ({ name, browser, test }) => {
       throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
     }
   });
+
+  await test("Sign PDF and PDF Forms offer ticks, crosses and lines; a tick is saved", async () => {
+    try {
+      step = "forms";
+      await open(page, "/en/pdf-forms");
+      await pick(page, [letter]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      for (const k of ["ed.check", "ed.cross", "ed.line", "ed.text"]) if (!(await tool(k).isVisible())) throw new Error(`forms: no "${t[k]}"`);
+      step = "sign";
+      await open(page, "/en/sign-pdf");
+      await pick(page, [letter]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      for (const k of ["ed.check", "ed.cross", "ed.line"]) if (!(await tool(k).isVisible())) throw new Error(`sign: no "${t[k]}"`);
+      const box = await page.locator("main img").first().boundingBox();
+      await tool("ed.check").click();
+      await page.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.3);
+      await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
+      if ((await page.locator("[data-item=check]").count()) !== 2) throw new Error("ticks on the page");
+      step = "save";
+      const [dl] = await Promise.all([
+        page.waitForEvent("download", { timeout: 60000 }),
+        page.getByRole("button", { name: t["tool.sign.action"], exact: true }).locator("visible=true").first().click(),
+      ]);
+      const saved = join(downloads, `${name}-signed.pdf`);
+      await dl.saveAs(saved);
+      const lib = await PDFDocument.load(readFileSync(saved));
+      if (lib.getPages()[0].node.Contents() === undefined) throw new Error("no content");
+      return "2 ticks saved";
+    } catch (e) {
+      await page.screenshot({ path: join(downloads, `${name}-sign-failed.png`) }).catch(() => {});
+      throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
+    }
+  });
   await ctx.close();
 });

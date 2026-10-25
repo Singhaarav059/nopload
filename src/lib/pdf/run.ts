@@ -172,8 +172,8 @@ export async function runTool(id: ToolId, files: File[], o: Opts, progress?: Pro
         const defs = toolById("pageNumbers").options;
         return b(o[key]) && optionVisible(defs.find((d) => d.key === key)!, o, defs);
       };
-      // A job saved before the choice existed: Bates numbers ran on across files then.
-      const runOn = o.continueNumbers === undefined ? o.numberFormat === "bates" : shown("continueNumbers");
+      // Bates numbers run on across files unless turned off (a job saved before the choice existed has it unset).
+      const runOn = o.numberFormat === "bates" && (o.continueNumbers === undefined || shown("continueNumbers"));
       const index = runOn && shown("exhibitIndex");
       if (!runOn || (files.length < 2 && !index)) return each(files, progress, (f) => pageNumbers(f, opts), signal);
       // Numbered as one set, in the order given: first every file's page count,

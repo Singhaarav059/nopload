@@ -735,7 +735,13 @@ export function Editor({
       { id: "erase", icon: <Eraser size={18} />, label: t("ed.erase"), group: true },
       { id: "whiteout", icon: <Brush size={18} />, label: t("ed.whiteout") },
     ];
-    if (toolId === "sign") return [...base, { id: "text", icon: <Type size={18} />, label: t("ed.text") }];
+    // Signing a paper form: text, ticks and crosses in its boxes, a line through what doesn't apply.
+    const marks = [
+      { id: "check" as EdTool, icon: <Check size={18} />, label: t("ed.check") },
+      { id: "cross" as EdTool, icon: <X size={18} />, label: t("ed.cross") },
+      { id: "line" as EdTool, icon: <Minus size={18} />, label: t("ed.line") },
+    ];
+    if (toolId === "sign") return [...base, { id: "text", icon: <Type size={18} />, label: t("ed.text"), group: true }, ...marks];
     if (toolId === "forms") return [...base,
       { id: "textField", icon: <TextCursorInput size={18} />, label: t("ed.addTextField") },
       { id: "checkbox", icon: <SquareCheck size={18} />, label: t("ed.addCheckbox") },
@@ -744,7 +750,9 @@ export function Editor({
       { id: "optionList", icon: <List size={18} />, label: t("ed.addList") },
       { id: "dateField", icon: <CalendarDays size={18} />, label: t("ed.addDate") },
       { id: "signatureField", icon: <PenLine size={18} />, label: t("ed.addSignatureField") },
-      { id: "text", icon: <Type size={18} />, label: t("ed.text") },
+      // Or fill it in by hand, as on paper.
+      { id: "text", icon: <Type size={18} />, label: t("ed.text"), group: true },
+      ...marks,
     ];
     if (toolId === "redact") return [{ id: "redact", icon: <ScanEye size={18} />, label: t("ed.redactArea") }];
     return [{ id: "crop", icon: <CropIcon size={18} />, label: t("tool.crop.name") }];

@@ -148,15 +148,13 @@ await test("continue numbering: the first file starts at First number", async ()
 });
 
 await test("continue numbering: pages left unnumbered don't use up numbers", async () => {
-  const out = await runTool("pageNumbers", await set(), { ...RUN, numberFormat: "custom", template: "<{page}>", skipFirstPages: 1, continueNumbers: true });
-  eq(json(await labelsOf(out)), json([["", "<1>", "<2>"], ["", "<3>"]]), "labels");
+  const out = await runTool("pageNumbers", await set(), { ...BATES, skipFirstPages: 1 });
+  eq(json(await labelsOf(out)), json([["", "DOC000001", "DOC000002"], ["", "DOC000003"]]), "labels");
 });
 
-await test("continue numbering: 'of total' and {pages} count the whole set", async () => {
+await test("other numbers start again in each file: 'of total' is each file's", async () => {
   const of = await runTool("pageNumbers", await set(), { ...RUN, numberFormat: "nOfTotal", continueNumbers: true });
-  eq(json(await labelsOf(of)), json([["1 of 5", "2 of 5", "3 of 5"], ["4 of 5", "5 of 5"]]), "n of total");
-  const custom = await runTool("pageNumbers", await set(), { ...RUN, numberFormat: "custom", template: "{page}/{pages}", startAt: 3, continueNumbers: true });
-  eq(json(await labelsOf(custom)), json([["3/7", "4/7", "5/7"], ["6/7", "7/7"]]), "custom");
+  eq(json(await labelsOf(of)), json([["1 of 3", "2 of 3", "3 of 3"], ["1 of 2", "2 of 2"]]), "n of total");
 });
 
 await test("off: each file is numbered on its own, Bates included", async () => {

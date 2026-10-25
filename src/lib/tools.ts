@@ -399,7 +399,8 @@ const ALL: Tool[] = [
       { key: "skipLastPages", type: "number", min: 0, max: 9999, default: 0 },
       // Several files numbered as one set, in the order given (run.ts), and a
       // table of each file's first and last number as one more PDF.
-      { key: "continueNumbers", type: "toggle", default: false, when: { key: "numberFormat", is: ["bates", "n", "pageN", "nOfTotal", "pageNOfTotal", "custom"] } },
+      // Bates numbers run on from file to file, as a set's do (on unless turned off); other numbers start again in each file.
+      { key: "continueNumbers", type: "toggle", default: true, when: { key: "numberFormat", is: ["bates"] } },
       { key: "exhibitIndex", type: "toggle", default: false, when: { key: "continueNumbers", is: [true] } },
       { key: "font", type: "select", choices: ["helvetica", "arimo", "tinos", "cousine", "noto"], default: "helvetica" },
       { key: "fontSize", type: "range", min: 6, max: 36, default: 11, unit: "pt" },

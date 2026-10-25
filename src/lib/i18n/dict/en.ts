@@ -1323,7 +1323,7 @@ const en = {
   "opt.numberStyle": "Numbers",
   "opt.skipFirstPages": "Leave the first pages unnumbered",
   "opt.skipLastPages": "Leave the last pages unnumbered",
-  "opt.continueNumbers": "Continue numbering across files",
+  "opt.continueNumbers": "Continue the numbers from file to file",
   "opt.exhibitIndex": "Add an exhibit index",
   "pn.indexTitle": "Exhibit index",
   "pn.indexFile": "File",
