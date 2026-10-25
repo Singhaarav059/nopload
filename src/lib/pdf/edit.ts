@@ -9,6 +9,7 @@ import { baseName, hexToRgb, isWinAnsi, normaliseImage, pageSet, pdfBlob, textTo
 import { loadPdf } from "./organize";
 import { PdfError } from "./errors";
 import { contentChanged } from "./contentchange";
+import { linkTarget } from "./links";
 import { FAMILIES, fontCovering, layoutText, type Family, type LaidOut } from "./fonts";
 import { addField } from "./forms";
 import { dateFormatOf, isFieldKind, type DateFormat, type FieldKind } from "./formsmeta";
@@ -529,7 +530,8 @@ export async function crop(file: File, rects: Map<number, FracRect> | FracRect):
 export type EditorItem = {
   id: string;
   page: number;
-  kind: "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "textEdit" | "paraEdit" | "objEdit" | "scanEdit" | FieldKind;
+  kind: "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "textEdit" | "paraEdit" | "objEdit" | "scanEdit"
+    | "erase" | "arrow" | "underline" | "strike" | "note" | "link" | "stamp" | "check" | "cross" | FieldKind;
   // Visual fractions of the page, top-left origin.
   x: number; y: number; w: number; h: number;
   color?: string;
@@ -567,7 +569,11 @@ export type EditorItem = {
   // emptied to `fill` (the paper's colour) and the text drawn in `color` (the
   // ink's), in `family`, no wider than the box.
   family?: Family;
+  // link: where it goes (linkTarget); note: its text is `text`.
+  url?: string;
 };
+
+export { linkTarget } from "./links";
 
 function dataUrlBytes(url: string) {
   const b64 = url.split(",")[1];
@@ -604,6 +610,71 @@ export async function applyItems(doc: PDFDocument, items: EditorItem[]) {
             vx, vy: vyTop - size * 0.86 - li * size * 1.25, size, color: it.color ?? "#111827", anchor: "left", bold: it.bold,
           });
         }
+        break;
+      }
+      case "arrow": {
+        const pts = it.points ?? [];
+        if (pts.length < 2) break;
+        const [[ax, ay], [bx, by]] = [pts[0], pts[pts.length - 1]].map(([px, py]) => [px * f.vw, (1 - py) * f.vh]);
+        const sw = it.stroke ?? 2;
+        const len = Math.hypot(bx - ax, by - ay);
+        if (len < 1) break;
+        const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+        const head = Math.min(len * 0.6, Math.max(8, sw * 4));
+        // The shaft stops where the head starts, so a thick line doesn't poke through its tip.
+        const [sx, sy] = [bx - ux * head * 0.8, by - uy * head * 0.8];
+        page.drawLine({ start: pt(f, ax, ay), end: pt(f, sx, sy), thickness: sw, color: c, lineCap: 1 });
+        const wing = (k: number) => {
+          const a = Math.atan2(uy, ux) + Math.PI + k * 0.45;
+          return [bx + Math.cos(a) * head, by + Math.sin(a) * head];
+        };
+        const tri = [[bx, by], wing(1), wing(-1)].map(([px, py]) => pt(f, px, py));
+        page.drawSvgPath(`M${tri[0].x} ${-tri[0].y} L${tri[1].x} ${-tri[1].y} L${tri[2].x} ${-tri[2].y} Z`, { x: 0, y: 0, color: c, borderWidth: 0 });
+        break;
+      }
+      case "underline":
+      case "strike": {
+        // Under the line's letters, or through the middle of its small letters.
+        const along = vyTop - h * (it.kind === "underline" ? 0.94 : 0.58);
+        const thickness = Math.max(0.6, Math.min(3, h * 0.07));
+        page.drawLine({ start: pt(f, vx, along), end: pt(f, vx + w, along), thickness, color: c });
+        break;
+      }
+      case "check":
+      case "cross": {
+        const sw = Math.max(1, Math.min(w, h) * 0.13);
+        const at = (fx: number, fy: number) => pt(f, vx + fx * w, vyTop - fy * h);
+        const strokes = it.kind === "check" ? [[[0.12, 0.55], [0.4, 0.82]], [[0.4, 0.82], [0.88, 0.18]]] : [[[0.18, 0.18], [0.82, 0.82]], [[0.82, 0.18], [0.18, 0.82]]];
+        for (const [[x0, y0], [x1, y1]] of strokes) page.drawLine({ start: at(x0, y0), end: at(x1, y1), thickness: sw, color: c, lineCap: 1 });
+        break;
+      }
+      case "stamp": {
+        // In capitals, as the editor shows it.
+        const label = (it.text ?? "").trim().toLocaleUpperCase();
+        if (!label) break;
+        page.drawRectangle({ x, y, width: w, height: h, rotate, borderColor: c, borderWidth: Math.max(1.5, h * 0.07), borderOpacity: 0.9 });
+        const size = Math.min(h * 0.55, it.fontSize ?? h * 0.55);
+        await drawLabel(doc, page, "helvetica", label, { vx: vx + w / 2, vy: vyTop - h / 2 - size * 0.35, size, color: it.color ?? "#d33f6a", anchor: "center", bold: true, maxWidth: w * 0.88, opacity: 0.9 });
+        break;
+      }
+      case "note":
+      case "link": {
+        // Real annotations: a comment readers open, or a link they follow. The box in user space.
+        const corners = [[vx, vyTop], [vx + w, vyTop], [vx, vyTop - h], [vx + w, vyTop - h]].map(([px, py]) => f.map(px, py));
+        const rect = [Math.min(...corners.map((q) => q[0])), Math.min(...corners.map((q) => q[1])), Math.max(...corners.map((q) => q[0])), Math.max(...corners.map((q) => q[1]))];
+        let dict: Record<string, unknown> | null = null;
+        if (it.kind === "note") {
+          if (!(it.text ?? "").trim()) break;
+          dict = { Type: "Annot", Subtype: "Text", Rect: rect, Contents: PDFHexString.fromText(it.text!), Name: "Comment", F: 4, C: [color.r, color.g, color.b], M: PDFString.fromDate(new Date()) };
+        } else {
+          const target = linkTarget(it.url ?? "", pages.length);
+          if (!target) break;
+          const action = "uri" in target
+            ? { A: doc.context.obj({ Type: "Action", S: "URI", URI: PDFString.of(target.uri) }) }
+            : { Dest: doc.context.obj([pages[target.page].ref, PDFName.of("Fit")]) };
+          dict = { Type: "Annot", Subtype: "Link", Rect: rect, Border: [0, 0, 0], F: 4, ...action };
+        }
+        page.node.addAnnot(doc.context.register(doc.context.obj(dict as never)));
         break;
       }
       case "scanEdit": {
@@ -658,6 +729,12 @@ export async function applyItems(doc: PDFDocument, items: EditorItem[]) {
 }
 
 // Changes to the page's own content go first (PDFium), then what was added on top (pdf-lib).
+// A point in visual points (y up), as pdf-lib wants it.
+const pt = (f: ReturnType<typeof visualFrame>, vx: number, vy: number) => {
+  const [x, y] = f.map(vx, vy);
+  return { x, y };
+};
+
 export const isContentEdit = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit" || i.kind === "scanEdit";
 
 export { contentChanged } from "./contentchange";
@@ -666,8 +743,8 @@ export { contentChanged } from "./contentchange";
 // place, then is drawn like an added item.
 export async function editPdf(file: File, items: EditorItem[], suffix: string): Promise<Output[]> {
   const changed = items.filter((i) => isContentEdit(i) && contentChanged(i));
-  const edits = [...changed, ...items.filter((i) => i.kind === "whiteout")];
-  const added = items.filter((i) => !isContentEdit(i) || (i.kind === "scanEdit" && changed.includes(i)));
+  const edits = [...changed, ...items.filter((i) => i.kind === "whiteout" || i.kind === "erase")];
+  const added = items.filter((i) => i.kind !== "erase" && (!isContentEdit(i) || (i.kind === "scanEdit" && changed.includes(i))));
   const name = `${baseName(file.name)}-${suffix}.pdf`;
   if (!edits.length) {
     const doc = await loadPdf(file, file.name);
@@ -679,7 +756,7 @@ export async function editPdf(file: File, items: EditorItem[], suffix: string): 
     out = await applyContent(file, edits);
   } catch (e) {
     // White-out alone still covers what's under it where the file can't be changed underneath.
-    if (!changed.length) {
+    if (!changed.length && !edits.some((i) => i.kind === "erase")) {
       const doc = await loadPdf(file, file.name);
       await applyItems(doc, added);
       return [{ name, blob: await save(doc) }];
@@ -1162,9 +1239,9 @@ async function applyContent(file: File, items: EditorItem[]) {
     const paragraphs: import("./objects").ParagraphChange[] = [];
     const erase: import("./objects").Erase[] = [];
     for (const it of items.filter((i) => i.page === page)) {
-      if (it.kind === "whiteout" || it.kind === "scanEdit") {
+      if (it.kind === "whiteout" || it.kind === "scanEdit" || it.kind === "erase") {
         const r = it.kind === "scanEdit" ? { x: it.source!.x, y: it.source!.y, w: it.source!.w ?? it.w, h: it.source!.h ?? it.h } : it;
-        const fill = it.kind === "scanEdit" && it.fill ? rgbaOf(it.fill) : undefined;
+        const fill = it.kind === "scanEdit" && it.fill ? rgbaOf(it.fill) : it.kind === "erase" ? ("around" as const) : undefined;
         erase.push({ box: userBox(geom, r), ...(fill ? { fill } : {}) });
         continue;
       }

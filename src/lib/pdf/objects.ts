@@ -459,7 +459,10 @@ function setImage(x: Mem, page: number, handle: number, image: NewImage): boolea
 // letters' centres lie in it is removed, pictures under it are painted
 // `fill` (white unless given: a scan's paper), and shapes wholly inside it
 // are removed. User space.
-export type Erase = { box: Box; fill?: RGBA };
+// `fill` "around": pictures are filled from the colours at the area's edges
+// (the Eraser), blended across, so a plain or gently shaded background
+// carries on through it.
+export type Erase = { box: Box; fill?: RGBA | "around" };
 
 export type ContentChanges = { objects?: ObjectChange[]; texts?: TextChange[]; paragraphs?: ParagraphChange[]; erase?: Erase[] };
 
@@ -568,16 +571,34 @@ async function repaint(x: Mem, page: number, o: number, areas: Erase[]) {
     let changed = false;
     for (const area of areas) {
       const { box } = area;
-      const fill = area.fill ?? [255, 255, 255, 255];
       const corners = [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]].map(([ux, uy]) => toPixel(ux, uy));
       const x0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p[0])))), x1 = Math.min(w, Math.ceil(Math.max(...corners.map((p) => p[0]))));
       const y0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p[1])))), y1 = Math.min(h, Math.ceil(Math.max(...corners.map((p) => p[1]))));
-      const grey = Math.round(0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]);
+      // A pixel's colour as [r, g, b, a] (clamped to the picture).
+      const at = (qx: number, qy: number): RGBA => {
+        const i = Math.min(h - 1, Math.max(0, qy)) * stride + Math.min(w - 1, Math.max(0, qx)) * px;
+        return px === 1 ? [src[i], src[i], src[i], 255] : [src[i + 2], src[i + 1], src[i], px === 4 && format === 4 ? src[i + 3] : 255];
+      };
+      // "around": the edges' colours, read before anything inside changes.
+      const around = area.fill === "around";
+      const left = around ? Array.from({ length: y1 - y0 }, (_, k) => at(x0 - 1, y0 + k)) : [];
+      const right = around ? Array.from({ length: y1 - y0 }, (_, k) => at(x1, y0 + k)) : [];
+      const top = around ? Array.from({ length: x1 - x0 }, (_, k) => at(x0 + k, y0 - 1)) : [];
+      const bottom = around ? Array.from({ length: x1 - x0 }, (_, k) => at(x0 + k, y1)) : [];
+      const plain = area.fill === "around" ? null : area.fill ?? ([255, 255, 255, 255] as RGBA);
       for (let py = y0; py < y1; py++) {
         for (let pxl = x0; pxl < x1; pxl++) {
           // The pixel's centre, back in user space.
           const u = (pxl + 0.5) / w, v = 1 - (py + 0.5) / h;
           if (!inside(box, a * u + c * v + e, b * u + d * v + f)) continue;
+          let fill = plain;
+          if (!fill) {
+            // Across between the left and right edges, down between the top and bottom ones, the two averaged.
+            const tx = (pxl - x0 + 0.5) / Math.max(1, x1 - x0), ty = (py - y0 + 0.5) / Math.max(1, y1 - y0);
+            const [L, R, T, B] = [left[py - y0], right[py - y0], top[pxl - x0], bottom[pxl - x0]];
+            fill = [0, 1, 2, 3].map((k) => Math.round(((L[k] * (1 - tx) + R[k] * tx) + (T[k] * (1 - ty) + B[k] * ty)) / 2)) as RGBA;
+          }
+          const grey = Math.round(0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]);
           const i = py * stride + pxl * px;
           if (px === 1) src[i] = grey;
           else {
