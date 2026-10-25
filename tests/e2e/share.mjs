@@ -170,7 +170,7 @@ await suite(async ({ name, browser, test }) => {
       await until(page, () => localStorage.getItem("locale") === "fr", null, "the language to be remembered");
       await launch(page, [PDF]);
       await page.goto(base + "/en/open");
-      await page.waitForURL("**/fr/pdf-viewer");
+      await page.waitForURL("**/fr/lecteur-pdf");
       await page.getByRole("dialog", { name: PDF }).waitFor({ timeout: 20000 });
       return "/en/open → /fr/open → the viewer, in French";
     } finally {
