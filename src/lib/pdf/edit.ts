@@ -8,6 +8,7 @@ import {
 import { baseName, hexToRgb, isWinAnsi, normaliseImage, pageSet, pdfBlob, textToPng, type Output } from "./common";
 import { loadPdf } from "./organize";
 import { PdfError } from "./errors";
+import { contentChanged } from "./contentchange";
 import { FAMILIES, fontCovering, layoutText, type Family, type LaidOut } from "./fonts";
 import { addField } from "./forms";
 import { dateFormatOf, isFieldKind, type DateFormat, type FieldKind } from "./formsmeta";
@@ -553,7 +554,7 @@ export type EditorItem = {
   source?: {
     index: number; was: string; x: number; y: number; font?: string; angle?: number;
     sig?: string; w?: number; h?: number; kind?: ContentKind; parts?: Target[];
-    size?: number; color?: string; fill?: string | null; stroke?: number; align?: Align; pixels?: [number, number];
+    size?: number; color?: string; fill?: string | null; stroke?: number; align?: Align; pixels?: [number, number]; lines?: number;
   };
   // objEdit and paraEdit: degrees counter-clockwise, flips, deletion, order.
   rotate?: number;
@@ -644,8 +645,10 @@ export async function applyItems(doc: PDFDocument, items: EditorItem[]) {
 // Changes to the page's own content go first (PDFium), then what was added on top (pdf-lib).
 export const isContentEdit = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit";
 
+export { contentChanged } from "./contentchange";
+
 export async function editPdf(file: File, items: EditorItem[], suffix: string): Promise<Output[]> {
-  const edits = items.filter((i) => isContentEdit(i) && i.source);
+  const edits = items.filter((i) => isContentEdit(i) && contentChanged(i));
   const added = items.filter((i) => !isContentEdit(i));
   const name = `${baseName(file.name)}-${suffix}.pdf`;
   if (!edits.length) {
@@ -1071,33 +1074,38 @@ export function jpegSize(b: Uint8Array): [number, number] | null {
   return null;
 }
 
-// A replacement picture for objects.ts: a JPEG as it is (unless it's CMYK,
-// which some readers draw inverted), anything else as pixels.
+// A replacement picture for objects.ts, upright (a phone photo's EXIF
+// turn applied): a plain JPEG as it is, anything else (PNG, WebP, HEIC,
+// TIFF, a CMYK JPEG, which some readers draw inverted) as pixels, at most
+// 4096 on a side.
 async function newImage(dataUrl: string): Promise<import("./objects").NewImage> {
-  const { bytes } = dataUrlBytes(dataUrl);
-  const size = jpegSize(bytes);
-  const components = size ? jpegComponents(bytes) : 0;
-  if (size && components !== 4) return { jpeg: bytes, width: size[0], height: size[1] };
+  const { pdfImages, jpegInfo } = await import("./images");
+  let bytes: Uint8Array = dataUrlBytes(dataUrl).bytes;
+  const plain = (b: Uint8Array) => {
+    const i = jpegInfo(b);
+    return i && i.orientation === 1 && i.components === 3 ? i : null;
+  };
+  let info = plain(bytes);
+  if (info) return { jpeg: bytes, width: info.width, height: info.height };
+  for await (const img of pdfImages(new Blob([bytes as BlobPart]), { upright: true })) {
+    bytes = img.bytes;
+    break;
+  }
+  info = plain(bytes);
+  if (info) return { jpeg: bytes, width: info.width, height: info.height };
   const bmp = await createImageBitmap(new Blob([bytes as BlobPart]));
+  const scale = Math.min(1, 4096 / Math.max(bmp.width, bmp.height));
+  const [width, height] = [Math.max(1, Math.round(bmp.width * scale)), Math.max(1, Math.round(bmp.height * scale))];
   const c = document.createElement("canvas");
-  [c.width, c.height] = [bmp.width, bmp.height];
+  [c.width, c.height] = [width, height];
   const ctx = c.getContext("2d")!;
-  ctx.drawImage(bmp, 0, 0);
-  const rgba = ctx.getImageData(0, 0, c.width, c.height).data;
+  ctx.drawImage(bmp, 0, 0, width, height);
+  bmp.close();
+  const rgba = ctx.getImageData(0, 0, width, height).data;
+  c.width = c.height = 0;
   const bgra = new Uint8Array(rgba.length);
   for (let i = 0; i < rgba.length; i += 4) [bgra[i], bgra[i + 1], bgra[i + 2], bgra[i + 3]] = [rgba[i + 2], rgba[i + 1], rgba[i], rgba[i + 3]];
-  return { bgra, width: c.width, height: c.height };
-}
-
-function jpegComponents(b: Uint8Array) {
-  let i = 2;
-  while (i + 9 < b.length && b[i] === 0xff) {
-    const marker = b[i + 1];
-    const len = (b[i + 2] << 8) | b[i + 3];
-    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return b[i + 9];
-    i += 2 + len;
-  }
-  return 0;
+  return { bgra, width, height };
 }
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-4;

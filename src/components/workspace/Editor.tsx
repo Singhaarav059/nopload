@@ -6,7 +6,7 @@ import {
   MousePointer2, Type, ImagePlus, Square, Circle, Minus, Pencil, Highlighter, Eraser, Undo2, Redo2, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Signature as SignatureIcon, CalendarDays, Search, ScanEye, Crop as CropIcon,
   TextCursorInput, SquareCheck, Copy, Bold, Stamp, UserRound, Crosshair, CircleDot, SquareChevronDown, List, PenLine,
-  LetterText, BringToFront, SendToBack, RotateCcw, Loader2,
+  LetterText, BringToFront, SendToBack, Loader2,
 } from "lucide-react";
 import { useI18n } from "../I18n";
 import { SignaturePad, type SignatureImage } from "./SignaturePad";
@@ -14,7 +14,10 @@ import { DetectPanel, FIELD_LABELS, FieldInput, FieldPreview, FieldSettings, Sug
 import type { Suggestion } from "@/lib/pdf/formsdetect";
 import { CertificateSign, prepareCertificate, type CertChoice } from "./CertificateSign";
 import { thumbUrl, pageSizes, docFor } from "@/lib/pdf/thumbs";
-import type { EditorItem, FieldInfo, FracRect, TextBox } from "@/lib/pdf/edit";
+import type { EditorItem, FieldInfo, FracRect } from "@/lib/pdf/edit";
+import { ContentLayer, itemFor, isFor, type ContentTarget, type PageContent } from "./ContentLayer";
+import { ContentPanel } from "./ContentPanel";
+import { contentChanged } from "@/lib/pdf/contentchange";
 import { AutofillPanel } from "./AutofillPanel";
 import type { PresetName } from "@/lib/pdf/security";
 import type { PageText } from "@/lib/pdf/text";
@@ -39,14 +42,8 @@ const ITEM_LABELS: Record<EditorItem["kind"], string> = {
   text: "ed.text", image: "ed.image", rect: "ed.rect", ellipse: "ed.ellipse", line: "ed.line", path: "ed.draw",
   highlight: "ed.highlight", whiteout: "ed.whiteout", textEdit: "ed.editText", paraEdit: "ed.editText", objEdit: "ed.object", ...FIELD_LABELS,
 };
-// What saving will do with a change to the page's own text (edit.ts textFonts), for the text it was checked with.
-type FontNote = { text: string; result: Awaited<ReturnType<typeof import("@/lib/pdf/edit").textFonts>> };
-const fontBlocks = (n?: FontNote) => Boolean(n && ("unsupported" in n.result || (!n.result.kept && !n.result.fallback)));
-// A CSS stand-in for a PDF font, for showing changed text in the editor.
-const cssFamily = (font = "") =>
-  /mono|courier|cousine|consol/i.test(font) ? "'Courier New', Cousine, monospace"
-  : /times|serif|tinos|georgia|roman|garamond|cambria|caladea|mincho|song|batang/i.test(font) && !/sans/i.test(font) ? "'Times New Roman', Tinos, serif"
-  : "Helvetica, Arial, Arimo, sans-serif";
+// Changes to the page's own content (Edit content), drawn by the preview rather than as items on top.
+const isContent = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit";
 // Pages a signature can be copied to.
 const PLACEMENTS = ["all", "allButLast", "last", "custom"] as const;
 type Placement = (typeof PLACEMENTS)[number];
@@ -148,9 +145,12 @@ export function Editor({
   // Fields found on a flat form, waiting to be accepted or rejected.
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [detected, setDetected] = useState<null | "busy" | number>(null);
-  // The page's own text objects, for the Edit text tool, and what saving each change will do to its font.
-  const [pageText, setPageText] = useState<{ page: number; list: TextBox[] } | null>(null);
-  const [fontNotes, setFontNotes] = useState<Record<string, FontNote>>({});
+  // Everything the page draws, for the Edit content tool.
+  const [content, setContent] = useState<PageContent | null>(null);
+  // The page drawn from the file with the content changes made (Edit content),
+  // for the changes it was made with; or why they can't be made.
+  const [preview, setPreview] = useState<{ key: string; page: number; width: number; url: string; blob: Blob } | null>(null);
+  const [previewState, setPreviewState] = useState<{ key: string; busy: boolean; error: string | null; note: string | null }>({ key: "[]", busy: false, error: null, note: null });
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<number | null>(null);
   const [matchCase, setMatchCase] = useState(false);
@@ -197,7 +197,7 @@ export function Editor({
   const ptToPx = size ? width / size.w : 1;
 
   const imgKey = `${page}:${width}`;
-  const img = rendered?.key === imgKey ? rendered.url : null;
+  const original = rendered?.key === imgKey ? rendered.url : null;
   useEffect(() => {
     let live = true;
     thumbUrl(file, page, width).then((r) => live && setRendered({ key: `${page}:${width}`, url: r.url })).catch(() => {});
@@ -207,30 +207,69 @@ export function Editor({
   }, [file, page, width]);
 
   useEffect(() => {
-    if (tool !== "editText" || pageText?.page === page) return;
+    if (tool !== "editText" || content?.page === page) return;
     let live = true;
-    import("@/lib/pdf/edit").then(({ listText }) => listText(file, page)).catch(() => [] as TextBox[])
-      .then((list) => live && setPageText({ page, list }));
+    import("@/lib/pdf/edit").then(({ listContent }) => listContent(file, page))
+      .catch(() => ({ objects: [], paragraphs: [] }))
+      .then((c) => live && setContent({ page, ...c }));
     return () => {
       live = false;
     };
-  }, [tool, page, file, pageText?.page]);
+  }, [tool, page, file, content?.page]);
 
-  // Checks each changed text once typing stops, and again after undo or redo.
+  // The preview: the file saved with the content changes, this page drawn
+  // from it, once changes stop for a moment. A paragraph being typed in is
+  // left out (the text box shows it), so typing doesn't redraw the page.
+  const changes = useMemo(() => items.value.filter((i) => isContent(i) && i.source), [items.value]);
+  const previewKey = useMemo(() => JSON.stringify(changes.map((i) => (
+    { ...i, image: i.image ? `${i.image.length}:${i.image.slice(-64)}` : undefined, ...(i.id === editing ? { removed: true } : {}) }
+  ))), [changes, editing]);
+  const editedFile = useRef<{ key: string; blob: Promise<{ blob: Blob; note?: string }> } | null>(null);
   useEffect(() => {
-    for (const i of items.value) {
-      if (i.kind !== "textEdit" || !i.source || editing === i.id || !i.text || i.text === i.source.was) continue;
-      if (fontNotes[i.id]?.text === i.text) continue;
-      const { id, page: p, text } = i, index = i.source.index;
-      import("@/lib/pdf/edit").then(({ textFonts }) => textFonts(file, p, index, text))
-        .then((result) => setFontNotes((n) => ({ ...n, [id]: { text, result } })))
-        .catch(() => {});
-    }
-  }, [items.value, editing, fontNotes, file]);
+    if (!changes.length) return;
+    let live = true;
+    const timer = setTimeout(async () => {
+      try {
+        if (editedFile.current?.key !== previewKey) {
+          const list = changes.map((i) => (i.id === editing ? { ...i, removed: true } : i));
+          editedFile.current = {
+            key: previewKey,
+            blob: import("@/lib/pdf/edit").then(({ editPdf, contentChanged }) =>
+              list.some(contentChanged) ? editPdf(file, list, "preview").then(([o]) => ({ blob: o.blob, note: o.note })) : { blob: file as Blob }),
+          };
+        }
+        const { blob, note } = await editedFile.current.blob;
+        const { url } = await thumbUrl(blob, page, width);
+        if (!live) return;
+        setPreview((old) => {
+          if (old && old.blob !== blob && old.blob !== file) {
+            void import("@/lib/pdf/thumbs").then((m) => m.forgetDoc(old.blob));
+          }
+          return { key: previewKey, page, width, url, blob };
+        });
+        const swap = note?.startsWith("textFallback:") ? note.slice(13).split("; ")[0].split(" → ") : null;
+        setPreviewState({ key: previewKey, busy: false, error: null, note: swap ? t("ed.fontFallback", { font: swap[0], fallback: swap[1] }) : null });
+      } catch (e) {
+        if (!live) return;
+        editedFile.current = null;
+        const code = (e as { code?: string })?.code;
+        setPreviewState({ key: previewKey, busy: false, error: t(code === "text_edit_failed" ? "ed.scriptUnsupported" : "ed.previewFailed"), note: null });
+      }
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewKey, page, width, file]);
 
-  const pageItems = items.value.filter((i) => i.page === page);
+  const pageItems = items.value.filter((i) => i.page === page && !isContent(i));
+  const pageContent = content?.page === page ? content : null;
+  const contentItems = changes.filter((i) => i.page === page && i.kind !== "textEdit");
   const pageMarks = marks.value.filter((m) => m.page === page);
   const selected = items.value.find((i) => i.id === sel) ?? null;
+  // The page as it will be saved: the latest preview of this page while there are changes.
+  const img = changes.length && preview && preview.page === page && preview.width === width ? preview.url : original;
   const cropRect = crops.get(options.cropScope === "current" ? page : -1) ?? null;
 
   const frac = (e: { clientX: number; clientY: number }) => {
@@ -419,7 +458,9 @@ export function Editor({
       } else if ((e.key === "Delete" || e.key === "Backspace") && sel) {
         e.preventDefault();
         // The page's own text is deleted from the file, not just from the list.
-        if (items.value.find((i) => i.id === sel)?.kind === "textEdit") patch(sel, { text: "" });
+        const it = items.value.find((i) => i.id === sel);
+        if (it?.kind === "textEdit") patch(sel, { text: "" });
+        else if (it && isContent(it)) patch(sel, { removed: true });
         else {
           items.set((l) => l.filter((i) => i.id !== sel));
           setSel(null);
@@ -519,22 +560,17 @@ export function Editor({
     setCrops((mp) => new Map(mp).set(options.cropScope === "current" ? page : -1, r));
   };
 
-  // ── Edit text: a change to one of the page's own text objects.
-  const editExisting = (o: TextBox) => {
-    const have = items.value.find((i) => i.kind === "textEdit" && i.page === page && i.source?.index === o.index);
-    if (have) {
-      setSel(have.id);
-      setEditing(have.id);
-      return;
+  // ── Edit content: picking a paragraph or object starts a change to it
+  // (one that changes nothing until something is changed).
+  const pickContent = (x: ContentTarget, edit: boolean) => {
+    const have = items.value.find((i) => i.page === page && isFor(i, x));
+    const id = have?.id ?? itemFor(page, x).id;
+    if (!have) {
+      const it = { ...itemFor(page, x), id };
+      items.set((l) => [...l, it], false);
     }
-    const it: EditorItem = {
-      id: uid(), page, kind: "textEdit", x: o.box.x, y: o.box.y, w: o.box.w, h: o.box.h, text: o.text,
-      fontSize: o.size, color: o.color, bold: o.bold,
-      source: { index: o.index, was: o.text, x: o.box.x, y: o.box.y, font: o.font, angle: o.angle },
-    };
-    items.set((l) => [...l, it]);
-    setSel(it.id);
-    setEditing(it.id);
+    setSel(id);
+    setEditing(edit && "para" in x ? id : null);
   };
 
   const run = () => {
@@ -590,12 +626,13 @@ export function Editor({
   const canRun =
     toolId === "redact" ? marks.value.length > 0 :
     toolId === "crop" ? [...crops.values()].some((r) => r.w > 0.02 && r.h > 0.02) :
-    toolId === "forms" || (toolId === "sign" && cert) ? true : items.value.length > 0 && !items.value.some((i) => i.kind === "textEdit" && fontBlocks(fontNotes[i.id]));
+    toolId === "forms" || (toolId === "sign" && cert) ? true :
+    items.value.some((i) => !isContent(i) || contentChanged(i)) && !(previewState.key === previewKey && previewState.error);
 
   const tools: { id: EdTool; icon: React.ReactNode; label: string }[] = useMemo(() => {
     const base = [{ id: "select" as EdTool, icon: <MousePointer2 size={18} />, label: t("ed.select") }];
     if (toolId === "edit") return [...base,
-      { id: "editText", icon: <LetterText size={18} />, label: t("ed.editText") },
+      { id: "editText", icon: <LetterText size={18} />, label: t("ed.editContent") },
       { id: "text", icon: <Type size={18} />, label: t("ed.text") },
       { id: "image", icon: <ImagePlus size={18} />, label: t("ed.image") },
       { id: "rect", icon: <Square size={18} />, label: t("ed.rect") },
@@ -670,7 +707,7 @@ export function Editor({
             onPointerUp={onUp}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {img && <img src={img} alt="" draggable={false} className="absolute inset-0 h-full w-full" />}
+            {img && <img src={img} alt="" draggable={false} data-preview={img !== original || undefined} className="absolute inset-0 h-full w-full" />}
 
             {/* Existing form fields */}
             {toolId === "forms" && fields.filter((f) => f.page === page && f.rect).map((f) => (
@@ -713,15 +750,12 @@ export function Editor({
               }} />
             )}
 
-            {/* The page's own text, to click and change */}
-            {tool === "editText" && pageText?.page === page && pageText.list
-              .filter((o) => !pageItems.some((i) => i.kind === "textEdit" && i.source?.index === o.index))
-              .map((o) => (
-                <button key={o.index} type="button" data-text-object={o.index} aria-label={`${t("ed.editText")}: ${o.text}`} title={o.text}
-                  className="absolute cursor-text rounded-[2px] outline-dashed outline-1 outline-[color-mix(in_oklab,var(--accent)_55%,transparent)] hover:bg-[color-mix(in_oklab,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
-                  style={{ left: `${o.box.x * 100}%`, top: `${o.box.y * 100}%`, width: `${o.box.w * 100}%`, height: `${o.box.h * 100}%` }}
-                  onPointerDown={(e) => e.stopPropagation()} onClick={() => editExisting(o)} />
-              ))}
+            {/* The page's own content, to click and change */}
+            {tool === "editText" && pageContent && (
+              <ContentLayer content={pageContent} items={contentItems} sel={sel} editing={editing} stage={stage} ptToPx={ptToPx} pageHeight={height}
+                onPick={pickContent} onSelect={setSel} onEdit={setEditing}
+                update={(id, p, record) => patch(id, p, record)} snapshot={() => items.set((l) => [...l])} />
+            )}
 
             {/* Items */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
@@ -748,43 +782,6 @@ export function Editor({
                 ...(editing === i.id ? {} : { tabIndex: 0, role: "button", "aria-label": i.kind === "text" ? i.text || t("ed.text") : t(ITEM_LABELS[i.kind]) }),
               };
               let inner: React.ReactNode = null;
-              if (i.kind === "textEdit" && i.source) {
-                const src = i.source;
-                const fs = (i.fontSize ?? 12) * ptToPx;
-                const changed = i.text !== src.was || i.x !== src.x || i.y !== src.y;
-                const bad = fontBlocks(fontNotes[i.id]);
-                return (
-                  <div key={i.id} className="contents">
-                    {/* Hides the old text in the preview; saving removes it from the file. */}
-                    {/* Padded for anti-aliasing, and below for descenders the box may leave out. */}
-                    {changed && <div aria-hidden className="pointer-events-none absolute bg-white"
-                      style={{ fontSize: fs, left: `calc(${src.x * 100}% - 2px)`, top: `calc(${src.y * 100}% - 2px)`, width: `calc(${i.w * 100}% + 4px)`, height: `calc(${i.h * 100}% + 0.25em + 4px)` }} />}
-                    <div {...common} onDoubleClick={() => setEditing(i.id)} data-text-edit={src.index}
-                      aria-label={i.text ? `${t("ed.editText")}: ${i.text}` : t("ed.textDeleted")}
-                      className={`absolute flex items-end whitespace-pre leading-none ${frame} ${bad ? "outline outline-2 outline-[var(--danger)]" : ""} ${editing === i.id ? "" : "cursor-move"}`}
-                      style={{
-                        left: `${i.x * 100}%`, top: `${i.y * 100}%`, minWidth: `${i.w * 100}%`, height: `${i.h * 100}%`, fontSize: fs, color: i.color,
-                        fontWeight: i.bold ? 700 : 400, fontFamily: cssFamily(src.font),
-                        transform: src.angle && Math.abs(src.angle) > 0.5 ? `rotate(${-src.angle}deg)` : undefined, transformOrigin: "0 100%",
-                      }}>
-                      {editing === i.id ? (
-                        <input ref={(el) => { if (el && document.activeElement !== el) el.focus(); }} value={i.text ?? ""} aria-label={t("ed.editText")}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onChange={(e) => patch(i.id, { text: e.target.value }, false)}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-                          onBlur={() => setEditing(null)}
-                          className="-mb-[0.22em] h-[calc(100%+0.22em)] bg-[color-mix(in_oklab,var(--accent)_8%,white)] p-0 outline-none"
-                          style={{ font: "inherit", color: "inherit", width: `${Math.max(4, (i.text ?? "").length + 2)}ch` }} />
-                      ) : changed && !i.text ? (
-                        <span className="h-full w-full min-w-4 border border-dashed border-[var(--danger)]" />
-                      ) : changed ? (
-                        // The box ends at the baseline; the line's descent goes below it.
-                        <span style={{ marginBottom: "-0.22em" }}>{i.text}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              }
               if (i.kind === "text") {
                 const fs = (i.fontSize ?? 16) * ptToPx;
                 return (
@@ -967,39 +964,24 @@ export function Editor({
         {/* Style for new and selected items */}
         {selected && isFieldKind(selected.kind) && <FieldSettings item={selected} onChange={(p) => patch(selected.id, p)} />}
 
-        {tool === "editText" && !selected && (
-          <p className="text-[14px] text-muted">
-            {pageText?.page === page && pageText.list.length === 0 ? t("ed.noEditableText") : t("ed.editTextHint")}
-          </p>
+        {(tool === "editText" || (selected && isContent(selected))) && (
+          <ContentPanel content={pageContent ?? (tool === "editText" ? "busy" : null)}
+            item={selected && isContent(selected) ? selected : null} items={contentItems}
+            status={previewState.key === previewKey ? previewState : { busy: changes.length > 0, error: null, note: null }}
+            pageAspect={size ? size.h / size.w : 1.414}
+            onPick={(x, edit) => { setTool("editText"); pickContent(x, edit); }}
+            update={(p, record = true) => selected && patch(selected.id, p, record)}
+            restore={() => {
+              if (!selected?.source) return;
+              const s = selected.source;
+              patch(selected.id, {
+                x: s.x, y: s.y, w: s.w ?? selected.w, h: s.h ?? selected.h, text: s.was, fontSize: s.size ?? selected.fontSize, color: s.color, fill: s.fill,
+                stroke: s.stroke, align: s.align, rotate: undefined, flipX: undefined, flipY: undefined, removed: undefined, order: undefined, image: undefined,
+              });
+            }} />
         )}
 
-        {selected?.kind === "textEdit" && selected.source && (() => {
-          const note = fontNotes[selected.id];
-          const changedText = selected.text !== selected.source.was;
-          const r = note?.text === selected.text ? note.result : null;
-          return (
-            <div className="space-y-3" aria-live="polite">
-              {!selected.text ? <p className="text-[14px] text-ink-2">{t("ed.textDeleted")}</p>
-                : !changedText || !r ? <p className="text-[14px] text-muted">{t("ed.fontKept", { font: selected.source.font ?? "" })}</p>
-                : "unsupported" in r ? <p className="text-[14px] text-danger">{t("ed.scriptUnsupported")}</p>
-                : r.kept ? <p className="text-[14px] text-muted">{t("ed.fontKept", { font: r.font })}</p>
-                : r.fallback ? <p className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">{t("ed.fontFallback", { font: r.font, fallback: r.fallback })}</p>
-                : <p className="text-[14px] text-danger">{t("ed.fontNone")}</p>}
-              <div className="flex flex-wrap gap-2">
-                {selected.text ? (
-                  <button className="btn btn-quiet btn-sm text-danger" onClick={() => patch(selected.id, { text: "" })}>
-                    <Trash2 size={15} /> {t("ed.deleteText")}
-                  </button>
-                ) : null}
-                <button className="btn btn-quiet btn-sm" onClick={() => { items.set((l) => l.filter((i) => i.id !== selected.id)); setSel(null); }}>
-                  <RotateCcw size={15} /> {t("ed.restoreText")}
-                </button>
-              </div>
-            </div>
-          );
-        })()}
-
-        {(toolId === "edit" || toolId === "sign" || toolId === "forms") && selected?.kind !== "image" && selected?.kind !== "textEdit" && !(selected && isFieldKind(selected.kind)) && !(tool === "editText" && !selected) && (
+        {(toolId === "edit" || toolId === "sign" || toolId === "forms") && selected?.kind !== "image" && !(selected && (isContent(selected) || isFieldKind(selected.kind))) && tool !== "editText" && (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-1.5">
               {COLORS.map((c) => (
@@ -1038,7 +1020,7 @@ export function Editor({
           </div>
         )}
 
-        {selected && selected.kind !== "textEdit" && (
+        {selected && !isContent(selected) && (
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
             <button className="btn btn-quiet btn-sm" disabled={moveLayer(items.value, selected.id, 1) === items.value}
               onClick={() => items.set((l) => moveLayer(l, selected.id, 1))}>
