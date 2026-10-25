@@ -175,38 +175,42 @@ await suite(async ({ browser, test }) => {
     }
   });
 
+  // Each from a freshly loaded page (the same browser profile, so Recent
+  // holds what was opened above), not from whatever the last test left open.
+  const fresh = async () => {
+    await open(page, "/en/pdf-viewer");
+    await page.waitForTimeout(300);
+  };
+
   await test("Recent: the file is there to open again, at its page", async () => {
-    let step = "close";
+    let step = "list";
     try {
-    await wake();
-    await bar(t["viewer.close"]).click();
-    await viewer().waitFor({ state: "detached" });
-    const recent = page.getByRole("region", { name: t["recent.title"] });
-    const card = recent.locator(".recent-card", { hasText: "report.pdf" });
-    await card.getByText(fill(t["recent.where"], { n: 3, total: 3 }), { exact: false }).waitFor();
-    step = "open";
-    await card.click();
-    await viewer().waitFor();
-    // Download hands over the file as it is.
-    await wake();
-    step = "more";
-    await bar(t["viewer.more"]).click();
-    step = "download";
-    const [dl] = await Promise.all([page.waitForEvent("download"), viewer().getByRole("menuitem", { name: t["viewer.download"] }).click()]);
-    if (dl.suggestedFilename() !== "report.pdf") throw new Error(`downloaded ${dl.suggestedFilename()}`);
-    await page.keyboard.press("Escape");
-    return "listed at page 3, opened, downloaded";
+      await fresh();
+      const recent = page.getByRole("region", { name: t["recent.title"] });
+      const card = recent.locator(".recent-card", { hasText: "report.pdf" });
+      await card.getByText(fill(t["recent.where"], { n: 3, total: 3 }), { exact: false }).waitFor();
+      step = "open";
+      await card.click();
+      await viewer().waitFor();
+      await viewer().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor({ state: "attached" });
+      // Download hands over the file as it is.
+      step = "more";
+      await wake();
+      await bar(t["viewer.more"]).click();
+      step = "download";
+      const [dl] = await Promise.all([page.waitForEvent("download"), viewer().getByRole("menuitem", { name: t["viewer.download"] }).click()]);
+      if (dl.suggestedFilename() !== "report.pdf") throw new Error(`downloaded ${dl.suggestedFilename()}`);
+      return "listed at page 3, opened there, downloaded";
     } catch (e) {
-      const state = await page.evaluate(() => {
-        const x = document.querySelector('[aria-label="Do more with this file"]');
-        const r = x?.getBoundingClientRect();
-        return r ? [document.querySelectorAll(".vw").length, document.querySelector(".vw")?.hasAttribute("data-chrome"), document.elementFromPoint(r.x + 5, r.y + 5)?.outerHTML.slice(0, 90)] : "no button";
-      }).catch((x) => String(x));
+      const state = await page.evaluate(() => [document.querySelectorAll(".vw").length, document.querySelector(".vw")?.hasAttribute("data-chrome") ?? null, location.pathname]).catch((x) => String(x));
       throw new Error(`${step}: ${e.message.split("\n")[0]} ${JSON.stringify(state)}`);
     }
   });
 
   await test("Do more: Compress opens with the file", async () => {
+    await fresh();
+    await pick(page, ["report.pdf"]);
+    await viewer().waitFor();
     await wake();
     await bar(t["viewer.more"]).click();
     await viewer().getByRole("menuitem", { name: t["tool.compress.name"] }).click();
