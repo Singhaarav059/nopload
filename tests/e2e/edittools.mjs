@@ -112,7 +112,18 @@ await suite(async ({ name, browser, test }) => {
 
       step = "eraser";
       // Along "99-SECRET-12" (Helvetica 14 pt: x 325–425 of 612, baseline 700 of 792): a brush stroke, no box left.
-      await drag(at(322 / 612, 1 - 705 / 792), at(430 / 612, 1 - 705 / 792));
+      // It wipes as it goes: before the button is let go, the text it has passed is already covered in the paper's colour.
+      await page.mouse.move(...at(322 / 612, 1 - 705 / 792));
+      await page.mouse.down();
+      await page.mouse.move(...at(430 / 612, 1 - 705 / 792), { steps: 8 });
+      const live = await page.evaluate(([x, y]) => {
+        const cv = document.querySelector("main canvas[aria-hidden]");
+        const r = cv.getBoundingClientRect();
+        const d = cv.getContext("2d").getImageData(Math.round(((x - r.left) / r.width) * cv.width), Math.round(((y - r.top) / r.height) * cv.height), 1, 1).data;
+        return [...d];
+      }, at(375 / 612, 1 - 705 / 792));
+      if (live[3] < 200 || live[0] + live[1] + live[2] < 600) throw new Error(`not wiped while erasing: rgba ${live}`);
+      await page.mouse.up();
       await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
       if (await page.locator("[data-item=erase]").count()) throw new Error("the eraser left something to pick");
 
