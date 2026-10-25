@@ -529,7 +529,7 @@ export async function crop(file: File, rects: Map<number, FracRect> | FracRect):
 export type EditorItem = {
   id: string;
   page: number;
-  kind: "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "textEdit" | "paraEdit" | "objEdit" | FieldKind;
+  kind: "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "textEdit" | "paraEdit" | "objEdit" | "scanEdit" | FieldKind;
   // Visual fractions of the page, top-left origin.
   x: number; y: number; w: number; h: number;
   color?: string;
@@ -563,6 +563,10 @@ export type EditorItem = {
   removed?: boolean;
   order?: "front" | "back";
   align?: Align;
+  // scanEdit: a line of a scan read with OCR, retyped. Its box on the scan is
+  // emptied to `fill` (the paper's colour) and the text drawn in `color` (the
+  // ink's), in `family`, no wider than the box.
+  family?: Family;
 };
 
 function dataUrlBytes(url: string) {
@@ -600,6 +604,17 @@ export async function applyItems(doc: PDFDocument, items: EditorItem[]) {
             vx, vy: vyTop - size * 0.86 - li * size * 1.25, size, color: it.color ?? "#111827", anchor: "left", bold: it.bold,
           });
         }
+        break;
+      }
+      case "scanEdit": {
+        const text = (it.text ?? "").replace(/\s+/g, " ").trim();
+        if (it.removed || !text) break;
+        const size = it.fontSize ?? 12;
+        // Room: to the right margin (as wide as the left one), or the box's width once it's been resized; longer text is drawn smaller.
+        const resized = it.source?.w !== undefined && Math.abs(it.source.w - it.w) > 1e-4;
+        const room = resized ? w : Math.max(w, (1 - it.x - Math.max(it.x, 0.04)) * f.vw);
+        // The box's top is the line's tallest letters, about three quarters of the size above its baseline.
+        await drawLabel(doc, page, it.family ?? "arimo", text, { vx, vy: vyTop - size * 0.78, size, color: it.color ?? "#111827", anchor: "left", bold: it.bold, maxWidth: room });
         break;
       }
       case "image": {
@@ -643,20 +658,35 @@ export async function applyItems(doc: PDFDocument, items: EditorItem[]) {
 }
 
 // Changes to the page's own content go first (PDFium), then what was added on top (pdf-lib).
-export const isContentEdit = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit";
+export const isContentEdit = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit" || i.kind === "scanEdit";
 
 export { contentChanged } from "./contentchange";
 
+// White-out empties what's under it; a retyped scan line empties its old
+// place, then is drawn like an added item.
 export async function editPdf(file: File, items: EditorItem[], suffix: string): Promise<Output[]> {
-  const edits = items.filter((i) => isContentEdit(i) && contentChanged(i));
-  const added = items.filter((i) => !isContentEdit(i));
+  const changed = items.filter((i) => isContentEdit(i) && contentChanged(i));
+  const edits = [...changed, ...items.filter((i) => i.kind === "whiteout")];
+  const added = items.filter((i) => !isContentEdit(i) || (i.kind === "scanEdit" && changed.includes(i)));
   const name = `${baseName(file.name)}-${suffix}.pdf`;
   if (!edits.length) {
     const doc = await loadPdf(file, file.name);
     await applyItems(doc, added);
     return [{ name, blob: await save(doc) }];
   }
-  const { bytes, note } = await applyContent(file, edits);
+  let out: Awaited<ReturnType<typeof applyContent>>;
+  try {
+    out = await applyContent(file, edits);
+  } catch (e) {
+    // White-out alone still covers what's under it where the file can't be changed underneath.
+    if (!changed.length) {
+      const doc = await loadPdf(file, file.name);
+      await applyItems(doc, added);
+      return [{ name, blob: await save(doc) }];
+    }
+    throw e;
+  }
+  const { bytes, note } = out;
   if (!added.length) return [{ name, blob: pdfBlob(bytes), note }];
   const doc = await loadPdf(new File([bytes as BlobPart], file.name, { type: "application/pdf" }), file.name);
   await applyItems(doc, added);
@@ -687,6 +717,14 @@ function frameOf(g: PageGeom) {
   // User-space vector → visual vector.
   const back = (x: number, y: number): [number, number] => [(x * v[1] - y * v[0]) / det, (u[0] * y - u[1] * x) / det];
   return { ...f, u, v, toVisual: (x: number, y: number) => back(x - ox, y - oy), back };
+}
+
+// A box on screen (visual fractions) → its bounds in user space.
+function userBox(g: PageGeom, r: FracRect): import("./pdfium").Box {
+  const f = frameOf(g);
+  const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].map(([fx, fy]) => f.map(fx * f.vw, (1 - fy) * f.vh));
+  const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
 }
 
 // Fractions of the page moved on screen → points moved in user space.
@@ -1122,7 +1160,14 @@ async function applyContent(file: File, items: EditorItem[]) {
     const objects: import("./objects").ObjectChange[] = [];
     const texts: import("./objects").TextChange[] = [];
     const paragraphs: import("./objects").ParagraphChange[] = [];
+    const erase: import("./objects").Erase[] = [];
     for (const it of items.filter((i) => i.page === page)) {
+      if (it.kind === "whiteout" || it.kind === "scanEdit") {
+        const r = it.kind === "scanEdit" ? { x: it.source!.x, y: it.source!.y, w: it.source!.w ?? it.w, h: it.source!.h ?? it.h } : it;
+        const fill = it.kind === "scanEdit" && it.fill ? rgbaOf(it.fill) : undefined;
+        erase.push({ box: userBox(geom, r), ...(fill ? { fill } : {}) });
+        continue;
+      }
       const src = it.source!;
       const from = { x: src.x, y: src.y, w: src.w ?? it.w, h: src.h ?? it.h };
       const box = { x: it.x, y: it.y, w: it.w, h: it.h };
@@ -1169,7 +1214,7 @@ async function applyContent(file: File, items: EditorItem[]) {
       const width = !near(it.w, src.w ?? it.w) || !near(it.h, src.h ?? it.h) ? (upright ? it.w * f.vw : it.h * f.vh) : undefined;
       paragraphs.push({ page, parts, text, move, scale, width, fill, align: it.align });
     }
-    return { objects, texts, paragraphs };
+    return { objects, texts, paragraphs, erase };
   };
   let out;
   try {

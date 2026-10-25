@@ -1,0 +1,20 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { load } from "../lib/load.mjs";
+const objects = await load("objects");
+const doc = await PDFDocument.create();
+const f = await doc.embedFont(StandardFonts.Helvetica);
+const img = await doc.embedJpg(new Uint8Array(readFileSync("/home/user/nopload/tests/fixtures/images/motion.jpg")));
+const p = doc.addPage([400, 400]);
+p.drawImage(img, { x: 0, y: 0, width: 400, height: 400 });
+p.drawText("Hello secret world", { x: 50, y: 300, size: 20, font: f });
+p.drawText("Below line stays", { x: 50, y: 270, size: 20, font: f });
+p.drawRectangle({ x: 50, y: 100, width: 300, height: 50, color: rgb(1, 0, 0) });
+p.drawRectangle({ x: 120, y: 200, width: 30, height: 20, color: rgb(0, 0, 1) });
+const bytes = await doc.save();
+// over "secret" only, touching the top of the line below, and the small blue box
+const out = await objects.editContent(bytes, [0], () => ({ erase: [{ box: { x0: 105, y0: 190, x1: 170, y1: 318 } }] }), async () => null);
+writeFileSync(process.argv[2], out.bytes);
+const { objects: list } = await objects.pageObjects(out.bytes, 0);
+for (const o of list) console.log(o.kind, JSON.stringify(o.bounds), o.text?.text ?? "", o.pixels ?? "");
+console.log("size", bytes.length, "->", out.bytes.length);

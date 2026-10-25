@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { RotateCw } from "lucide-react";
 import type { ContentObject, EditorItem, FracRect, Paragraph } from "@/lib/pdf/edit";
+import type { ScanLine } from "@/lib/pdf/scanedit";
 import { useI18n } from "../I18n";
 
 // Edit PDF's Edit content tool on the page: every paragraph and object the
@@ -11,8 +12,16 @@ import { useI18n } from "../I18n";
 // the changes look like comes from the edited file itself (Editor's preview),
 // so this layer draws only outlines, handles and the text being typed.
 
-export type PageContent = { page: number; objects: ContentObject[]; paragraphs: Paragraph[] };
-export type ContentTarget = { para: Paragraph } | { obj: ContentObject };
+// `scan`: a scanned page's lines, once read with OCR.
+export type PageContent = { page: number; objects: ContentObject[]; paragraphs: Paragraph[]; scan?: ScanLine[] };
+export type ContentTarget = { para: Paragraph } | { obj: ContentObject } | { scan: ScanLine };
+
+// A page that's a picture of text: a picture over half of it, and no text that shows.
+export const isScan = (c: PageContent) =>
+  c.objects.some((o) => o.kind === "image" && o.box.w * o.box.h > 0.5) && !c.paragraphs.some((p) => !p.invisible);
+
+export const keyOf = (x: ContentTarget) => ("para" in x ? `p${x.para.parts[0].index}:${x.para.parts[0].sig}` : "obj" in x ? `o${x.obj.index}:${x.obj.sig}` : x.scan.key);
+export const boxOf = (x: ContentTarget) => ("para" in x ? x.para.box : "obj" in x ? x.obj.box : x.scan.box);
 
 const uid = () => crypto.randomUUID();
 
@@ -24,6 +33,13 @@ export const cssFamily = (font = "") =>
 
 // The editor item that changes a paragraph or an object, starting as it is.
 export function itemFor(page: number, t: ContentTarget): EditorItem {
+  if ("scan" in t) {
+    const l = t.scan;
+    return {
+      id: uid(), page, kind: "scanEdit", ...l.box, text: l.text, fontSize: l.size, color: l.ink, fill: l.paper, family: l.family,
+      source: { index: -1, sig: l.key, was: l.text, ...l.box, size: l.size, color: l.ink, fill: l.paper, font: l.family },
+    };
+  }
   if ("para" in t) {
     const p = t.para;
     return {
@@ -40,10 +56,12 @@ export function itemFor(page: number, t: ContentTarget): EditorItem {
 
 // Whether an item changes this target.
 export const isFor = (i: EditorItem, t: ContentTarget) =>
-  "para" in t ? i.kind === "paraEdit" && i.source?.index === t.para.parts[0].index && i.source.sig === t.para.parts[0].sig
+  "scan" in t ? i.kind === "scanEdit" && i.source?.sig === t.scan.key
+  : "para" in t ? i.kind === "paraEdit" && i.source?.index === t.para.parts[0].index && i.source.sig === t.para.parts[0].sig
   : i.kind === "objEdit" && i.source?.index === t.obj.index && i.source.sig === t.obj.sig;
 
 export function targetLabel(t: ContentTarget, tr: (k: string) => string) {
+  if ("scan" in t) return t.scan.text.length > 60 ? `${t.scan.text.slice(0, 60)}…` : t.scan.text;
   if ("para" in t) return t.para.text.length > 60 ? `${t.para.text.slice(0, 60)}…` : t.para.text;
   const o = t.obj;
   const name = tr(o.kind === "image" ? "ed.objImage" : o.kind === "path" ? "ed.objShape" : o.kind === "shading" ? "ed.objGradient" : o.kind === "text" ? "ed.objText" : "ed.objGraphic");
@@ -58,7 +76,8 @@ export function targetLabel(t: ContentTarget, tr: (k: string) => string) {
 const MAX_OBJECTS = 600, MAX_PARAGRAPHS = 1500;
 export function targetsOf(c: PageContent): ContentTarget[] {
   const objects = c.objects.filter((o) => o.kind !== "text").sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h).slice(0, MAX_OBJECTS);
-  return [...objects.map((obj) => ({ obj })), ...c.paragraphs.slice(0, MAX_PARAGRAPHS).map((para) => ({ para }))];
+  // On a scan that's been read, its lines (the picture itself stays pickable under them).
+  return [...objects.map((obj) => ({ obj })), ...c.paragraphs.slice(0, MAX_PARAGRAPHS).map((para) => ({ para })), ...(c.scan ?? []).map((scan) => ({ scan }))];
 }
 
 const pct = (v: number) => `${v * 100}%`;
@@ -150,13 +169,13 @@ export function ContentLayer({
     <>
       {/* What can be picked */}
       {targets.map((x) => {
-        const box = "para" in x ? x.para.box : x.obj.box;
-        const key = "para" in x ? `p${x.para.parts[0].index}:${x.para.parts[0].sig}` : `o${x.obj.index}:${x.obj.sig}`;
-        const label = `${"para" in x ? t("ed.objText") : t("ed.object")}: ${targetLabel(x, t)}`;
+        const box = boxOf(x);
+        const text = !("obj" in x);
+        const label = `${text ? t("ed.objText") : t("ed.object")}: ${targetLabel(x, t)}`;
         return (
-          <button key={key} type="button" aria-label={label} title={targetLabel(x, t)}
-            data-content={"para" in x ? "text" : x.obj.kind}
-            className={`absolute rounded-[2px] outline-dashed outline-1 hover:bg-[color-mix(in_oklab,var(--accent)_12%,transparent)] hover:outline-2 focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${"para" in x ? "cursor-text outline-[color-mix(in_oklab,var(--accent)_55%,transparent)]" : "cursor-pointer outline-[color-mix(in_oklab,var(--accent)_30%,transparent)]"}`}
+          <button key={keyOf(x)} type="button" aria-label={label} title={targetLabel(x, t)}
+            data-content={"para" in x ? "text" : "scan" in x ? "scan" : x.obj.kind}
+            className={`absolute rounded-[2px] outline-dashed outline-1 hover:bg-[color-mix(in_oklab,var(--accent)_12%,transparent)] hover:outline-2 focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${text ? "cursor-text outline-[color-mix(in_oklab,var(--accent)_55%,transparent)]" : "cursor-pointer outline-[color-mix(in_oklab,var(--accent)_30%,transparent)]"}`}
             style={{ left: pct(box.x), top: pct(box.y), width: pct(box.w), height: pct(box.h), ...minBox }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
@@ -164,11 +183,11 @@ export function ContentLayer({
               e.preventDefault();
               onPick(x, false);
             }}
-            onDoubleClick={() => "para" in x && onPick(x, true)}
+            onDoubleClick={() => text && onPick(x, true)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onPick(x, "para" in x);
+                onPick(x, text);
               }
             }} />
         );
@@ -178,7 +197,8 @@ export function ContentLayer({
       {items.map((it) => {
         const isSel = sel === it.id;
         const src = it.source!;
-        const text = it.kind === "paraEdit";
+        const scan = it.kind === "scanEdit";
+        const text = it.kind === "paraEdit" || scan;
         const rotate = it.rotate ?? 0;
         const style: React.CSSProperties = {
           left: pct(it.x), top: pct(it.y), width: pct(it.w), height: pct(it.h), ...minBox,
@@ -189,6 +209,24 @@ export function ContentLayer({
             <div key={it.id} role="button" tabIndex={0} data-content-item={src.kind ?? "text"} data-removed aria-label={`${t("ed.deleted")}: ${t(text ? "ed.objText" : "ed.object")}`}
               className={`absolute border border-dashed border-[var(--danger)] bg-[color-mix(in_oklab,var(--danger)_8%,transparent)] ${isSel ? "outline outline-2 outline-offset-2 outline-[var(--accent)]" : ""}`}
               style={style} onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onSelect(it.id); }} onFocus={() => onSelect(it.id)} />
+          );
+        }
+        if (editing === it.id && scan) {
+          const fs = (it.fontSize ?? src.size ?? 12) * ptToPx;
+          // Opaque, in the paper's colour: the old line stays under it until the page is redrawn.
+          return (
+            <input key={it.id} data-content-editing aria-label={t("ed.paragraphText")}
+              ref={(el) => { if (el && document.activeElement !== el) el.focus(); }}
+              value={it.text ?? ""}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => update(it.id, { text: e.target.value }, false)}
+              onKeyDown={(e) => { if (e.key === "Escape" || e.key === "Enter") e.currentTarget.blur(); }}
+              onBlur={() => onEdit(null)}
+              className="absolute z-10 p-0 outline outline-2 outline-offset-2 outline-[var(--accent)]"
+              style={{
+                left: pct(it.x), top: pct(it.y), minWidth: pct(it.w), height: pct(it.h), width: `${Math.max(4, (it.text ?? "").length * 0.55)}em`,
+                fontSize: fs, lineHeight: 1, color: it.color, background: it.fill ?? "#fff", fontFamily: cssFamily(it.family === "tinos" ? "Times" : it.family === "cousine" ? "Courier" : ""),
+              }} />
           );
         }
         if (editing === it.id && text) {
@@ -221,7 +259,7 @@ export function ContentLayer({
               }} />
           );
         }
-        // Text resizes across (its width is where it wraps); everything else on every side.
+        // Text resizes across (its width is where it wraps, or a scan line's room); everything else on every side.
         const handles = text ? (["e", "w"] as const) : HANDLES;
         return (
           <div key={it.id} role="button" tabIndex={0} data-content-item={src.kind ?? "text"} data-selected={isSel || undefined}

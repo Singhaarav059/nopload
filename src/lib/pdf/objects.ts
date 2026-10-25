@@ -11,7 +11,7 @@
 // again, so nothing removed or replaced is left in it.
 
 import {
-  canSetText, fontCovers, fontInfo, geomOf, openDoc, saveDoc, textObjectAt, values, withWide,
+  canSetText, fontCovers, fontInfo, geomOf, hugeImage, openDoc, saveDoc, textObjectAt, values, withWide,
   type Box, type Fallback, type FallbackRun, type Mem, type PageGeom,
 } from "./pdfium";
 
@@ -455,7 +455,177 @@ function setImage(x: Mem, page: number, handle: number, image: NewImage): boolea
   }
 }
 
-export type ContentChanges = { objects?: ObjectChange[]; texts?: TextChange[]; paragraphs?: ParagraphChange[] };
+// An area to empty (White-out, a scan line being retyped): the text whose
+// letters' centres lie in it is removed, pictures under it are painted
+// `fill` (white unless given: a scan's paper), and shapes wholly inside it
+// are removed. User space.
+export type Erase = { box: Box; fill?: RGBA };
+
+export type ContentChanges = { objects?: ObjectChange[]; texts?: TextChange[]; paragraphs?: ParagraphChange[]; erase?: Erase[] };
+
+const inside = (b: Box, x: number, y: number) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+const overlap = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+const within = (a: Box, b: Box, tol = 0.5) => a.x0 >= b.x0 - tol && a.x1 <= b.x1 + tol && a.y0 >= b.y0 - tol && a.y1 <= b.y1 + tol;
+// The most pixels a picture is repainted at; bigger ones are only covered.
+const ERASE_PIXELS = 40e6;
+
+// Empties `areas` on the page (see Erase). Letters go through PDFium's
+// redaction with a pinpoint at each letter's centre, so a letter that only
+// touches an area stays; pictures are taken off the page meanwhile, as
+// redaction would cut them, and repainted here instead, as JPEG again when
+// they were (a scan stays a scan's size).
+async function eraseAreas(x: Mem, page: number, areas: Erase[]) {
+  const { m } = x;
+  const boxes = areas.map((a) => a.box);
+  // Letters.
+  const tp = m.FPDFText_LoadPage(page);
+  const quads: number[][] = [];
+  try {
+    const n = m.FPDFText_CountChars(tp) as number;
+    const box = x.malloc(32);
+    try {
+      for (let i = 0; i < n; i++) {
+        // left, right, bottom, top as doubles.
+        if (!m.FPDFText_GetCharBox(tp, i, box, box + 8, box + 16, box + 24)) continue;
+        const [l, r, b, t] = [0, 8, 16, 24].map((o) => m.pdfium.getValue(box + o, "double") as number);
+        const cx = (l + r) / 2, cy = (b + t) / 2;
+        if (r > l && t > b && boxes.some((bx) => inside(bx, cx, cy))) quads.push([cx, cy]);
+      }
+    } finally {
+      x.free(box);
+    }
+  } finally {
+    m.FPDFText_ClosePage(tp);
+  }
+  const objects = () => Array.from({ length: m.FPDFPage_CountObjects(page) as number }, (_, i) => m.FPDFPage_GetObject(page, i) as number);
+  const boundsOf = (o: number): Box => {
+    const b = values(x, 4, "float", (p) => m.FPDFPageObj_GetBounds(o, p, p + 4, p + 8, p + 12)) ?? [0, 0, 0, 0];
+    return { x0: b[0], y0: b[1], x1: b[2], y1: b[3] };
+  };
+  if (quads.length) {
+    // Pictures aside, each with the objects after it, to go back before the first still there.
+    const all = objects();
+    const aside = all.map((o, i) => ({ o, after: all.slice(i + 1) })).filter(({ o }) => m.FPDFPageObj_GetType(o) === 3);
+    for (const { o } of aside) m.FPDFPage_RemoveObject(page, o);
+    const q = x.malloc(32 * quads.length);
+    const d = 0.05;
+    quads.forEach(([cx, cy], i) => {
+      [cx - d, cy + d, cx + d, cy + d, cx - d, cy - d, cx + d, cy - d].forEach((v, k) => m.pdfium.setValue(q + i * 32 + k * 4, v, "float"));
+    });
+    try {
+      // Into form XObjects too, unless one holds a picture too big to decode safely (a decompression bomb).
+      m.EPDFText_RedactInQuads(page, q, quads.length, !hugeImage(x, page), false);
+    } finally {
+      x.free(q);
+      // Back to front, so a picture's later neighbours that are pictures are back first.
+      for (const { o, after } of [...aside].reverse()) {
+        const now = objects();
+        const at = after.map((a) => now.indexOf(a)).find((i) => i >= 0) ?? -1;
+        if (at >= 0) m.FPDFPage_InsertObjectAtIndex(page, o, at);
+        else m.FPDFPage_InsertObject(page, o);
+      }
+    }
+  }
+  // Pictures under an area: repainted.
+  for (const o of objects()) {
+    if (m.FPDFPageObj_GetType(o) !== 3) continue;
+    const mine = areas.filter((a) => overlap(a.box, boundsOf(o)));
+    if (mine.length) await repaint(x, page, o, mine);
+  }
+  // Shapes, gradients and groups wholly inside an area.
+  for (const o of objects()) {
+    const type = m.FPDFPageObj_GetType(o);
+    if ((type === 2 || type === 4 || type === 5) && boxes.some((b) => within(boundsOf(o), b))) {
+      m.FPDFPage_RemoveObject(page, o);
+      m.FPDFPageObj_Destroy(o);
+    }
+  }
+}
+
+async function repaint(x: Mem, page: number, o: number, areas: Erase[]) {
+  const { m } = x;
+  const bmp = m.FPDFImageObj_GetBitmap(o) as number;
+  if (!bmp) return;
+  try {
+    const w = m.FPDFBitmap_GetWidth(bmp) as number, h = m.FPDFBitmap_GetHeight(bmp) as number;
+    if (!w || !h || w * h > ERASE_PIXELS) return;
+    const format = m.FPDFBitmap_GetFormat(bmp) as number; // 1 grey, 2 BGR, 3 BGRx, 4 BGRA
+    const stride = m.FPDFBitmap_GetStride(bmp) as number;
+    const src = x.heap().slice(m.FPDFBitmap_GetBuffer(bmp) as number, (m.FPDFBitmap_GetBuffer(bmp) as number) + stride * h);
+    const px = format === 1 ? 1 : format === 2 ? 3 : 4;
+    const [a, b, c, d, e, f] = values(x, 6, "float", (p) => m.FPDFPageObj_GetMatrix(o, p)) ?? [1, 0, 0, 1, 0, 0];
+    const det = a * d - b * c;
+    if (!det) return;
+    // User space → the picture's unit square → pixels (row 0 at the top).
+    const toPixel = (ux: number, uy: number) => {
+      const [dx, dy] = [ux - e, uy - f];
+      const u = (d * dx - c * dy) / det, v = (-b * dx + a * dy) / det;
+      return [u * w, (1 - v) * h];
+    };
+    let changed = false;
+    for (const area of areas) {
+      const { box } = area;
+      const fill = area.fill ?? [255, 255, 255, 255];
+      const corners = [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]].map(([ux, uy]) => toPixel(ux, uy));
+      const x0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p[0])))), x1 = Math.min(w, Math.ceil(Math.max(...corners.map((p) => p[0]))));
+      const y0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p[1])))), y1 = Math.min(h, Math.ceil(Math.max(...corners.map((p) => p[1]))));
+      const grey = Math.round(0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]);
+      for (let py = y0; py < y1; py++) {
+        for (let pxl = x0; pxl < x1; pxl++) {
+          // The pixel's centre, back in user space.
+          const u = (pxl + 0.5) / w, v = 1 - (py + 0.5) / h;
+          if (!inside(box, a * u + c * v + e, b * u + d * v + f)) continue;
+          const i = py * stride + pxl * px;
+          if (px === 1) src[i] = grey;
+          else {
+            src[i] = fill[2];
+            src[i + 1] = fill[1];
+            src[i + 2] = fill[0];
+            if (px === 4) src[i + 3] = format === 4 ? fill[3] : 255;
+          }
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return;
+    // Back as JPEG when it was one (and has no transparency to keep), else as pixels.
+    const filters = Array.from({ length: m.FPDFImageObj_GetImageFilterCount(o) as number }, (_, i) => readAscii(x, (buf, len) => m.FPDFImageObj_GetImageFilter(o, i, buf, len) as number));
+    if (filters.includes("DCTDecode") && format !== 4) {
+      const { encodeJpeg } = await import("./jpeg");
+      const ch = px === 1 ? 1 : 3;
+      const data = new Uint8Array(w * h * ch);
+      for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) {
+        const i = y * stride + xx * px, j = (y * w + xx) * ch;
+        if (ch === 1) data[j] = src[i];
+        else [data[j], data[j + 1], data[j + 2]] = [src[i + 2], src[i + 1], src[i]];
+      }
+      const jpeg = await encodeJpeg({ w, h, ch, data }, 88);
+      if (setImage(x, page, o, { jpeg, width: w, height: h })) return;
+    }
+    const bgra = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) {
+      const i = y * stride + xx * px, j = (y * w + xx) * 4;
+      if (px === 1) bgra.fill(src[i], j, j + 3);
+      else [bgra[j], bgra[j + 1], bgra[j + 2]] = [src[i], src[i + 1], src[i + 2]];
+      bgra[j + 3] = format === 4 ? src[i + 3] : 255;
+    }
+    setImage(x, page, o, { bgra, width: w, height: h });
+  } finally {
+    m.FPDFBitmap_Destroy(bmp);
+  }
+}
+
+function readAscii(x: Mem, fn: (buf: number, len: number) => number) {
+  const len = fn(0, 0);
+  if (!len) return "";
+  const buf = x.malloc(len);
+  try {
+    fn(buf, len);
+    return String.fromCharCode(...x.heap().subarray(buf, buf + len - 1));
+  } finally {
+    x.free(buf);
+  }
+}
 
 // Applies the changes to `pages`, in one pass. `forPage` gives each page's
 // changes once its geometry is known (moves made on screen depend on its
@@ -491,7 +661,7 @@ export async function editContent(
       }
       const geom = geomOf(x, page);
       const changes = forPage(pageIndex, geom);
-      const mine = { objects: changes.objects ?? [], texts: changes.texts ?? [], paragraphs: changes.paragraphs ?? [] };
+      const mine = { objects: changes.objects ?? [], texts: changes.texts ?? [], paragraphs: changes.paragraphs ?? [], erase: changes.erase ?? [] };
       const all = [...mine.objects, ...mine.texts, ...mine.paragraphs.flatMap((c) => c.parts.map((p) => ({ ...p, page: c.page })))];
       const tp = m.FPDFText_LoadPage(page);
       try {
@@ -656,6 +826,9 @@ export async function editContent(
           }
           results.push({ page: pageIndex, index: c.index });
         }
+
+        // Areas emptied last: they change the page's objects, which every target above was found among.
+        if (mine.erase.length) await eraseAreas(x, page, mine.erase);
 
         if (!m.FPDFPage_GenerateContent(page)) {
           for (const r of results) if (r.page === pageIndex && !r.error) r.error = "page";

@@ -33,9 +33,10 @@ export function pdfium() {
 // Boxes in PDF user space (points, bottom-left origin).
 export type Box = { x0: number; y0: number; x1: number; y1: number };
 
-// Redacts each page's boxes in place and draws black boxes over them.
+// Redacts each page's boxes in place and draws black boxes over them (or,
+// with `draw` false, leaves the areas empty: White-out, scan edits).
 // Returns the new file and the pages PDFium couldn't redact.
-export async function redactInPlace(bytes: Uint8Array, boxes: Map<number, Box[]>): Promise<{ bytes: Uint8Array; failed: number[] }> {
+export async function redactInPlace(bytes: Uint8Array, boxes: Map<number, Box[]>, draw = true): Promise<{ bytes: Uint8Array; failed: number[] }> {
   const m = await pdfium();
   const { malloc, free } = m.pdfium.wasmExports as unknown as { malloc: (n: number) => number; free: (p: number) => void };
   // Read the heap each time: it's replaced when WASM memory grows.
@@ -70,7 +71,7 @@ export async function redactInPlace(bytes: Uint8Array, boxes: Map<number, Box[]>
       });
       try {
         // Arguments: page, quads, count, also inside form XObjects, draw black boxes.
-        const ok = m.EPDFText_RedactInQuads(page, quads, list.length, true, true) && m.FPDFPage_GenerateContent(page);
+        const ok = m.EPDFText_RedactInQuads(page, quads, list.length, true, draw) && m.FPDFPage_GenerateContent(page);
         if (!ok) failed.push(index);
       } finally {
         free(quads);
@@ -86,7 +87,7 @@ export async function redactInPlace(bytes: Uint8Array, boxes: Map<number, Box[]>
 
 // Whether the page shows a picture over renderLimits.image pixels, itself or
 // in a form XObject. Reads only the sizes, without decoding anything.
-function hugeImage(x: Mem, page: number) {
+export function hugeImage(x: Mem, page: number) {
   const { m } = x;
   const IMAGE = 3, FORM = 5;
   const visit = (count: number, at: (i: number) => number, depth: number): boolean => {

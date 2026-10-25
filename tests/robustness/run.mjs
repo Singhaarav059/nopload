@@ -67,7 +67,7 @@ const manifest = JSON.parse(readFileSync(join(corpus, "manifest.json"), "utf8"))
 const fixtures = Object.keys(manifest);
 
 const cases = [];
-const core = ["merge", "split", "rotate", "compress", "watermark", "pagenumbers", "word", "excel", "images", "redact", "pdfa", "repair", "protect", "edit"];
+const core = ["merge", "split", "rotate", "compress", "watermark", "pagenumbers", "word", "excel", "images", "redact", "pdfa", "repair", "protect", "edit", "whiteout"];
 for (const f of fixtures) for (const t of core) cases.push([t, f, ""]);
 for (const f of fixtures.filter((f) => manifest[f].encrypted).concat("base.pdf")) cases.push(["unlock", f, ""], ["unlock", f, "wrong"]);
 for (const f of ["base.pdf", "img-ccitt.pdf", "img-jbig2.pdf", "img-jpx.pdf", "odd-boxes.pdf", "huge-page.pdf", "zero-pages.pdf", "enc-aes256-owner.pdf", "dup-ids.pdf", "malformed-content.pdf", "tiny-page.pdf", "scanned.pdf", "scanned-rot90.pdf", "incremental.pdf", "bomb-image.pdf", "huge-scan.pdf"]) {

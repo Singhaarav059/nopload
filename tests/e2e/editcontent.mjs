@@ -4,6 +4,7 @@
 //  - a picture is moved, replaced by a portrait photo, and turned
 //  - a rectangle is recoloured; another shape is deleted from the objects list
 //  - undo and redo step through it, restore puts one thing back
+// A scanned page is read with OCR and one of its lines retyped.
 // The saved file is read back: the new text is there and the old gone, the
 // picture is the replacement's size, the colour is in the content stream and
 // the deleted shape's isn't.
@@ -161,6 +162,45 @@ await suite(async ({ name, browser, test }) => {
       return `${text.slice(0, 80)}… ${JSON.stringify(images)}`;
     } catch (e) {
       await page.screenshot({ path: join(downloads, `${name}-failed.png`) }).catch(() => {});
+      throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
+    }
+  });
+
+  await test("a scanned page is read with OCR and a line retyped in place", async () => {
+    try {
+      step = "open scan";
+      await open(page, "/en/edit-pdf");
+      await pick(page, ["scanned.pdf"]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      await page.getByRole("button", { name: t["ed.editContent"], exact: true }).click();
+      await panel().getByText(t["ed.scanPage"]).waitFor();
+
+      step = "read";
+      await panel().getByRole("button", { name: t["ed.scanRead"] }).click();
+      await page.locator("[data-content=scan]").first().waitFor({ timeout: 120000 });
+      const lines = await page.locator("[data-content=scan]").count();
+
+      step = "retype";
+      const first = page.locator("[data-content=scan]").first();
+      const was = await first.getAttribute("title");
+      await first.dblclick();
+      const box = page.locator("[data-content-editing]");
+      await box.fill("Nopload edited this scan");
+      await box.press("Enter");
+      await settled();
+
+      step = "save";
+      const [dl] = await Promise.all([
+        page.waitForEvent("download", { timeout: 60000 }),
+        page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
+      ]);
+      const saved = join(downloads, `${name}-scan-${dl.suggestedFilename()}`);
+      await dl.saveAs(saved);
+      const text = await textOf(saved);
+      if (!text.includes("Nopload edited this scan")) throw new Error(`no new line in ${text.slice(0, 200)}`);
+      return `${lines} lines read; "${was}" retyped`;
+    } catch (e) {
+      await page.screenshot({ path: join(downloads, `${name}-scan-failed.png`) }).catch(() => {});
       throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
     }
   });

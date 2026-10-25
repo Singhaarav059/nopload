@@ -8,7 +8,17 @@ import {
 import type { Align, EditorItem } from "@/lib/pdf/edit";
 import { colorKey } from "@/lib/colors";
 import { useI18n } from "../I18n";
-import { isFor, targetLabel, targetsOf, type ContentTarget, type PageContent } from "./ContentLayer";
+import { isFor, isScan, keyOf, targetLabel, targetsOf, type ContentTarget, type PageContent } from "./ContentLayer";
+import { LangPicker } from "./LangPicker";
+import { OCR_LANGS } from "@/lib/tools";
+import { MAX_OCR_LANGS } from "@/lib/ocr-langs";
+import type { Family } from "@/lib/pdf/fonts";
+
+const FAMILY_KEYS: Record<Family, string> = { arimo: "ed.familySans", tinos: "ed.familySerif", cousine: "ed.familyMono" };
+
+// A row's kind in the objects list.
+const kindKey = (x: ContentTarget) =>
+  !("obj" in x) ? "ed.objText" : x.obj.kind === "image" ? "ed.objImage" : x.obj.kind === "path" ? "ed.objShape" : x.obj.kind === "shading" ? "ed.objGradient" : "ed.objGraphic";
 
 const COLORS = ["#111827", "#d33f6a", "#2f6fed", "#12a37f", "#e2662b", "#7b4fe0", "#ffffff"];
 const ALIGNS: { a: Align; icon: React.ReactNode; key: string }[] = [
@@ -25,7 +35,7 @@ const wrapAngle = (d: number) => ((((d % 360) + 540) % 360) - 180);
 // or object can have changed, and a list of everything on the page (for
 // things hidden under others, or too small to click).
 export function ContentPanel({
-  content, item, items, status, pageAspect, onPick, update, restore,
+  content, item, items, status, pageAspect, scan, ocrLang, onOcrLang, onReadScan, onPick, update, restore,
 }: {
   content: PageContent | "busy" | null;
   item: EditorItem | null; // the selected paraEdit or objEdit
@@ -33,6 +43,11 @@ export function ContentPanel({
   // The preview of the changes: being made, failed (with why), or a note on fonts.
   status: { busy: boolean; error: string | null; note: string | null };
   pageAspect: number; // the page's height ÷ width
+  // Reading a scanned page with OCR: not yet, under way, or how it went.
+  scan: "idle" | "busy" | "done" | "none" | "turned" | "failed";
+  ocrLang: string;
+  onOcrLang: (v: string) => void;
+  onReadScan: () => void;
   onPick: (t: ContentTarget, edit: boolean) => void;
   update: (p: Partial<EditorItem>, record?: boolean) => void;
   restore: () => void;
@@ -55,14 +70,33 @@ export function ContentPanel({
 
   const src = item?.source;
   const text = item?.kind === "paraEdit";
+  const scanItem = item?.kind === "scanEdit";
+  const scanPage = content && content !== "busy" && isScan(content);
 
   return (
     <div className="space-y-4" aria-live="polite">
       {!item && (
         <p className="text-[14px] text-muted">
           {content === "busy" ? <><Loader2 size={14} className="me-1.5 inline animate-spin" />{t("ed.reading")}</>
+            : scanPage && scan === "done" ? t("ed.scanHint")
+            : scanPage ? t("ed.scanPage")
             : list.length === 0 ? t("ed.noContent") : t("ed.editContentHint")}
         </p>
+      )}
+
+      {!item && scanPage && scan !== "done" && (
+        <div className="space-y-3" data-scan-reader>
+          <div>
+            <label htmlFor="scan-lang" className="mb-1.5 block text-[13px] font-medium text-ink-2">{t("ed.scanLang")}</label>
+            <LangPicker id="scan-lang" choices={[...OCR_LANGS]} max={MAX_OCR_LANGS} value={ocrLang} fallback="eng" restore onChange={onOcrLang} />
+          </div>
+          <button className="btn btn-quiet w-full" disabled={scan === "busy"} onClick={onReadScan}>
+            {scan === "busy" ? <><Loader2 size={16} className="animate-spin" /> {t("ed.scanReading")}</> : t("ed.scanRead")}
+          </button>
+          {scan === "none" && <p className="text-[13px] text-ink-2">{t("ed.scanNone")}</p>}
+          {scan === "turned" && <p className="text-[13px] text-ink-2">{t("ed.scanTurned")}</p>}
+          {scan === "failed" && <p role="alert" className="text-[13px] text-danger">{t("ed.scanFailed")}</p>}
+        </div>
       )}
 
       {item && src && item.removed && (
@@ -99,7 +133,40 @@ export function ContentPanel({
         </div>
       )}
 
-      {item && src && !item.removed && !text && (
+      {item && src && !item.removed && scanItem && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-[13px] font-medium text-ink-2">{t("ed.paragraphText")}</span>
+            <input className="field h-10 w-full text-[14px]" value={item.text ?? ""}
+              onChange={(e) => update({ text: e.target.value }, false)} onBlur={() => update({}, true)} />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-[13px] text-ink-2">
+              {t("ed.fontSize")}
+              <input type="number" min={4} max={200} step={0.5} className="field h-9 w-20"
+                value={Math.round((item.fontSize ?? src.size ?? 12) * 10) / 10}
+                onChange={(e) => { const v = Number(e.target.value); if (v >= 4 && v <= 200) update({ fontSize: v }); }} />
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-ink-2">
+              {t("ed.family")}
+              <select className="field h-9" value={item.family ?? "arimo"} onChange={(e) => update({ family: e.target.value as Family })}>
+                {(Object.keys(FAMILY_KEYS) as Family[]).map((f) => <option key={f} value={f}>{t(FAMILY_KEYS[f])}</option>)}
+              </select>
+            </label>
+          </div>
+          <div>
+            <p className="mb-1.5 text-[13px] text-ink-2">{t("ed.ink")}</p>
+            {swatches(item.color, (c) => update({ color: c }), t("ed.ink"))}
+          </div>
+          <div>
+            <p className="mb-1.5 text-[13px] text-ink-2">{t("ed.paper")}</p>
+            {swatches(item.fill, (c) => update({ fill: c }), t("ed.paper"))}
+          </div>
+          <p className="text-[13px] text-muted">{t("ed.scanLineHint")}</p>
+        </div>
+      )}
+
+      {item && src && !item.removed && !text && !scanItem && (
         <div className="space-y-3">
           <p className="text-[14px] font-medium text-ink">
             {targetLabel({ obj: { index: src.index, sig: src.sig ?? "", kind: src.kind ?? "path", box: item, angle: 0, fill: null, stroke: null, strokeWidth: 0, pixels: src.pixels } }, t)}
@@ -160,12 +227,16 @@ export function ContentPanel({
 
       {item && src && !item.removed && (
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-          <button className="btn btn-quiet btn-sm" aria-pressed={item.order === "front"} onClick={() => update({ order: item.order === "front" ? undefined : "front" })}>
-            <BringToFront size={15} /> {t("ed.bringToFront")}
-          </button>
-          <button className="btn btn-quiet btn-sm" aria-pressed={item.order === "back"} onClick={() => update({ order: item.order === "back" ? undefined : "back" })}>
-            <SendToBack size={15} /> {t("ed.sendToBack")}
-          </button>
+          {!scanItem && (
+            <>
+              <button className="btn btn-quiet btn-sm" aria-pressed={item.order === "front"} onClick={() => update({ order: item.order === "front" ? undefined : "front" })}>
+                <BringToFront size={15} /> {t("ed.bringToFront")}
+              </button>
+              <button className="btn btn-quiet btn-sm" aria-pressed={item.order === "back"} onClick={() => update({ order: item.order === "back" ? undefined : "back" })}>
+                <SendToBack size={15} /> {t("ed.sendToBack")}
+              </button>
+            </>
+          )}
           <button className="btn btn-quiet btn-sm text-danger" onClick={() => update({ removed: true })}>
             <Trash2 size={15} /> {t("ed.deleteItem")}
           </button>
@@ -194,13 +265,12 @@ export function ContentPanel({
           <ul className="mt-2 max-h-[260px] space-y-0.5 overflow-auto pe-1" data-objects-list>
             {[...list].reverse().map((x) => {
               const have = items.find((i) => isFor(i, x));
-              const key = "para" in x ? `p${x.para.parts[0].index}:${x.para.parts[0].sig}` : `o${x.obj.index}:${x.obj.sig}`;
               return (
-                <li key={key}>
+                <li key={keyOf(x)}>
                   <button className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[13px] hover:bg-surface-2 ${have && have.id === item?.id ? "bg-surface-2 font-medium" : ""}`}
                     onClick={() => onPick(x, false)}>
-                    <span className="w-14 shrink-0 text-[11px] uppercase tracking-wide text-muted">{"para" in x ? t("ed.objText") : t(x.obj.kind === "image" ? "ed.objImage" : x.obj.kind === "path" ? "ed.objShape" : x.obj.kind === "shading" ? "ed.objGradient" : "ed.objGraphic")}</span>
-                    <span className={`min-w-0 flex-1 truncate ${have?.removed ? "text-muted line-through" : ""}`}>{"para" in x ? (have && !have.removed ? have.text || targetLabel(x, t) : targetLabel(x, t)) : x.obj.pixels ? `${x.obj.pixels[0]}×${x.obj.pixels[1]}` : ""}</span>
+                    <span className="w-14 shrink-0 text-[11px] uppercase tracking-wide text-muted">{t(kindKey(x))}</span>
+                    <span className={`min-w-0 flex-1 truncate ${have?.removed ? "text-muted line-through" : ""}`}>{!("obj" in x) ? (have && !have.removed ? have.text || targetLabel(x, t) : targetLabel(x, t)) : x.obj.pixels ? `${x.obj.pixels[0]}×${x.obj.pixels[1]}` : ""}</span>
                   </button>
                 </li>
               );

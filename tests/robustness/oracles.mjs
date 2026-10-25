@@ -53,6 +53,17 @@ async function savePdf(o, i = 0) {
   return b;
 }
 // Same-shape checks for tools whose output should be the input, page for page.
+// Where pdf.js (the editor's renderer) shows a text item, as fractions of the page.
+function textFrame(it, vp) {
+  const [a, b, , , e, f2] = it.transform;
+  const len = Math.hypot(a, b) || 1;
+  const ux = a / len, uy = b / len;
+  const corners = [[e, f2], [e + ux * it.width, f2 + uy * it.width], [e - uy * it.height, f2 + ux * it.height], [e + ux * it.width - uy * it.height, f2 + uy * it.width + ux * it.height]]
+    .map(([x, y]) => vp.convertToViewportPoint(x, y)).map(([x, y]) => [x / vp.width, y / vp.height]);
+  const xs = corners.map((p) => p[0]), ys = corners.map((p) => p[1]);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+
 async function samePages(out, label, { rotateBy = null, keepAnnots = true, keepExtras = true, password } = {}) {
   const s = await pdfSummary(out.blob, password);
   result.info.out = { size: s.size, numPages: s.numPages, note: out.note };
@@ -335,18 +346,42 @@ try {
       }
       break;
     }
+    case "whiteout": {
+      // White-out drawn around page 1's first line, as it is shown: the line's
+      // first word must be gone from the file there (it may be elsewhere too,
+      // so there must be fewer of it), with every page still there.
+      const edit = await load("edit");
+      const doc = await refOpen(bytes, meta.password);
+      let mark = null, word = "", before = 0;
+      if (doc.numPages) {
+        const page = await doc.getPage(1);
+        const vp = page.getViewport({ scale: 1 });
+        const items = (await page.getTextContent()).items;
+        const it = items.find((t) => t.str.trim().split(" ")[0].length > 2);
+        if (it) {
+          const box = textFrame(it, vp), pad = 3 / Math.max(vp.width, vp.height);
+          mark = { x: box.x0 - pad, y: box.y0 - pad, w: box.x1 - box.x0 + 2 * pad, h: box.y1 - box.y0 + 2 * pad };
+          word = it.str.trim().split(" ")[0];
+          before = items.map((t) => t.str).join(" ").split(word).length - 1;
+        }
+      }
+      await doc.loadingTask.destroy();
+      result.info.word = word || "none";
+      if (!mark) break;
+      const [o] = await edit.editPdf(f, [{ id: "w", page: 0, kind: "whiteout", ...mark }], "edited");
+      await savePdf(o);
+      const s = await pdfSummary(o.blob);
+      if (!s.ok) problem(`whiteout: output unreadable (${s.error})`);
+      else {
+        if (refIn && s.numPages !== refIn.numPages) problem(`whiteout: page count ${refIn.numPages} -> ${s.numPages}`);
+        const after = (s.pages[0]?.text ?? "").split(word).length - 1;
+        if (after >= before) problem(`whiteout: "${word}" still in the file under the box (${before} -> ${after})`);
+      }
+      break;
+    }
     case "redact": {
       const { redact } = await load("security");
-      // Where pdf.js (the editor's renderer) shows a text item, as fractions of the page.
-      const frame = (it, vp) => {
-        const [a, b, , , e, f2] = it.transform;
-        const len = Math.hypot(a, b) || 1;
-        const ux = a / len, uy = b / len;
-        const corners = [[e, f2], [e + ux * it.width, f2 + uy * it.width], [e - uy * it.height, f2 + ux * it.height], [e + ux * it.width - uy * it.height, f2 + uy * it.width + ux * it.height]]
-          .map(([x, y]) => vp.convertToViewportPoint(x, y)).map(([x, y]) => [x / vp.width, y / vp.height]);
-        const xs = corners.map((p) => p[0]), ys = corners.map((p) => p[1]);
-        return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
-      };
+      const frame = textFrame;
       if (variant === "labels") {
         // A box drawn around each page's first line, exactly as it is shown;
         // that line must be gone afterwards, whatever the page's boxes and rotation.

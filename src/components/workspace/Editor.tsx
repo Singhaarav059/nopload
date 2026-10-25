@@ -40,10 +40,10 @@ const PRESET_NAMES = ["emails", "phones", "numbers", "cards", "ibans", "aadhaar"
 // How an item on the page is announced.
 const ITEM_LABELS: Record<EditorItem["kind"], string> = {
   text: "ed.text", image: "ed.image", rect: "ed.rect", ellipse: "ed.ellipse", line: "ed.line", path: "ed.draw",
-  highlight: "ed.highlight", whiteout: "ed.whiteout", textEdit: "ed.editText", paraEdit: "ed.editText", objEdit: "ed.object", ...FIELD_LABELS,
+  highlight: "ed.highlight", whiteout: "ed.whiteout", textEdit: "ed.editText", paraEdit: "ed.editText", objEdit: "ed.object", scanEdit: "ed.editText", ...FIELD_LABELS,
 };
 // Changes to the page's own content (Edit content), drawn by the preview rather than as items on top.
-const isContent = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit";
+const isContent = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit" || i.kind === "scanEdit";
 // Pages a signature can be copied to.
 const PLACEMENTS = ["all", "allButLast", "last", "custom"] as const;
 type Placement = (typeof PLACEMENTS)[number];
@@ -147,6 +147,9 @@ export function Editor({
   const [detected, setDetected] = useState<null | "busy" | number>(null);
   // Everything the page draws, for the Edit content tool.
   const [content, setContent] = useState<PageContent | null>(null);
+  // Reading a scanned page's lines with OCR (Edit content), and in which languages.
+  const [scanRead, setScanRead] = useState<{ page: number; state: "busy" | "done" | "none" | "turned" | "failed" } | null>(null);
+  const [scanLang, setScanLang] = useState("eng");
   // The page drawn from the file with the content changes made (Edit content),
   // for the changes it was made with; or why they can't be made.
   const [preview, setPreview] = useState<{ key: string; page: number; width: number; url: string; blob: Blob } | null>(null);
@@ -560,6 +563,19 @@ export function Editor({
     setCrops((mp) => new Map(mp).set(options.cropScope === "current" ? page : -1, r));
   };
 
+  const readScan = async () => {
+    const at = page;
+    setScanRead({ page: at, state: "busy" });
+    try {
+      const { scanLines } = await import("@/lib/pdf/scanedit");
+      const { lines, turned } = await scanLines(file, at, scanLang);
+      setContent((c) => (c && c.page === at ? { ...c, scan: lines } : c));
+      setScanRead({ page: at, state: turned ? "turned" : lines.length ? "done" : "none" });
+    } catch {
+      setScanRead({ page: at, state: "failed" });
+    }
+  };
+
   // ── Edit content: picking a paragraph or object starts a change to it
   // (one that changes nothing until something is changed).
   const pickContent = (x: ContentTarget, edit: boolean) => {
@@ -969,6 +985,7 @@ export function Editor({
             item={selected && isContent(selected) ? selected : null} items={contentItems}
             status={previewState.key === previewKey ? previewState : { busy: changes.length > 0, error: null, note: null }}
             pageAspect={size ? size.h / size.w : 1.414}
+            scan={scanRead?.page === page ? scanRead.state : "idle"} ocrLang={scanLang} onOcrLang={setScanLang} onReadScan={() => void readScan()}
             onPick={(x, edit) => { setTool("editText"); pickContent(x, edit); }}
             update={(p, record = true) => selected && patch(selected.id, p, record)}
             restore={() => {
@@ -976,7 +993,7 @@ export function Editor({
               const s = selected.source;
               patch(selected.id, {
                 x: s.x, y: s.y, w: s.w ?? selected.w, h: s.h ?? selected.h, text: s.was, fontSize: s.size ?? selected.fontSize, color: s.color, fill: s.fill,
-                stroke: s.stroke, align: s.align, rotate: undefined, flipX: undefined, flipY: undefined, removed: undefined, order: undefined, image: undefined,
+                stroke: s.stroke, align: s.align, family: selected.kind === "scanEdit" ? (s.font as EditorItem["family"]) : undefined, rotate: undefined, flipX: undefined, flipY: undefined, removed: undefined, order: undefined, image: undefined,
               });
             }} />
         )}

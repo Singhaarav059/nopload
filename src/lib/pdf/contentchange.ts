@@ -13,6 +13,10 @@ export function contentChanged(i: EditorItem) {
     return moved || Boolean(i.image || i.order || i.rotate || i.flipX || i.flipY) ||
       (i.fill ?? null) !== (s.fill ?? null) || (i.color ?? null) !== (s.color ?? null) || (i.stroke ?? s.stroke) !== s.stroke;
   }
+  if (i.kind === "scanEdit") {
+    return moved || (i.text ?? "") !== s.was || (i.family ?? "arimo") !== (s.font ?? "arimo") || (i.fill ?? null) !== (s.fill ?? null) ||
+      (i.color ?? null) !== (s.color ?? null) || (i.fontSize !== undefined && s.size !== undefined && !near(i.fontSize, s.size));
+  }
   return moved || (i.text ?? "") !== s.was || (i.color !== undefined && i.color !== s.color) ||
     (i.fontSize !== undefined && s.size !== undefined && !near(i.fontSize, s.size)) || (i.align !== undefined && i.align !== s.align);
 }

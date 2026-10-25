@@ -1,5 +1,5 @@
-// Editing a PDF's own text in a real browser (P1-15): the Edit text tool shows
-// the page's text objects, one is changed in a font that has the letters
+// Editing a PDF's own text in a real browser (P1-15): the Edit content tool shows
+// the page's text, one is changed in a font that has the letters
 // (kept) and one in a subset that lacks them (falls back to Tinos, which the
 // side panel and the result say). Two added rectangles have their layer order
 // swapped. The saved file is read back with pdf.js.
@@ -57,21 +57,22 @@ await suite(async ({ name, browser, test }) => {
     await open(page, "/en/edit-pdf");
     await pick(page, [reportPdf]);
     await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
-    await page.getByRole("button", { name: t["ed.editText"], exact: true }).click();
+    await page.getByRole("button", { name: t["ed.editContent"], exact: true }).click();
+    const retype = async (from, to) => {
+      await page.getByRole("button", { name: `${t["ed.objText"]}: ${from}`, exact: true }).dblclick();
+      const box = page.locator("[data-content-editing]");
+      await box.fill(to);
+      await box.press("Escape");
+    };
 
     step = "Helvetica text";
     // Text in Helvetica, which has every letter: kept.
-    await page.getByRole("button", { name: `${t["ed.editText"]}: Revenue grew 12%`, exact: true }).click();
-    const input = page.getByRole("textbox", { name: t["ed.editText"], exact: true });
-    await input.fill("Income grew 12%");
-    await input.press("Enter");
+    await retype("Revenue grew 12%", "Income grew 12%");
     await panel().getByText(t["ed.fontKept"].replace("{font}", "Helvetica")).waitFor();
 
     step = "Tinos text";
-    // Text in a Tinos subset without I, c, o or m: set in the full Tinos instead.
-    await page.getByRole("button", { name: `${t["ed.editText"]}: Revenue fell`, exact: true }).click();
-    await input.fill("Income fell");
-    await input.press("Enter");
+    // Text in a Tinos subset without I, c, o or m: set in the full Tinos instead, which the panel says once the page is redrawn.
+    await retype("Revenue fell", "Income fell");
     const fallback = panel().getByText(/Tinos instead/);
     await fallback.waitFor();
 

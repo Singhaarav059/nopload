@@ -110,17 +110,20 @@ export async function readPage(recognise: Recognise, image: Gray) {
   const doubtful = best!.score < 45;
   const floor = doubtful ? 70 : 25;
 
-  const words: { text: string; corners: [number, number][] }[] = [];
+  // `line`: which of the lines Tesseract read the word is on, in reading order.
+  const words: { text: string; corners: [number, number][]; line: number }[] = [];
+  let lineNo = 0;
   for (const block of page.blocks ?? [])
     for (const para of block.paragraphs)
       for (const line of para.lines) {
+        lineNo++;
         const b = line.baseline;
         const base = (x: number, fallback: number) =>
           b && b.has_baseline !== false && b.x1 !== b.x0 ? b.y0 + ((b.y1 - b.y0) * (x - b.x0)) / (b.x1 - b.x0) : fallback;
         for (const w of line.words) {
           if (!w.text.trim() || w.confidence < floor) continue;
           const { x0, y0, x1, y1 } = w.bbox;
-          words.push({ text: w.text, corners: [unmap(x0, base(x0, y1)), unmap(x1, base(x1, y1)), unmap(x0, y0)] });
+          words.push({ text: w.text, corners: [unmap(x0, base(x0, y1)), unmap(x1, base(x1, y1)), unmap(x0, y0)], line: lineNo });
         }
       }
   return { words, turns, skew, confidence: best!.score, doubtful: doubtful && words.length > 0 };

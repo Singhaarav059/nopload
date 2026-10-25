@@ -9,12 +9,15 @@
 //   - recolouring, reordering and replacing a picture change only that;
 //   - a paragraph's new text is wrapped to its width in its own font, at its
 //     line spacing and alignment, and the old text is gone from the file;
-//   - characters the font lacks come from bundled fonts, and say so.
+//   - characters the font lacks come from bundled fonts, and say so;
+//   - White-out empties what it covers (letters centred under it, picture
+//     pixels, shapes inside it); a retyped scan line empties its place in
+//     the paper's colour and the scan stays a JPEG.
 //
 //   node tests/editcontent.mjs
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
+import { PDFDocument, PDFName, StandardFonts, degrees, rgb } from "pdf-lib";
 import { load, openPdf, check, eq, root, vendorDir } from "./lib/load.mjs";
 
 // Bundled fonts the browser fetches from /vendor are read from disk.
@@ -318,6 +321,48 @@ await test("a change to an object that isn't there any more is refused", async (
     (e) => eq(e.code, "text_edit_failed", "error code"),
   );
   return "refused";
+});
+
+await test("White-out removes the text, picture and shapes under it, and only those", async () => {
+  // Over "quarterly results" on the paragraph's first line (letters only touching the box stay),
+  // the whole blue box, and part of the picture.
+  const pt = (x0, y0, x1, y1) => ({ x: x0 / 612, y: 1 - y1 / 792, w: (x1 - x0) / 612, h: (y1 - y0) / 792 });
+  const white = (r, i) => ({ id: `w${i}`, page: 0, kind: "whiteout", ...r });
+  const before = await raw(base);
+  const out = await save(base, [white(pt(92, 678, 172, 690), 0), white(pt(66, 374, 280, 486), 1), white(pt(340, 370, 420, 440), 2)]);
+  const text = await allText(out);
+  ok(!/quarterly|results/.test(text), `covered words still in the file: ${text.slice(0, 120)}`);
+  ok(/Our\b/.test(text) && /show steady growth/.test(text) && /every region/.test(text), `text around it went too: ${text.slice(0, 160)}`);
+  const after = await raw(out);
+  const blue = (o) => o.kind === "path" && o.fill && o.fill[0] < 40 && o.fill[2] > 200;
+  ok(before.some(blue) && !after.some(blue), "the blue box is gone from the file");
+  ok(after.some((o) => o.kind === "path" && o.stroke && o.stroke[0] > 180 && o.stroke[1] < 60), "the red line, not under any box, stays");
+  ok(after.some((o) => o.kind === "image" && o.pixels[0] === 120), "the picture, repainted, is still there");
+  return text.slice(0, 60);
+});
+
+await test("a retyped scan line empties its place in the paper's colour; the scan stays a JPEG", async () => {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([612, 792]);
+  page.drawImage(await doc.embedJpg(jpeg2), { x: 0, y: 0, width: 612, height: 792 });
+  const scan = await doc.save();
+  const box = { x: 0.1, y: 0.1, w: 0.5, h: 0.03 };
+  const item = {
+    id: "s1", page: 0, kind: "scanEdit", ...box, text: "Retyped line", fontSize: 14, color: "#202020", fill: "#f0e8d8", family: "tinos",
+    source: { index: -1, sig: "scan0:1", was: "Old line", ...box, size: 14, color: "#202020", fill: "#f0e8d8", font: "arimo" },
+  };
+  const out = await save(scan, [item]);
+  ok((await allText(out)).includes("Retyped line"), "new text");
+  const lib = await PDFDocument.load(out);
+  const filters = [];
+  for (const [, o] of lib.context.enumerateIndirectObjects()) {
+    if (o.dict && String(o.dict.get(PDFName.of("Subtype"))) === "/Image") filters.push(String(o.dict.get(PDFName.of("Filter"))));
+  }
+  ok(filters.includes("/DCTDecode"), `scan's filters: ${filters}`);
+  // Picked but unchanged: nothing is emptied or drawn.
+  const same = await save(scan, [{ ...item, text: "Old line", family: "arimo" }]);
+  ok(!(await allText(same)).trim(), "an unchanged line left the page alone");
+  return filters.join(",");
 });
 
 await test("every robustness fixture lists without failing", async () => {
