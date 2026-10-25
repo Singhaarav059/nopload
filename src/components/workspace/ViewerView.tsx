@@ -537,8 +537,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     };
     document.body.append(frame);
   };
-  // A fresh copy: Firefox won't download a file read back from IndexedDB (Recent) through a link.
-  const downloadFile = async () => save(new Blob([await file.arrayBuffer()], { type: file.type || "application/pdf" }), file.name);
+  const downloadFile = () => save(file, file.name);
 
   const total = ratios.length;
   const iconBtn = "vw-btn";
@@ -651,7 +650,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
           <div className="vw-actions">
             {canShare && <button type="button" role="menuitem" onClick={() => void shareFile()}><Share2 size={18} /> {t("viewer.share")}</button>}
             <button type="button" role="menuitem" onClick={printFile}><Printer size={18} /> {t("viewer.print")}</button>
-            <button type="button" role="menuitem" onClick={() => void downloadFile()}><Download size={18} /> {t("viewer.download")}</button>
+            <button type="button" role="menuitem" onClick={downloadFile}><Download size={18} /> {t("viewer.download")}</button>
             {!!marks.length && <button type="button" role="menuitem" onClick={() => void saveWithMarks()}><Highlighter size={18} /> {t("viewer.saveHighlights")}</button>}
           </div>
           <p className="vw-sheet-title">{t("viewer.more")}</p>

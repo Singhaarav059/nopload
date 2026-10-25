@@ -56,10 +56,33 @@ export async function recentFiles(): Promise<Recent[]> {
   return (await all()).map(({ id, name, size, type, opened, page, pages }) => ({ id, name, size, type, opened, page, pages }));
 }
 
-export async function openRecent(id: string): Promise<File | null> {
-  const row = await withStore<Row>("readonly", (s) => s.get(id));
-  if (!row) return null;
-  return new File([row.data], row.name, { type: row.type || "application/pdf", lastModified: row.opened });
+// The file's bytes are read while the database is still open: Firefox can't
+// read a file kept in IndexedDB once its connection has closed.
+export function openRecent(id: string): Promise<File | null> {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === "undefined") return resolve(null);
+    const open = indexedDB.open(DB, 1);
+    open.onupgradeneeded = () => open.result.createObjectStore(STORE, { keyPath: "id" });
+    open.onerror = () => resolve(null);
+    open.onsuccess = () => {
+      const db = open.result;
+      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
+      req.onerror = () => {
+        db.close();
+        resolve(null);
+      };
+      req.onsuccess = async () => {
+        const row = req.result as Row | undefined;
+        try {
+          resolve(row ? new File([await row.data.arrayBuffer()], row.name, { type: row.type || "application/pdf", lastModified: row.opened }) : null);
+        } catch {
+          resolve(null);
+        } finally {
+          db.close();
+        }
+      };
+    };
+  });
 }
 
 // Keeps a file just opened (or brings it to the top), within the limits.
@@ -69,7 +92,8 @@ export async function remember(file: File, pages: number) {
   void navigator.storage?.persist?.().catch(() => {});
   const id = idOf(file);
   const old = await withStore<Row>("readonly", (s) => s.get(id));
-  await withStore("readwrite", (s) => s.put({ id, name: file.name, size: file.size, type: file.type, opened: Date.now(), page: old?.page ?? 0, pages, data: old?.data ?? file } satisfies Row));
+  // The file as opened (in memory): a copy read back from here can't be stored again in Firefox.
+  await withStore("readwrite", (s) => s.put({ id, name: file.name, size: file.size, type: file.type, opened: Date.now(), page: old?.page ?? 0, pages, data: file } satisfies Row));
   const rows = await all();
   let bytes = 0;
   const drop = rows.filter((r, i) => (bytes += r.size) > MAX_BYTES || i >= MAX_FILES).map((r) => r.id);
