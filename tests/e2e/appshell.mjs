@@ -31,13 +31,16 @@ const DEVICES = [
 await suite(async ({ name, browser, test }) => {
   // Firefox has no isMobile; the phone and tablet layouts come from touch and screen size there too.
   const mobileOk = name !== "firefox";
+  // Pages are opened without waiting for "load": that also waits for every image
+  // and font, which in WebKit on CI has taken longer than the 15 s allowed. open()
+  // still waits for the page to be ready to use.
   for (const d of DEVICES) {
     await test(`${d.id}: its own navigation, no website parts, nothing wider than the screen`, async () => {
       const ctx = await browser.newContext({ locale: "en-US", ...d.ctx, ...(mobileOk ? {} : { isMobile: undefined }) });
       const page = await ctx.newPage();
       page.setDefaultTimeout(15000);
       try {
-        await open(page, "/en?app=1");
+        await open(page, "/en?app=1", { waitUntil: "domcontentloaded" });
         const html = await page.evaluate(() => ({ ...document.documentElement.dataset }));
         if (html.os !== d.os) throw new Error(`os ${html.os}`);
         if (mobileOk && (html.form !== d.form || html.nav !== d.nav)) throw new Error(`form ${html.form}, nav ${html.nav}`);
@@ -71,7 +74,7 @@ await suite(async ({ name, browser, test }) => {
     const page = await ctx.newPage();
     page.setDefaultTimeout(15000);
     try {
-      await open(page, "/en?app=1");
+      await open(page, "/en?app=1", { waitUntil: "domcontentloaded" });
       const nav = page.getByRole("navigation", { name: t["app.nav"] });
       await nav.locator('[data-tab="tools"]').click();
       const sheet = page.getByRole("dialog", { name: t["app.tools"] });
@@ -102,7 +105,7 @@ await suite(async ({ name, browser, test }) => {
     const page = await ctx.newPage();
     page.setDefaultTimeout(15000);
     try {
-      await open(page, "/en?app=1");
+      await open(page, "/en?app=1", { waitUntil: "domcontentloaded" });
       const side = page.getByRole("navigation", { name: t["app.nav"] });
       await side.getByRole("link", { name: t["tool.merge.name"], exact: true }).click();
       await page.waitForURL(/\/en\/merge-pdf/);
@@ -126,7 +129,7 @@ await suite(async ({ name, browser, test }) => {
     const page = await ctx.newPage();
     page.setDefaultTimeout(15000);
     try {
-      await open(page, "/en");
+      await open(page, "/en", { waitUntil: "domcontentloaded" });
       const bar = page.getByRole("dialog", { name: t["cmd.label"] });
       // The shortcut is listened for once the page has started; a key pressed
       // before that does nothing, so press until the bar opens.
@@ -157,7 +160,7 @@ await suite(async ({ name, browser, test }) => {
     const ctx = await browser.newContext({ locale: "en-US", ...DEVICES[0].ctx, ...(mobileOk ? {} : { isMobile: undefined }) });
     const page = await ctx.newPage();
     try {
-      await open(page, "/en?app=0");
+      await open(page, "/en?app=0", { waitUntil: "domcontentloaded" });
       if (await page.evaluate(() => document.documentElement.dataset.app)) throw new Error("app mode on the website");
       if (await page.getByRole("navigation", { name: t["app.nav"] }).count()) throw new Error("app navigation shown");
       await page.locator("[data-site-footer]").waitFor({ state: "attached" });
