@@ -454,6 +454,12 @@ export function Editor({
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
       // A click without a drag drops a default-sized shape.
+      // A click without a drag: areas (erase, white-out, marks, links) aren't made at all, so a stray click changes nothing.
+      if (["erase", "whiteout", "highlight", "underline", "strike", "link", "line", "arrow"].includes(it.kind) && it.w < 0.01 && it.h < 0.006) {
+        items.set((l) => l.filter((x) => x.id !== it.id), false);
+        setSel(null);
+        return;
+      }
       if (it.kind !== "path" && it.kind !== "line" && it.kind !== "arrow" && (it.w < 0.01 || it.h < 0.006)) {
         const def = isFieldKind(it.kind) ? fieldSize(it, (size?.w ?? 1) / (size?.h ?? 1.414))
           : it.kind === "link" || it.kind === "underline" || it.kind === "strike" ? { w: 0.25, h: 0.025 } : { w: 0.18, h: 0.08 };
@@ -910,7 +916,8 @@ export function Editor({
                 );
               }
               if (i.kind === "path" || i.kind === "line" || i.kind === "arrow") {
-                return <div key={i.id} {...common} className={`absolute cursor-move ${frame}`} style={{ ...boxStyle, minWidth: 6, minHeight: 6 }} />;
+                // A drawing selected shows a light dashed outline, not a box (it isn't one), and no resize handle.
+                return <div key={i.id} {...common} className={`absolute cursor-move rounded-sm ${isSel ? "outline-dashed outline-1 outline-offset-4 outline-[color-mix(in_oklab,var(--accent)_70%,transparent)]" : ""}`} style={{ ...boxStyle, minWidth: 6, minHeight: 6 }} />;
               }
               if (i.kind === "image") {
                 // eslint-disable-next-line @next/next/no-img-element
