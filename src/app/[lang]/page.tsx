@@ -36,17 +36,17 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       {/* Hero: what this is, a way in for people who don't know which tool
           they need, and the most used tools. The scene says the rest: the
           work happens in this window, and the cloud gets nothing. */}
-      <section className="relative grid items-center gap-10 pb-10 pt-10 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:gap-8 lg:pb-16 lg:pt-20">
+      <section data-app-hero className="relative grid items-center gap-10 pb-10 pt-10 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:gap-8 lg:pb-16 lg:pt-20">
         <div className="flex min-w-0 flex-col">
-          <p data-cat="organize" className="fade-up pill self-start" style={{ "--d": "0ms" } as React.CSSProperties}>
+          <p data-web-only data-cat="organize" className="fade-up pill self-start" style={{ "--d": "0ms" } as React.CSSProperties}>
             <ShieldCheck size={14} strokeWidth={2} aria-hidden />
             <span className="tabular">{local}/{TOOLS.length}</span>
             {t["home.privateBadge"]}
           </p>
-          <h1 className="display mt-6 max-w-[15ch] text-[2.75rem] sm:text-[4rem] lg:text-[4.6rem]">
+          <h1 data-app-title className="display mt-6 max-w-[15ch] text-[2.75rem] sm:text-[4rem] lg:text-[4.6rem]">
             <Words text={t["home.title"]} />
           </h1>
-          <p className="fade-up mt-6 max-w-[540px] text-pretty text-[17px] leading-[1.6] text-ink-2 sm:text-[18px]" style={{ "--d": "450ms" } as React.CSSProperties}>
+          <p data-web-only className="fade-up mt-6 max-w-[540px] text-pretty text-[17px] leading-[1.6] text-ink-2 sm:text-[18px]" style={{ "--d": "450ms" } as React.CSSProperties}>
             {t["home.subtitle"]}
           </p>
           <div className="fade-up mt-8 max-w-[600px]" style={{ "--d": "600ms" } as React.CSSProperties}>
@@ -67,26 +67,26 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
                 </li>
               ))}
             </ul>
-            <a href="#tools" className="link-u mt-5 inline-flex items-center gap-1.5 text-[14px] font-medium text-ink-2 hover:text-ink">
+            <a data-web-only href="#tools" className="link-u mt-5 inline-flex items-center gap-1.5 text-[14px] font-medium text-ink-2 hover:text-ink">
               {format(t["home.browseAll"], { n: TOOLS.length })} <ArrowDown size={14} aria-hidden />
             </a>
           </nav>
         </div>
-        <div className="fade-up hidden sm:block" style={{ "--d": "200ms" } as React.CSSProperties}>
+        <div data-web-only className="fade-up hidden sm:block" style={{ "--d": "200ms" } as React.CSSProperties}>
           <HeroScene badge={t["home.privateBadge"]} />
         </div>
       </section>
 
-      <div className="mt-20 sm:mt-28">
+      <div data-web-only className="mt-20 sm:mt-28">
         <HowGuide />
       </div>
 
-      <div className="mt-24 sm:mt-32">
+      <div data-app-tight className="mt-24 sm:mt-32">
         <ToolGrid />
       </div>
 
       {/* Why the files stay put, and the promise with its proof. */}
-      <section aria-labelledby="home-cloud" className="relative mt-28 grid items-center gap-10 overflow-hidden rounded-[36px] bg-surface-2 px-6 py-12 sm:px-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+      <section data-web-only aria-labelledby="home-cloud" className="relative mt-28 grid items-center gap-10 overflow-hidden rounded-[36px] bg-surface-2 px-6 py-12 sm:px-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
         <div aria-hidden className="relative mx-auto aspect-[5/4] w-full max-w-[440px]">
           <div data-cat="organize" className="blob inset-[8%] bg-(--tint)" />
           <div className="absolute end-[6%] top-[0%] w-[34%]">
@@ -133,7 +133,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       </section>
 
       {/* Workflows: a few tools in a row, run as one. */}
-      <section aria-labelledby="home-workflows" className="mt-28 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+      <section data-web-only aria-labelledby="home-workflows" className="mt-28 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
         <div className="min-w-0">
           <p className="reveal eyebrow">{t["nav.workflows"]}</p>
           <h2 id="home-workflows" className="reveal display mt-3 max-w-[18ch] text-[2rem] sm:text-[2.75rem]">{t["home.workflowsTitle"]}</h2>
@@ -161,7 +161,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       </section>
 
       {/* What makes it different, in three soft cards. */}
-      <section aria-labelledby="home-why" className="mt-28">
+      <section data-web-only aria-labelledby="home-why" className="mt-28">
         <h2 id="home-why" className="reveal display text-[2rem] sm:text-[2.75rem]">{t["home.whyTitle"]}</h2>
         <dl className="mt-10 grid gap-4 md:grid-cols-3">
           {([

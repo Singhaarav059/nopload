@@ -30,7 +30,8 @@ const brochure = join(downloads, "brochure.pdf");
   const doc = await PDFDocument.create();
   const helv = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const photo = await doc.embedJpg(readFileSync(fixture("images/motion.jpg")));
+  // A copy: pdf-lib reads the bytes from the start of their buffer, and newer Node can hand a small file back inside a larger one.
+  const photo = await doc.embedJpg(new Uint8Array(readFileSync(fixture("images/motion.jpg"))));
   const p = doc.addPage([612, 792]);
   p.drawText("Annual report", { x: 72, y: 720, size: 24, font: bold });
   OLD.forEach((l, i) => p.drawText(l, { x: 72, y: 680 - i * 16, size: 12, font: helv }));

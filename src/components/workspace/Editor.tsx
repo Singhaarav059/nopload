@@ -19,6 +19,8 @@ import { ContentLayer, itemFor, isFor, type ContentTarget, type PageContent } fr
 import { ContentPanel } from "./ContentPanel";
 import { contentChanged } from "@/lib/pdf/contentchange";
 import { linkTarget } from "@/lib/pdf/links";
+import { scratchOut, loop } from "@/lib/gestures";
+import { haptic } from "@/lib/device";
 import { AutofillPanel } from "./AutofillPanel";
 import type { PresetName } from "@/lib/pdf/security";
 import type { PageText } from "@/lib/pdf/text";
@@ -119,6 +121,10 @@ export function Editor({
   const [sizes, setSizes] = useState<Size[]>([]);
   const [page, setPage] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
   const [fit, setFit] = useState(640);
   const [rendered, setRendered] = useState<{ key: string; url: string } | null>(null);
   const items = useHistory<EditorItem[]>([]);
@@ -133,6 +139,15 @@ export function Editor({
   const [eraserSize, setEraserSize] = useState(14);
   // The Eraser stroke under way, drawn as a track until it's lifted.
   const [erasing, setErasing] = useState<string | null>(null);
+  // A loop drawn with the pen around part of the page: what to do with it is asked next to it.
+  const [lasso, setLasso] = useState<{ page: number; box: FracRect } | null>(null);
+  // Where something was just crossed out: a puff of dust there for a moment.
+  const [poofs, setPoofs] = useState<{ id: string; page: number; box: FracRect }[]>([]);
+  const poof = (pg: number, box: FracRect) => {
+    const id = uid();
+    setPoofs((l) => [...l, { id, page: pg, box }]);
+    setTimeout(() => setPoofs((l) => l.filter((x) => x.id !== id)), 700);
+  };
   // The stamp the Stamp tool places next.
   const [stampPick, setStampPick] = useState<{ text: string; color: string }>({ text: "", color: STAMPS[0][1] });
   const [pad, setPad] = useState<null | "signature" | "initials" | "stamp">(null);
@@ -492,6 +507,27 @@ export function Editor({
     if (hit.includes(sel ?? "")) setSel(null);
   };
 
+  // What a loop's choice does to the area it went round, as one step to undo.
+  const applyLasso = (what: "highlight" | "whiteout" | "erase") => {
+    if (!lasso) return;
+    const { page: pg, box } = lasso;
+    setLasso(null);
+    if (what === "erase") {
+      const pw = size?.w ?? 612, ph = size?.h ?? 792;
+      const wide = box.w * pw >= box.h * ph;
+      const mid = wide ? box.y + box.h / 2 : box.x + box.w / 2;
+      const points: [number, number][] = wide ? [[box.x, mid], [box.x + box.w, mid]] : [[mid, box.y], [mid, box.y + box.h]];
+      const it: EditorItem = { id: uid(), page: pg, kind: "erase", ...box, color: "#000000", fill: null, stroke: wide ? box.h * ph : box.w * pw, points };
+      items.set((l) => [...l, it]);
+      poof(pg, box);
+      finishErase(it);
+      return;
+    }
+    const it: EditorItem = { id: uid(), page: pg, kind: what, ...box, color: what === "highlight" ? "#facc15" : "#ffffff", fill: null, stroke: style.stroke };
+    items.set((l) => [...l, it]);
+    setSel(it.id);
+  };
+
   const onUp = () => {
     const d = drag.current;
     drag.current = null;
@@ -506,6 +542,32 @@ export function Editor({
       if (it.kind === "erase") {
         finishErase(it);
         return;
+      }
+      // Scribbled over something with the pen: crossed out, as on paper. The
+      // scribble becomes an eraser stroke along its band, as wide as the band.
+      if (it.kind === "path" && it.points) {
+        const pw = size?.w ?? 612, ph = size?.h ?? 792;
+        const box = scratchOut(it.points.map(([a, b]) => [a * pw, b * ph]));
+        if (box) {
+          const wide = box.w >= box.h;
+          const band = (wide ? box.h : box.w) + 6;
+          const mid = wide ? (box.y + box.h / 2) / ph : (box.x + box.w / 2) / pw;
+          const ends: [number, number][] = wide ? [[box.x / pw, mid], [(box.x + box.w) / pw, mid]] : [[mid, box.y / ph], [mid, (box.y + box.h) / ph]];
+          const erase: EditorItem = { ...it, kind: "erase", color: "#000000", fill: null, stroke: Math.max(band, eraserSize), points: ends };
+          items.set((l) => l.map((o) => (o.id === it.id ? erase : o)), false);
+          poof(it.page, { x: box.x / pw, y: box.y / ph, w: box.w / pw, h: box.h / ph });
+          haptic("done");
+          finishErase(erase);
+          return;
+        }
+        // A loop around something: it's picked, and the choices show beside it.
+        const ring = toolId === "edit" ? loop(it.points.map(([a, b]) => [a * pw, b * ph])) : null;
+        if (ring) {
+          items.set((l) => l.filter((o) => o.id !== it.id), false);
+          setLasso({ page: it.page, box: { x: ring.x / pw, y: ring.y / ph, w: ring.w / pw, h: ring.h / ph } });
+          haptic();
+          return;
+        }
       }
       // A click without a drag drops a default-sized shape.
       // A click without a drag: areas (erase, white-out, marks, links) aren't made at all, so a stray click changes nothing.
@@ -538,6 +600,51 @@ export function Editor({
     const p = frac(e);
     drag.current = { kind, id: it.id, x0: p.x, y0: p.y, orig: { x: it.x, y: it.y, w: it.w, h: it.h } };
   };
+
+  // Pinch to zoom: two fingers on a touch screen, or a trackpad pinch (which
+  // browsers send as a wheel with Ctrl). Two fingers stop any stroke the
+  // first one started.
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    let pinch: { d: number; z: number } | null = null;
+    const gap = (e: TouchEvent) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const clamp = (z: number) => Math.min(3, Math.max(0.5, +z.toFixed(2)));
+    const start = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      const d = drag.current;
+      drag.current = null;
+      if (d?.kind === "new" && d.id) items.set((l) => l.filter((o) => o.id !== d.id), false);
+      setErasing(null);
+      pinch = { d: gap(e), z: zoomRef.current };
+    };
+    const move = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      setZoom(clamp(pinch.z * (gap(e) / pinch.d)));
+    };
+    const end = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch = null;
+    };
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => clamp(z * Math.exp(-e.deltaY / 200)));
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", end);
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+      el.removeEventListener("wheel", wheel);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keyboard: delete, undo/redo, nudge.
   useEffect(() => {
@@ -913,6 +1020,27 @@ export function Editor({
               <SuggestionBox key={s.id} s={s} onAccept={() => void acceptSuggestions([s])} onReject={() => setSuggestions((l) => l.filter((x) => x !== s))} />
             ))}
 
+            {/* Just crossed out: dust where it was */}
+            {poofs.filter((x) => x.page === page).map((x) => (
+              <span key={x.id} aria-hidden data-poof className="poof pointer-events-none absolute"
+                style={{ left: `${x.box.x * 100}%`, top: `${x.box.y * 100}%`, width: `${x.box.w * 100}%`, height: `${x.box.h * 100}%` }}>
+                {Array.from({ length: 10 }, (_, k) => <i key={k} style={{ "--k": k } as React.CSSProperties} />)}
+              </span>
+            ))}
+
+            {/* A loop's area, and what to do with it */}
+            {lasso && lasso.page === page && tool === "path" && (
+              <div data-lasso className="lasso pointer-events-none absolute"
+                style={{ left: `${lasso.box.x * 100}%`, top: `${lasso.box.y * 100}%`, width: `${lasso.box.w * 100}%`, height: `${lasso.box.h * 100}%` }}>
+                <div role="toolbar" aria-label={t("ed.loopActions")} className="lasso-bar pointer-events-auto" onPointerDown={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => applyLasso("highlight")}><Highlighter size={15} /> {t("ed.highlight")}</button>
+                  <button type="button" onClick={() => applyLasso("erase")}><Eraser size={15} /> {t("ed.lassoErase")}</button>
+                  <button type="button" onClick={() => applyLasso("whiteout")}><Square size={15} /> {t("ed.whiteout")}</button>
+                  <button type="button" aria-label={t("nav.close")} onClick={() => setLasso(null)}><X size={15} /></button>
+                </div>
+              </div>
+            )}
+
             {/* Redaction marks */}
             {pageMarks.map((m) => (
               <div key={m.id} className="group absolute bg-black/80 outline outline-2 outline-[var(--danger)]"
@@ -1220,6 +1348,9 @@ export function Editor({
           <p className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">
             {t(tool === "erase" || selected?.kind === "erase" ? "ed.eraseHint" : "ed.whiteoutHint")}
           </p>
+        )}
+        {toolId === "edit" && tool === "path" && (
+          <p data-scribble-hint className="rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">{t("ed.scribbleHint")} {t("ed.loopHint")}</p>
         )}
         {toolId === "edit" && tool === "erase" && (
           <label className="flex items-center gap-2 text-[13px] text-ink-2">

@@ -6,6 +6,7 @@ import { Download } from "lucide-react";
 import { Logo } from "./Logo";
 import { Friend } from "./Studio";
 import { useI18n } from "./I18n";
+import { InstallGuide } from "./InstallGuide";
 import { BRAND, OPERATOR } from "@/lib/brand";
 import { REPO_URL, STATIC } from "@/lib/mode";
 
@@ -49,7 +50,7 @@ export function Footer() {
   ];
 
   return (
-    <footer className="relative isolate mt-32 px-3 pb-3 sm:px-4 sm:pb-4">
+    <footer data-site-footer className="relative isolate mt-32 px-3 pb-3 sm:px-4 sm:pb-4">
       <div className="relative mx-auto max-w-[1400px] overflow-hidden rounded-[36px] bg-surface-2">
         <div className="mx-auto grid max-w-[1240px] grid-cols-2 gap-x-6 gap-y-10 px-6 pb-10 pt-16 sm:px-10 md:grid-cols-[1.6fr_repeat(4,1fr)]">
           <div className="col-span-2 md:col-span-1">
@@ -58,7 +59,7 @@ export function Footer() {
             <button onClick={doInstall} className="btn btn-quiet btn-sm mt-6">
               <Download size={15} strokeWidth={1.75} /> {t("foot.install")}
             </button>
-            {hint && <p className="rise mt-2 max-w-[260px] text-[13px] text-muted">{t("install.manual")}</p>}
+            {hint && <div className="rise mt-3 max-w-[320px]"><InstallGuide /></div>}
           </div>
           {cols.map((c) => (
             <div key={c.title}>

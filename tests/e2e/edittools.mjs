@@ -1,5 +1,6 @@
 // Edit PDF's toolbar and markup tools in a real browser: every tool is named
-// under its icon; the Eraser removes text with no box left; a stamp, a tick,
+// under its icon; the Eraser removes text with no box left; a scribble with
+// the pen crosses a word out; a stamp, a tick,
 // an arrow, a note and a link are added. The saved file is read back: the
 // erased words are gone, the stamp's word is there, and the note and link are
 // real annotations.
@@ -27,12 +28,43 @@ const letter = join(downloads, "letter.pdf");
 }
 
 await suite(async ({ name, browser, test }) => {
-  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 1100 } });
+  // Tall enough for the whole page: Firefox drops pointer events below the window, so a stroke there never ends.
+  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 1700 } });
   const page = await ctx.newPage();
   page.setDefaultTimeout(20000);
   const panel = () => page.locator("aside");
   const tool = (key) => page.getByRole("toolbar").getByRole("button", { name: t[key], exact: true });
   let step = "";
+  // The saved file's text, and when a word that should be gone is still there,
+  // what the page held when it was saved: the evidence for a failure seen only
+  // on CI's faster machines.
+  const saveText = async (label) => {
+    const [dl] = await Promise.all([
+      page.waitForEvent("download", { timeout: 60000 }),
+      page.getByRole("button", { name: t["tool.edit.action"], exact: true }).locator("visible=true").first().click(),
+    ]);
+    const saved = join(downloads, `${name}-${label}.pdf`);
+    await dl.saveAs(saved);
+    const bytes = new Uint8Array(readFileSync(saved));
+    const pdf = await getDocument({ data: bytes.slice(), verbosity: 0 }).promise;
+    return { text: (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(" "), size: bytes.length };
+  };
+  // The page image's box once the layout has stopped moving: picking a tool
+  // changes the side panel, which can resize the page a moment later.
+  const settledBox = async () => {
+    let last = null;
+    for (let i = 0; i < 40; i++) {
+      const b = await page.locator("main img").first().boundingBox();
+      if (last && b && Math.abs(b.x - last.x) < 0.5 && Math.abs(b.y - last.y) < 0.5 && Math.abs(b.width - last.width) < 0.5) return b;
+      last = b;
+      await page.waitForTimeout(150);
+    }
+    return last;
+  };
+  const evidence = async (first) => {
+    const items = await page.evaluate(() => [...document.querySelectorAll("[data-item]")].map((e) => e.dataset.item).join(",") || "none");
+    return `saved ${first.size} B of ${readFileSync(letter).length} B, items on page: ${items}`;
+  };
   await test("labelled tools; Eraser, stamp, tick, arrow, note and link", async () => {
     try {
       step = "open";
@@ -135,6 +167,80 @@ await suite(async ({ name, browser, test }) => {
       return text.slice(0, 70);
     } catch (e) {
       await page.screenshot({ path: join(downloads, `${name}-failed.png`) }).catch(() => {});
+      throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
+    }
+  });
+
+  await test("a scribble with the pen crosses a word out", async () => {
+    try {
+      step = "open";
+      await open(page, "/en/edit-pdf");
+      await pick(page, [letter]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      step = "scribble";
+      // Back and forth over "business." (Helvetica 14 pt, x 202-262, baseline 660), as a hand would.
+      await tool("ed.draw").click();
+      const box = await settledBox();
+      const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
+      await page.mouse.move(...at(200, 664));
+      await page.mouse.down();
+      for (let k = 0; k < 7; k++) await page.mouse.move(...at(k % 2 ? 200 : 264, 662 + (k % 3) * 2), { steps: 6 });
+      await page.mouse.up();
+      await page.locator("[data-poof]").first().waitFor({ state: "attached", timeout: 2000 });
+      if (await page.locator("[data-item=path]").count()) throw new Error("the scribble stayed as a drawing");
+      await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
+      step = "save";
+      const first = await saveText("scribbled");
+      const text = first.text;
+      if (/business/.test(text)) throw new Error(`crossed-out word still there: ${text} (${await evidence(first)})`);
+      if (!/Thank you for your/.test(text) || !/SECRET/.test(text)) throw new Error(`text around it went: ${text}`);
+      return text.slice(0, 70);
+    } catch (e) {
+      await page.screenshot({ path: join(downloads, `${name}-scribble-failed.png`) }).catch(() => {});
+      throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
+    }
+  });
+
+  await test("a loop with the pen picks an area: highlight it, or erase it", async () => {
+    try {
+      step = "open";
+      await open(page, "/en/edit-pdf");
+      await pick(page, [letter]);
+      await page.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0), null, { timeout: 30000 });
+      let box;
+      const at = (px, py) => [box.x + (box.width * px) / 612, box.y + box.height * (1 - py / 792)];
+      // A loop round a centre in page points, rx by ry.
+      const ring = async (cx, cy, rx, ry) => {
+        await page.mouse.move(...at(cx + rx, cy));
+        await page.mouse.down();
+        for (let k = 1; k <= 36; k++) await page.mouse.move(...at(cx + Math.cos((k / 36) * Math.PI * 2) * rx, cy + Math.sin((k / 36) * Math.PI * 2) * ry));
+        await page.mouse.up();
+      };
+      await tool("ed.draw").click();
+      box = await settledBox();
+      step = "highlight";
+      // Round "Dear customer," (x 72-170, baseline 700).
+      await ring(120, 704, 60, 14);
+      const bar = page.getByRole("toolbar", { name: t["ed.loopActions"] });
+      await bar.waitFor({ timeout: 3000 });
+      if (await page.locator("[data-item=path]").count()) throw new Error("the loop stayed as a drawing");
+      await bar.getByRole("button", { name: t["ed.highlight"], exact: true }).click();
+      if ((await page.locator("[data-item=highlight]").count()) !== 1) throw new Error("no highlight");
+      step = "erase";
+      await tool("ed.draw").click();
+      box = await settledBox();
+      // Round "Thank you" (x 72-136, baseline 660).
+      await ring(104, 664, 38, 12);
+      await bar.getByRole("button", { name: t["ed.lassoErase"], exact: true }).click();
+      await page.waitForFunction(() => document.querySelector("main img[data-preview]"), null, { timeout: 30000 });
+      step = "save";
+      const first = await saveText("looped");
+      const text = first.text;
+      if (/Thank/.test(text)) throw new Error(`erased words still there: ${text} (${await evidence(first)})`);
+      if (!/Dear customer/.test(text) || !/business/.test(text)) throw new Error(`text around it went: ${text}`);
+      return text.slice(0, 70);
+    } catch (e) {
+      await page.screenshot({ path: join(downloads, `${name}-loop-failed.png`) }).catch(() => {});
       throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
     }
   });

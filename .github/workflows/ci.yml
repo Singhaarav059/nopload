@@ -2,10 +2,11 @@ name: CI
 
 # Every push, on any branch, so a problem shows before it reaches main;
 # main only takes changes whose run is green (branch protection, see
-# docs/ci.md), and the site deploys from main.
+# docs/ci.md), and the site deploys from main. A pull request shows the
+# checks of its branch's push run (they're the same commit), so there's no
+# second run for the pull request itself.
 on:
   push:
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -62,7 +63,7 @@ jobs:
   e2e:
     name: End-to-end (${{ matrix.browser }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -149,6 +150,18 @@ jobs:
       - name: Sign and editor
         if: success() || failure()
         run: npm run test:e2e:sign -- ${{ matrix.browser }}
+      - name: Editor tools (eraser, scribble, stamps, notes, links)
+        if: success() || failure()
+        run: npm run test:e2e:edittools -- ${{ matrix.browser }}
+      - name: Editor content (paragraphs, objects, find and replace)
+        if: success() || failure()
+        run: npm run test:e2e:editcontent -- ${{ matrix.browser }}
+      - name: Editing the page's text
+        if: success() || failure()
+        run: npm run test:e2e:textedit -- ${{ matrix.browser }}
+      - name: Fill and create forms
+        if: success() || failure()
+        run: npm run test:e2e:forms -- ${{ matrix.browser }}
       - name: Browser add-on handoff
         if: matrix.browser == 'chromium' && (success() || failure())
         run: node scripts/ci-report.mjs "Browser add-on handoff" npm run test:e2e:extension
@@ -167,6 +180,9 @@ jobs:
       - name: Home page promise
         if: success() || failure()
         run: npm run test:e2e:promise -- ${{ matrix.browser }}
+      - name: Installed app frame on each device
+        if: success() || failure()
+        run: npm run test:e2e:appshell -- ${{ matrix.browser }}
       - name: Office to PDF with LibreOffice, first visit
         if: matrix.browser == 'chromium'
         run: npm run test:e2e-office
@@ -205,7 +221,7 @@ jobs:
   pdf:
     name: PDF engine tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -294,6 +310,28 @@ jobs:
         run: npm run test:redact-trust
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:stamps
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:sheets
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:cleanscan
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:a11y
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:split
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:targetsize
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:forms
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:formsdetect
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:editcontent
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:textedit
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:scanner
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:gestures
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:office
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}

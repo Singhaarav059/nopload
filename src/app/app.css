@@ -1,0 +1,546 @@
+/* The installed app: the frame around the pages (src/components/AppShell.tsx)
+   and how it behaves on each system. Keyed off <html>:
+     data-os    ios | ipados | android | mac | windows | linux | chromeos
+     data-form  phone | tablet | desktop
+     data-app   standalone | wco      (opened as an installed app)
+     data-nav   tabs | rail | sidebar | fluent   (the navigation it gets)
+   set before the first paint by src/lib/device.ts. */
+
+/* Touch screens, app or not: no grey flash on tap, no double-tap delay. */
+:root:is([data-form="phone"], [data-form="tablet"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+:root:is([data-form="phone"], [data-form="tablet"]) :is(a, button, label, input, select, textarea) {
+  touch-action: manipulation;
+}
+
+/* ---------- App mode: what changes for every system ---------- */
+:root[data-app] {
+  --tabbar-h: 0px;
+  --side-w: 0px;
+  overscroll-behavior: none;
+}
+:root[data-app][data-nav="tabs"] { --tabbar-h: 54px; }
+:root[data-app][data-nav="tabs"][data-os="android"] { --tabbar-h: 80px; }
+:root[data-app][data-nav="rail"] { --side-w: 80px; }
+:root[data-app][data-nav="sidebar"] { --side-w: 264px; }
+:root[data-app][data-nav="fluent"] { --side-w: 280px; }
+
+:root[data-app] body {
+  overscroll-behavior-y: none;
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-inline-start: var(--side-w);
+}
+:root[data-app][data-sheet] body { overflow: hidden; }
+
+/* An app's controls aren't text to select or links to preview. */
+:root[data-app] :is(nav, header, button, .btn, .app-tab, .app-side-item, .app-launch) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The site's marketing parts stay on the website. */
+:root[data-app] :is([data-web-only], [data-site-footer]) { display: none !important; }
+
+/* The header becomes the app's title bar: flat, edge to edge, under the
+   status bar on phones and in the window's title bar where it's ours. */
+:root[data-app] header[data-site-header] {
+  padding: env(safe-area-inset-top) 0 0;
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+}
+:root[data-app] header[data-site-header] > div {
+  max-width: none;
+  height: 52px;
+  border-radius: 0;
+  padding-inline: 16px 10px;
+}
+:root[data-app] header[data-site-header] .header-scroll { display: none; }
+:root[data-app][data-form="phone"] header[data-site-header] > div { height: 46px; }
+/* Bars that stick under the header stick under the app's shorter one. */
+:root[data-app] [data-sticky-bar] { top: calc(52px + env(safe-area-inset-top)); }
+:root[data-app][data-form="phone"] [data-sticky-bar] { top: calc(46px + env(safe-area-inset-top)); }
+
+/* Desktop window with its own title bar (window-controls-overlay): the
+   header sits in the title bar's space and drags the window; the system's
+   buttons keep their corner. */
+:root[data-app="wco"] header[data-site-header] {
+  padding: 0;
+  padding-inline-start: env(titlebar-area-x, 0);
+  width: env(titlebar-area-width, 100%);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+:root[data-app="wco"] header[data-site-header] > div { height: env(titlebar-area-height, 40px); }
+:root[data-app="wco"] header[data-site-header] :is(a, button, input, select) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* ---------- Tab bar (phones, and narrow windows) ---------- */
+.app-tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: app-rise 420ms var(--ease-out) both;
+}
+.app-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--muted);
+  cursor: default;
+}
+.app-tab-icon {
+  display: grid;
+  place-items: center;
+  transition: transform 300ms var(--ease-spring), background-color 300ms var(--ease-out), color 200ms;
+}
+.app-tab:active .app-tab-icon { transform: scale(0.84); transition-duration: 90ms; }
+.app-tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* iPhone: frosted, hairline on top, icons tinted when chosen. */
+[data-tabbar="ios"] {
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  backdrop-filter: blur(22px) saturate(1.8);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  border-top: 0.5px solid var(--line-strong);
+}
+[data-tabbar="ios"] .app-tab { padding-top: 5px; justify-content: flex-start; }
+[data-tabbar="ios"] .app-tab-label { font-size: 10px; font-weight: 560; letter-spacing: 0.01em; }
+[data-tabbar="ios"] .app-tab[aria-current] { color: var(--brand); }
+
+/* Android: Material's navigation bar, a pill behind the chosen icon. */
+[data-tabbar="material"] {
+  background: var(--surface-2);
+}
+[data-tabbar="material"] .app-tab { gap: 4px; }
+[data-tabbar="material"] .app-tab-icon {
+  width: 64px;
+  height: 32px;
+  border-radius: 16px;
+}
+[data-tabbar="material"] .app-tab[aria-current] { color: var(--ink); }
+[data-tabbar="material"] .app-tab[aria-current] .app-tab-icon {
+  background: color-mix(in oklab, var(--brand) 24%, transparent);
+  animation: app-pill 360ms var(--ease-out);
+}
+[data-tabbar="material"] .app-tab-label { font-size: 12px; font-weight: 600; }
+
+/* ---------- Side navigation (tablets, desktops) ---------- */
+.app-side {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: 0;
+  z-index: 41;
+  width: var(--side-w);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  animation: app-slide-in 460ms var(--ease-out) both;
+}
+.app-side-drag { height: 8px; flex: none; }
+:root[data-app="wco"] .app-side-drag { height: env(titlebar-area-height, 40px); -webkit-app-region: drag; app-region: drag; }
+.app-side-top { padding: 6px 10px; display: grid; gap: 1px; }
+.app-side-list { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 4px 10px 24px; scrollbar-width: thin; }
+.app-side-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+  cursor: default;
+}
+.app-side-chev { transition: rotate 240ms var(--ease-out); opacity: 0; }
+.app-side-head:hover .app-side-chev { opacity: 1; }
+.app-side-head[aria-expanded="false"] .app-side-chev { rotate: -90deg; opacity: 1; }
+.app-side-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: default;
+  transition: background-color 160ms, color 160ms;
+}
+.app-side-item:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); }
+.app-side-item[aria-current] { background: color-mix(in oklab, var(--brand) 16%, transparent); color: var(--ink); font-weight: 560; }
+
+/* iPad and Mac: a translucent sidebar, like Finder's and Notes'. */
+[data-side="sidebar"] {
+  background: color-mix(in oklab, var(--surface-2) 74%, transparent);
+  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(30px) saturate(1.7);
+  border-inline-end: 1px solid var(--line);
+}
+:root[data-os="ipados"] [data-side="sidebar"] .app-side-item { height: 40px; border-radius: 11px; font-size: 15px; }
+:root[data-os="ipados"] [data-side="sidebar"] .app-side-head { font-size: 13px; }
+
+/* Windows: a navigation pane, the chosen item marked by a bar at its edge. */
+[data-side="fluent"] {
+  background: var(--surface-2);
+  border-inline-end: 1px solid var(--line);
+}
+[data-side="fluent"] .app-side-item { height: 36px; border-radius: 4px; }
+[data-side="fluent"] .app-side-item[aria-current] { background: color-mix(in oklab, var(--ink) 7%, transparent); }
+[data-side="fluent"] .app-side-item[aria-current]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  translate: 0 -50%;
+  border-radius: 2px;
+  background: var(--brand);
+  animation: app-indicator 300ms var(--ease-spring);
+}
+
+/* Android tablets and ChromeOS: Material's navigation rail. */
+[data-side="rail"] {
+  align-items: center;
+  gap: 12px;
+  padding-top: calc(env(safe-area-inset-top) + 64px);
+  background: var(--surface-2);
+}
+[data-side="rail"] .app-tab { gap: 4px; width: 100%; color: var(--ink-2); }
+[data-side="rail"] .app-tab-icon { width: 56px; height: 32px; border-radius: 16px; }
+[data-side="rail"] .app-tab[aria-current] .app-tab-icon { background: color-mix(in oklab, var(--brand) 24%, transparent); color: var(--ink); }
+[data-side="rail"] .app-tab-label { font-size: 12px; font-weight: 600; }
+
+/* ---------- Sheets ---------- */
+.app-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  align-items: end;
+}
+.app-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(12 9 22 / 0.34);
+  animation: app-fade 300ms var(--ease-out) both;
+  transition: opacity 260ms;
+  cursor: default;
+}
+.app-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  border-radius: 28px 28px 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: app-sheet-up 460ms var(--ease-out) both;
+  transition: translate 340ms var(--ease-out), scale 340ms var(--ease-out), opacity 260ms;
+}
+.app-sheet-grip { touch-action: none; flex: none; }
+.app-sheet-handle {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 8px auto 6px;
+  border-radius: 3px;
+  background: var(--line-strong);
+}
+.app-sheet-body { overflow: auto; overscroll-behavior: contain; }
+.app-sheet-wrap[data-leaving] .app-sheet { translate: 0 105%; }
+.app-sheet-wrap[data-leaving] .app-sheet-scrim { opacity: 0; }
+/* Bigger screens: a panel in the middle. */
+.app-sheet-wrap:not([data-phone]) { place-items: center; }
+.app-sheet-wrap:not([data-phone]) .app-sheet {
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(82dvh, 760px);
+  border-radius: 24px;
+  animation-name: app-pop;
+}
+.app-sheet-wrap:not([data-phone]) .app-sheet-handle { visibility: hidden; height: 0; margin: 6px; }
+.app-sheet-wrap:not([data-phone])[data-leaving] .app-sheet { translate: none; scale: 0.96; opacity: 0; }
+.app-sheet-wrap[data-os="windows"] .app-sheet { border-radius: 8px; }
+
+/* Launcher tiles in the tools sheet. */
+.app-launch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border-radius: 14px;
+  cursor: default;
+  transition: transform 260ms var(--ease-spring);
+}
+.app-launch:active { transform: scale(0.9); transition-duration: 90ms; }
+
+/* Grouped rows, as in a settings screen. */
+.app-group { border-radius: 16px; background: var(--surface-2); overflow: hidden; }
+.app-group li + li { border-top: 1px solid var(--line); }
+.app-row { display: flex; align-items: center; min-height: 46px; padding-inline: 16px; font-size: 15px; color: var(--ink); }
+.app-row::after { content: "›"; margin-inline-start: auto; color: var(--muted); font-size: 20px; }
+[dir="rtl"] .app-row::after { content: "‹"; }
+.app-row:active { background: color-mix(in oklab, var(--ink) 6%, transparent); }
+
+/* ---------- Each system's manners ---------- */
+
+/* Mac and Windows apps don't use the hand cursor on their own controls. */
+:root[data-app]:is([data-os="mac"], [data-os="windows"], [data-os="linux"]) :is(button, .btn, nav a) { cursor: default; }
+
+/* Windows: Fluent's squarer corners and a focus ring that always shows. */
+:root[data-app][data-os="windows"] { --radius: 8px; }
+:root[data-app][data-os="windows"] :is(.btn, .field) { border-radius: 6px; }
+:root[data-app][data-os="windows"] .card { border-radius: 8px; }
+:root[data-app][data-os="windows"] :focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* iPhone and iPad: larger targets, a press that dims rather than ripples. */
+:root[data-app]:is([data-os="ios"], [data-os="ipados"]) .btn { min-height: 44px; }
+:root[data-app]:is([data-os="ios"], [data-os="ipados"]) :is(.btn, .icon-btn):active:not(:disabled) { opacity: 0.72; }
+
+/* Android: a ripple from where the finger lands (AppShell sets --rx/--ry). */
+:root[data-os="android"] :is(.btn, .icon-btn, .app-tab, .app-row)[data-ripple]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: currentColor;
+  opacity: 0.14;
+  clip-path: circle(var(--ripple) at var(--rx) var(--ry));
+  animation: app-ripple 520ms var(--ease-out) forwards;
+}
+:root[data-os="android"] :is(.icon-btn, .app-tab, .app-row) { position: relative; overflow: hidden; }
+:root[data-os="android"][data-app] .btn { min-height: 48px; }
+
+/* ---------- Moving between pages ---------- */
+::view-transition { pointer-events: none; }
+::view-transition-old(.app-out) { animation: 160ms var(--ease-in-out) both app-page-out; }
+::view-transition-new(.app-in) { animation: 380ms var(--ease-out) 60ms both app-page-in; }
+:root[data-nav="tabs"]::view-transition-new(.app-in) { animation-name: app-page-push; }
+
+@keyframes app-page-out { to { opacity: 0; scale: 0.985; } }
+@keyframes app-page-in { from { opacity: 0; translate: 0 10px; } }
+@keyframes app-page-push { from { opacity: 0; translate: 28px 0; } }
+@keyframes app-rise { from { translate: 0 100%; } }
+@keyframes app-slide-in { from { translate: -100% 0; opacity: 0; } }
+[dir="rtl"] .app-side { animation-name: app-slide-in-rtl; }
+@keyframes app-slide-in-rtl { from { translate: 100% 0; opacity: 0; } }
+@keyframes app-fade { from { opacity: 0; } }
+@keyframes app-sheet-up { from { translate: 0 100%; } }
+@keyframes app-pop { from { opacity: 0; scale: 0.94; translate: 0 12px; } }
+@keyframes app-pill { from { scale: 0.4 1; opacity: 0.4; } }
+@keyframes app-indicator { from { height: 4px; } }
+@keyframes app-ripple { from { --ripple: 0%; opacity: 0.22; } to { --ripple: 150%; opacity: 0; } }
+@property --ripple {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tabbar, .app-side, .app-sheet, .app-sheet-scrim { animation: none !important; }
+}
+
+/* The home screen as an app's start screen: a title, the drop area, the
+   tools. The website's introduction stays on the website. */
+:root[data-app] [data-app-hero] { padding-top: 1.25rem; padding-bottom: 0; }
+:root[data-app] [data-app-title] { margin-top: 0; font-size: clamp(1.9rem, 5vw, 2.6rem); max-width: 22ch; }
+:root[data-app] [data-app-tight] { margin-top: 2.5rem; }
+
+/* ---------- Gestures ---------- */
+
+/* Crossed out with a scribble: the spot clouds over and blows away. */
+.poof { animation: poof-cloud 620ms var(--ease-out) forwards; border-radius: 40%; background: radial-gradient(closest-side, rgb(180 176 196 / 0.45), transparent); }
+.poof i {
+  position: absolute;
+  left: calc(10% + var(--k) * 8%);
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(150 145 170 / 0.7);
+  animation: poof-dust 620ms var(--ease-out) forwards;
+  --a: calc(var(--k) * 36deg);
+}
+@keyframes poof-cloud { from { scale: 0.9; opacity: 1; } to { scale: 1.25; opacity: 0; } }
+@keyframes poof-dust {
+  from { translate: 0 0; scale: 1; opacity: 0.9; }
+  to { translate: calc(cos(var(--a)) * 28px) calc(sin(var(--a)) * 22px - 14px); scale: 0.2; opacity: 0; }
+}
+
+/* ---------- Command bar (⌘K) ---------- */
+.cmd-wrap { position: fixed; inset: 0; z-index: 80; display: grid; justify-items: center; align-items: start; padding: max(10vh, calc(env(safe-area-inset-top) + 16px)) 16px 16px; }
+.cmd-scrim { position: absolute; inset: 0; background: rgb(12 9 22 / 0.3); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: app-fade 220ms var(--ease-out) both; cursor: default; }
+.cmd {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: min(70dvh, 560px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--surface) 94%, transparent);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: var(--shadow-lift);
+  animation: cmd-in 340ms var(--ease-spring) both;
+}
+.cmd-field { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.cmd-kbd { border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font: 11px var(--font-geist-mono), monospace; color: var(--muted); }
+.cmd-list { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 6px 8px 10px; }
+.cmd-group { display: flex; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 11.5px; font-weight: 650; color: var(--muted); }
+.cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 15px;
+  cursor: default;
+  animation: cmd-row 300ms var(--ease-out) both;
+  animation-delay: calc(min(var(--i), 10) * 18ms);
+}
+.cmd-row[aria-selected="true"] { background: color-mix(in oklab, var(--brand) 13%, transparent); }
+.cmd-foot { border-top: 1px solid var(--line); padding: 8px 16px; font-size: 12px; color: var(--muted); }
+:root[data-form="phone"] .cmd-foot { display: none; }
+@keyframes cmd-in { from { opacity: 0; scale: 0.96; translate: 0 -8px; } }
+@keyframes cmd-row { from { opacity: 0; translate: 0 4px; } }
+
+/* A loop drawn round part of the page: marching ants, and the choices. */
+.lasso {
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, var(--brand) 50%, transparent 0) repeat-x top / 10px 1.5px,
+    linear-gradient(90deg, var(--brand) 50%, transparent 0) repeat-x bottom / 10px 1.5px,
+    linear-gradient(0deg, var(--brand) 50%, transparent 0) repeat-y left / 1.5px 10px,
+    linear-gradient(0deg, var(--brand) 50%, transparent 0) repeat-y right / 1.5px 10px,
+    color-mix(in oklab, var(--brand) 8%, transparent);
+  animation: lasso-ants 600ms linear infinite, app-pop 280ms var(--ease-spring) both;
+}
+@keyframes lasso-ants { to { background-position: 10px 0, -10px 100%, 0 -10px, 100% 10px, 0 0; } }
+.lasso-bar {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  translate: -50% 0;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: var(--shadow-lift);
+  white-space: nowrap;
+  animation: lasso-bar 360ms var(--ease-spring) 80ms both;
+}
+.lasso-bar button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 11px; border-radius: 10px; font-size: 13px; font-weight: 550; }
+.lasso-bar button:hover { background: color-mix(in oklab, var(--bg) 16%, transparent); }
+@keyframes lasso-bar { from { opacity: 0; translate: -50% -6px; scale: 0.9; } }
+
+/* Page cards that swipe: they spring back, or turn, when let go. */
+.page-swipe { transition: box-shadow 200ms, translate 420ms var(--ease-spring), rotate 420ms var(--ease-spring), opacity 300ms; }
+.page-swipe[data-swiping] { transition: box-shadow 200ms; cursor: grabbing; }
+.page-swipe img, .page-swipe canvas, .page-swipe > div { transition: transform 460ms var(--ease-spring); }
+
+/* ---------- Each tool's own motion (src/lib/paper.ts paperMotion) ----------
+   Added to the paper's 2D version: what the tool does, shown on the sheet. */
+.p2d-b > i { display: block; height: 5%; margin: 0 12% 7%; border-radius: 2px; background: var(--line-strong); opacity: 0.7; }
+.p2d-b > i:first-child { margin-top: 16%; width: 55%; background: var(--ink); opacity: 0.85; }
+
+/* protect / unlock: a padlock closes on the page, or springs open */
+.p2d-padlock { position: absolute; left: 50%; top: 52%; width: 34%; translate: -50% -50%; aspect-ratio: 1; }
+.p2d-body { position: absolute; inset: 42% 0 0; border-radius: 18%; background: var(--accent); box-shadow: 0 6px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent); }
+.p2d-shackle { position: absolute; left: 20%; right: 20%; top: 0; height: 62%; border: 4px solid var(--ink); border-bottom: 0; border-radius: 999px 999px 0 0; transform-origin: 100% 100%; }
+.p2d-padlock .p2d-body { animation: p2d-lock-body 2.6s var(--ease-out) infinite; }
+.p2d-padlock .p2d-shackle { animation: p2d-lock 2.6s var(--ease-spring) infinite; }
+.p2d-unlock .p2d-shackle { animation-name: p2d-unlock; }
+@keyframes p2d-lock { 0%, 20% { translate: 0 -28%; } 45%, 90% { translate: 0 0; } 100% { translate: 0 -28%; } }
+@keyframes p2d-unlock { 0%, 25% { translate: 0 0; rotate: 0deg; } 50%, 85% { translate: 0 -24%; rotate: 32deg; } 100% { translate: 0 0; rotate: 0deg; } }
+@keyframes p2d-lock-body { 0%, 44% { scale: 1; } 50% { scale: 1.12 0.92; } 58%, 100% { scale: 1; } }
+
+/* sign: a pen line writes itself across the foot of the page */
+.p2d-sig { position: absolute; inset-inline: 10%; bottom: 10%; width: 80%; overflow: visible; }
+.p2d-sig path { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 260; animation: p2d-sign 2.6s var(--ease-in-out) infinite; }
+@keyframes p2d-sign { 0%, 10% { stroke-dashoffset: 260; opacity: 1; } 60%, 90% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+
+/* redact: black bars sweep over the lines, one by one */
+.p2d-bars { position: absolute; inset: 0; padding: 16% 12%; display: flex; flex-direction: column; gap: 7%; padding-top: calc(16% + 12%); }
+.p2d-bars > u { display: block; height: 7%; border-radius: 2px; background: var(--ink); transform-origin: left; animation: p2d-redact 2.6s var(--ease-out) infinite; }
+.p2d-bars > u:nth-child(1) { width: 92%; }
+.p2d-bars > u:nth-child(2) { width: 80%; animation-delay: 0.2s; }
+.p2d-bars > u:nth-child(3) { width: 64%; animation-delay: 0.4s; }
+[dir="rtl"] .p2d-bars > u { transform-origin: right; }
+@keyframes p2d-redact { 0%, 15% { scale: 0 1; opacity: 1; } 45%, 85% { scale: 1 1; opacity: 1; } 100% { scale: 1 1; opacity: 0; } }
+
+/* watermark: a stamp comes down on the page and leaves its mark */
+.p2d-stampmark { position: absolute; left: 18%; right: 18%; top: 40%; height: 18%; border: 3px solid var(--accent); border-radius: 6px; rotate: -14deg; animation: p2d-stamp 2.6s var(--ease-out) infinite; }
+@keyframes p2d-stamp { 0%, 20% { opacity: 0; scale: 1.8; } 38% { opacity: 1; scale: 0.94; } 46%, 88% { opacity: 0.55; scale: 1; } 100% { opacity: 0; } }
+
+/* page numbers: the number at the foot counts on */
+.p2d-num { position: absolute; bottom: 6%; left: 50%; translate: -50% 0; height: 14%; aspect-ratio: 1.4; overflow: hidden; border-radius: 4px; background: color-mix(in oklab, var(--accent) 16%, transparent); font: 600 clamp(9px, 1.4vw, 13px) / 1 var(--font-geist-mono), monospace; color: var(--accent); }
+.p2d-num > span { display: grid; place-items: center; height: 100%; animation: p2d-num 2.6s var(--ease-spring) infinite; }
+@keyframes p2d-num { 0%, 25% { translate: 0 0; } 33%, 58% { translate: 0 -100%; } 66%, 92% { translate: 0 -200%; } 100% { translate: 0 0; } }
+
+/* compare: the two versions slide apart, and the lines that differ light up */
+.p2d-compare .p2d-b { opacity: 1; animation-name: p2d-compare-b; }
+.p2d-compare .p2d-a { animation-name: p2d-compare-a; }
+.p2d-compare .p2d-a > i:nth-child(3), .p2d-compare .p2d-b > i:nth-child(3) { animation: p2d-differ 2.6s infinite; }
+@keyframes p2d-compare-a { 0%, 15% { translate: 0 0; } 40%, 85% { translate: 32% 0; } 100% { translate: 0 0; } }
+@keyframes p2d-compare-b { 0%, 15% { translate: 0 0; } 40%, 85% { translate: -32% 0; } 100% { translate: 0 0; } }
+@keyframes p2d-differ { 0%, 45% { background: var(--line-strong); } 55%, 85% { background: var(--coral); opacity: 1; } 100% { background: var(--line-strong); } }
+
+/* summarize / chat: the lines gather into one highlighted line */
+.p2d-summarize .p2d-a > i:not(:first-child) { animation: p2d-gather 2.6s var(--ease-in-out) infinite; }
+.p2d-gist { position: absolute; left: 12%; width: 70%; top: 46%; height: 8%; border-radius: 3px; background: var(--accent); transform-origin: left; animation: p2d-gist 2.6s var(--ease-out) infinite; }
+@keyframes p2d-gather { 0%, 15% { translate: 0 0; opacity: 0.7; } 45%, 85% { translate: 0 var(--to, 0); opacity: 0; } 100% { translate: 0 0; opacity: 0.7; } }
+.p2d-summarize .p2d-a > i:nth-child(2) { --to: 120%; }
+.p2d-summarize .p2d-a > i:nth-child(4) { --to: -120%; }
+@keyframes p2d-gist { 0%, 35% { scale: 0 1; opacity: 1; } 55%, 88% { scale: 1 1; opacity: 1; } 100% { scale: 1 1; opacity: 0; } }
+
+/* translate: the page turns over into the same page in another language */
+.p2d-translate { perspective: 600px; }
+.p2d-translate .p2d-a, .p2d-translate .p2d-b { backface-visibility: hidden; }
+.p2d-translate .p2d-a { animation-name: p2d-face; }
+.p2d-translate .p2d-b { opacity: 1; animation-name: p2d-back; }
+.p2d-translate .p2d-b > i { background: var(--accent); opacity: 0.55; border-radius: 999px; }
+@keyframes p2d-face { 0%, 20% { transform: rotateY(0); } 45%, 80% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+@keyframes p2d-back { 0%, 20% { transform: rotateY(-180deg); } 45%, 80% { transform: rotateY(0); } 100% { transform: rotateY(180deg); } }
+
+/* OCR / clean up scans: lines of text appear where the scan bar passes */
+.p2d-ocr .p2d-mark { inset-inline: -6%; height: 2px; top: 0; background: var(--accent); box-shadow: 0 0 12px var(--accent); opacity: 1; animation: p2d-scan-down 2.6s linear infinite; }
+.p2d-ocr .p2d-a > i { transform-origin: left; animation: p2d-ocr-line 2.6s linear infinite; }
+.p2d-ocr .p2d-a > i:nth-child(1) { animation-delay: 0s; }
+@keyframes p2d-scan-down { 0% { top: 4%; opacity: 1; } 80% { top: 94%; opacity: 1; } 100% { top: 94%; opacity: 0; } }
+@keyframes p2d-ocr-line { 0% { opacity: 0.12; } 30% { opacity: 0.12; } 40%, 90% { opacity: 0.9; background: var(--ink); } 100% { opacity: 0.12; } }
+.p2d-ocr .p2d-a > i:nth-child(2) { animation-delay: 0.35s; }
+.p2d-ocr .p2d-a > i:nth-child(3) { animation-delay: 0.7s; }
+.p2d-ocr .p2d-a > i:nth-child(4) { animation-delay: 1.05s; }
+
+/* Compress's result: the size bar shrinks to the new size, with a little bounce. */
+.shrink-bar { transition: width 1100ms var(--ease-spring) 450ms; }

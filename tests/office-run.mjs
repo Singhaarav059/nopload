@@ -110,14 +110,22 @@ await test("automatic writes the PDF with LibreOffice", async () => {
   eq(names(await job("auto")), "brief.pdf", "output");
 });
 
+await test("a conversion that stalls once is tried again with a fresh LibreOffice", async () => {
+  const used = [];
+  reset({ convert: (c) => (used.push(c), used.length === 1 ? never() : pdf()) });
+  eq(names(await job("auto")), "brief.pdf", "output");
+  eq(used.length === 2 && used[0] !== used[1], true, "the second try on another LibreOffice");
+  eq(used[0].terminated, true, "the stuck one stopped");
+});
+
 await test("a conversion that never ends prints, and the next job starts LibreOffice afresh", async () => {
-  let stuck = null;
-  reset({ convert: (c) => ((stuck = c), never()) });
+  const stuck = [];
+  reset({ convert: (c) => (stuck.push(c), never()) });
   eq(names(await job("auto")), "brief.docx.print.html", "output");
-  eq(stuck?.terminated, true, "stuck worker stopped");
+  eq(stuck.length === 2 && stuck.every((c) => c.terminated) && stuck[0] !== stuck[1], true, "two tries, each worker stopped");
   lo.convert = pdf;
   eq(names(await job("auto")), "brief.pdf", "next output");
-  eq(lo.made.length === 1 && lo.made[0] !== stuck, true, "a new LibreOffice started");
+  eq(lo.made.length === 2 && !stuck.includes(lo.made.at(-1)), true, "a new LibreOffice started");
 });
 
 // ── The job kept over the reload
