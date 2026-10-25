@@ -37,7 +37,7 @@ const PRESET_NAMES = ["emails", "phones", "numbers", "cards", "ibans", "aadhaar"
 // How an item on the page is announced.
 const ITEM_LABELS: Record<EditorItem["kind"], string> = {
   text: "ed.text", image: "ed.image", rect: "ed.rect", ellipse: "ed.ellipse", line: "ed.line", path: "ed.draw",
-  highlight: "ed.highlight", whiteout: "ed.whiteout", textEdit: "ed.editText", ...FIELD_LABELS,
+  highlight: "ed.highlight", whiteout: "ed.whiteout", textEdit: "ed.editText", paraEdit: "ed.editText", objEdit: "ed.object", ...FIELD_LABELS,
 };
 // What saving will do with a change to the page's own text (edit.ts textFonts), for the text it was checked with.
 type FontNote = { text: string; result: Awaited<ReturnType<typeof import("@/lib/pdf/edit").textFonts>> };

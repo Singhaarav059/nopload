@@ -96,6 +96,7 @@
     "test:formsdetect": "node tests/formsdetect.mjs",
     "test:e2e:forms": "node tests/e2e/forms.mjs",
     "test:textedit": "node tests/textedit.mjs",
+    "test:editcontent": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/editcontent.mjs",
     "test:e2e:textedit": "node tests/e2e/textedit.mjs",
     "test:e2e:preview": "node tests/e2e/preview.mjs",
     "test:e2e:listen": "node tests/e2e/listen.mjs",

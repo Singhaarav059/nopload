@@ -207,6 +207,35 @@ try {
       }
       break;
     }
+    case "edit": {
+      // Edit PDF's Edit content tool on the first page, as the editor makes
+      // its changes: a paragraph gets a word, a picture moves and turns, a
+      // shape goes. The pages, every other word and the new one must be there.
+      const edit = await load("edit");
+      const { objects: os, paragraphs } = await edit.listContent(f, 0);
+      const items = [];
+      const src = (o, extra = {}) => ({ index: o.index ?? o.parts[0].index, was: "", x: o.box.x, y: o.box.y, w: o.box.w, h: o.box.h, angle: o.angle, ...extra });
+      const para = paragraphs.find((p) => !p.invisible && p.text.trim() && /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}]+$/u.test(p.text));
+      if (para) items.push({ id: "p", page: 0, kind: "paraEdit", x: para.box.x, y: para.box.y, w: para.box.w, h: para.box.h, text: `${para.text} EDITEDWORD`, fontSize: para.size, color: para.color, source: src(para, { parts: para.parts, was: para.text, size: para.size, color: para.color, align: para.align, font: para.font }) });
+      const img = os.find((o) => o.kind === "image");
+      if (img) items.push({ id: "i", page: 0, kind: "objEdit", x: Math.max(0, img.box.x - 0.02), y: img.box.y, w: img.box.w * 0.8, h: img.box.h * 0.8, rotate: 15, source: src(img, { sig: img.sig, kind: img.kind }) });
+      const shape = os.find((o) => o.kind === "path" && o.box.w < 0.5 && o.box.h < 0.5);
+      if (shape) items.push({ id: "s", page: 0, kind: "objEdit", x: shape.box.x, y: shape.box.y, w: shape.box.w, h: shape.box.h, removed: true, source: src(shape, { sig: shape.sig, kind: shape.kind }) });
+      result.info.edits = items.map((i) => i.id).join("") || "none";
+      if (!items.length) break;
+      const [o] = await edit.editPdf(f, items, "edited");
+      await savePdf(o);
+      const s = await samePages(o, "edit");
+      // A page under an inch across has no room for another word to be seen.
+      let roomy = true;
+      try {
+        const { width, height } = (await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false })).getPage(0).getSize();
+        roomy = width >= 72 && height >= 72;
+      } catch { /* assume it has room */ }
+      if (!roomy) result.info.tinyPage = true;
+      if (s?.ok && para && roomy && !s.pages[0]?.text.replace(/\s+/g, "").includes("EDITEDWORD")) problem("edit: the new word is missing from page 1");
+      break;
+    }
     case "pagenumbers": {
       const { pageNumbers } = await load("edit");
       const [o] = await pageNumbers(f, { position: "bottom-center", numberFormat: "pageNOfTotal", startAt: 1, pageRange: "", skipFirst: false, fontSize: 11, color: "#1f2937", facing: false });

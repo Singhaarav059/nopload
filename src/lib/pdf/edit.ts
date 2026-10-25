@@ -528,7 +528,7 @@ export async function crop(file: File, rects: Map<number, FracRect> | FracRect):
 export type EditorItem = {
   id: string;
   page: number;
-  kind: "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "textEdit" | FieldKind;
+  kind: "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "textEdit" | "paraEdit" | "objEdit" | FieldKind;
   // Visual fractions of the page, top-left origin.
   x: number; y: number; w: number; h: number;
   color?: string;
@@ -547,9 +547,21 @@ export type EditorItem = {
   multiline?: boolean;
   dateFormat?: DateFormat;
   tooltip?: string;
-  // textEdit: the page's own text object it changes (see listText), and where
-  // its box was, so x and y say how far it moved. `text` "" deletes it.
-  source?: { index: number; was: string; x: number; y: number; font?: string; angle?: number };
+  // textEdit, paraEdit, objEdit: what on the page it changes (see listText,
+  // listContent) and how it was, so the item's own fields say what changed.
+  // `text` "" (or `removed`) deletes it.
+  source?: {
+    index: number; was: string; x: number; y: number; font?: string; angle?: number;
+    sig?: string; w?: number; h?: number; kind?: ContentKind; parts?: Target[];
+    size?: number; color?: string; fill?: string | null; stroke?: number; align?: Align; pixels?: [number, number];
+  };
+  // objEdit and paraEdit: degrees counter-clockwise, flips, deletion, order.
+  rotate?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+  removed?: boolean;
+  order?: "front" | "back";
+  align?: Align;
 };
 
 function dataUrlBytes(url: string) {
@@ -629,17 +641,19 @@ export async function applyItems(doc: PDFDocument, items: EditorItem[]) {
   }
 }
 
-// Changes to the page's own text go first (PDFium), then what was added on top (pdf-lib).
+// Changes to the page's own content go first (PDFium), then what was added on top (pdf-lib).
+export const isContentEdit = (i: EditorItem) => i.kind === "textEdit" || i.kind === "paraEdit" || i.kind === "objEdit";
+
 export async function editPdf(file: File, items: EditorItem[], suffix: string): Promise<Output[]> {
-  const edits = items.filter((i) => i.kind === "textEdit" && i.source);
-  const added = items.filter((i) => i.kind !== "textEdit");
+  const edits = items.filter((i) => isContentEdit(i) && i.source);
+  const added = items.filter((i) => !isContentEdit(i));
   const name = `${baseName(file.name)}-${suffix}.pdf`;
   if (!edits.length) {
     const doc = await loadPdf(file, file.name);
     await applyItems(doc, added);
     return [{ name, blob: await save(doc) }];
   }
-  const { bytes, note } = await applyTextEdits(file, edits);
+  const { bytes, note } = await applyContent(file, edits);
   if (!added.length) return [{ name, blob: pdfBlob(bytes), note }];
   const doc = await loadPdf(new File([bytes as BlobPart], file.name, { type: "application/pdf" }), file.name);
   await applyItems(doc, added);
@@ -781,20 +795,382 @@ export async function textFonts(file: File, page: number, index: number, text: s
   return { kept: false, font: r.font, fallback: r.fallback ? r.fallback.join(", ") : null };
 }
 
-async function applyTextEdits(file: File, edits: EditorItem[]) {
-  const { editTextObjects } = await import("./pdfium");
-  const changes = edits.map((e) => ({
-    page: e.page, index: e.source!.index, was: e.source!.was, text: (e.text ?? "").replace(/\s*\n\s*/g, " "),
-    move: [e.x - e.source!.x, e.y - e.source!.y] as [number, number],
+// ── Everything on the page (Edit PDF's Edit content tool, objects.ts)
+
+export type ContentKind = import("./objects").ObjKind;
+export type Align = import("./objects").Align;
+type Target = import("./objects").Target;
+
+// One object as the editor shows it: its box in visual fractions (top-left
+// origin), the angle it's turned on screen (degrees counter-clockwise) and,
+// for paths, its colours.
+export type ContentObject = {
+  index: number; sig: string; kind: ContentKind;
+  box: FracRect; angle: number;
+  fill: string | null; stroke: string | null; strokeWidth: number;
+  pixels?: [number, number];
+};
+
+// Text as paragraphs: the text objects that make one (lines, or pieces of
+// lines), read in order.
+export type Paragraph = {
+  parts: Target[];
+  text: string; box: FracRect; angle: number;
+  font: string; size: number; // visual points
+  color: string; bold: boolean; italic: boolean;
+  align: Align; lines: number;
+  // More than one font, size or colour: editing sets it all like the first part.
+  mixed: boolean;
+  // Text that isn't drawn (an OCR layer over a scan).
+  invisible: boolean;
+};
+
+const hexOf = (c: number[] | null) => (c ? `#${c.slice(0, 3).map((n) => Math.round(n).toString(16).padStart(2, "0")).join("")}` : null);
+const rgbaOf = (hex: string): import("./objects").RGBA => {
+  const v = hexToRgb(hex);
+  return [Math.round(v.r * 255), Math.round(v.g * 255), Math.round(v.b * 255), 255];
+};
+
+type Raw = import("./objects").PageObject;
+type Placed = { o: Raw; box: FracRect; angle: number; dir: [number, number]; up: [number, number]; base: number; left: number; right: number; size: number };
+
+// The file as the content editor reads and writes it: through the shared
+// load pre-pass (open.ts: owner-only encryption removed, a damaged file
+// repaired, a locked one refused), then, when PDFium still can't open it or
+// its first page (garbage before the header, a page tree too deep or looping),
+// with its page tree rebuilt by qpdf. Listing and saving both start from
+// these same bytes, so what was listed is what's changed.
+const editable = new WeakMap<File, Promise<Uint8Array>>();
+function contentBytes(file: File): Promise<Uint8Array> {
+  let p = editable.get(file);
+  if (!p) {
+    p = (async () => {
+      const [{ openForEdit }, { pdfiumOpens }] = await Promise.all([import("./open"), import("./objects")]);
+      const { bytes, doc } = await openForEdit(await fileBytes(file), file.name);
+      if (await pdfiumOpens(bytes)) return bytes;
+      // pdf-lib read it: written out again, with one flat page tree.
+      try {
+        const flat = await flatPages(doc);
+        if (await pdfiumOpens(flat)) return flat;
+      } catch {
+        /* qpdf next */
+      }
+      const { runQpdf } = await import("./qpdf");
+      try {
+        const { output } = await runQpdf(bytes, (i, o) => ["--deterministic-id", "--decode-level=none", i, "--pages", i, "--", o]);
+        if (await pdfiumOpens(output)) return output;
+      } catch {
+        /* reported below */
+      }
+      throw new PdfError("damaged", file.name);
+    })();
+    p.catch(() => editable.delete(file));
+    editable.set(file, p);
+  }
+  return p;
+}
+
+// The document written out with every page directly under one page tree
+// node, each page carrying the attributes it inherited from the levels that
+// are gone.
+async function flatPages(doc: PDFDocument): Promise<Uint8Array> {
+  const pages = doc.getPages();
+  const ctx = doc.context;
+  const tree = ctx.obj({ Type: "Pages", Kids: pages.map((p) => p.ref), Count: pages.length });
+  const ref = ctx.register(tree);
+  for (const p of pages) {
+    for (const name of ["Resources", "MediaBox", "CropBox", "Rotate"]) {
+      const key = PDFName.of(name);
+      const v = p.node.getInheritableAttribute(key);
+      if (v && !p.node.get(key)) p.node.set(key, v);
+    }
+    p.node.set(PDFName.of("Parent"), ref);
+  }
+  doc.catalog.set(PDFName.of("Pages"), ref);
+  return doc.save({ useObjectStreams: false, addDefaultPage: false });
+}
+
+// The page's objects, and its text grouped into paragraphs.
+export async function listContent(file: File, page: number): Promise<{ objects: ContentObject[]; paragraphs: Paragraph[] }> {
+  const { pageObjects } = await import("./objects");
+  const { geom, objects } = await pageObjects(await contentBytes(file), page);
+  const f = frameOf(geom);
+  const boxOf = (b: Raw["bounds"]): FracRect => {
+    const corners = [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]].map(([x, y]) => f.toVisual(x, y));
+    const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+    return { x: Math.min(...xs) / f.vw, y: 1 - Math.max(...ys) / f.vh, w: (Math.max(...xs) - Math.min(...xs)) / f.vw, h: (Math.max(...ys) - Math.min(...ys)) / f.vh };
+  };
+  const angleOf = (mx: number[]) => {
+    const d = f.back(mx[0], mx[1]);
+    return (Math.atan2(d[1], d[0]) * 180) / Math.PI;
+  };
+  const list: ContentObject[] = objects.map((o) => ({
+    index: o.index, sig: o.sig, kind: o.kind, box: boxOf(o.bounds),
+    angle: o.kind === "path" || o.kind === "shading" ? 0 : angleOf(o.matrix),
+    fill: hexOf(o.fill), stroke: hexOf(o.stroke), strokeWidth: o.strokeWidth, pixels: o.pixels,
   }));
+  // Text in visual points: each object's baseline, extent along it, and size.
+  const placed: Placed[] = objects.filter((o) => o.kind === "text" && o.text).map((o) => {
+    const [a, b] = o.matrix;
+    const d = f.back(a, b);
+    const len = Math.hypot(d[0], d[1]) || 1;
+    const dir: [number, number] = [d[0] / len, d[1] / len];
+    const up: [number, number] = [-dir[1], dir[0]];
+    const origin = f.toVisual(o.matrix[4], o.matrix[5]);
+    const corners = [[o.bounds.x0, o.bounds.y0], [o.bounds.x1, o.bounds.y0], [o.bounds.x0, o.bounds.y1], [o.bounds.x1, o.bounds.y1]].map(([x, y]) => f.toVisual(x, y));
+    const along = corners.map((c) => c[0] * dir[0] + c[1] * dir[1]);
+    return {
+      o, box: boxOf(o.bounds), angle: angleOf(o.matrix), dir, up,
+      base: origin[0] * up[0] + origin[1] * up[1],
+      left: Math.min(...along), right: Math.max(...along),
+      size: o.text!.size * Math.hypot(a, b),
+    };
+  });
+  return { objects: list, paragraphs: paragraphsOf(placed) };
+}
+
+const START = /^\s*([•◦▪●○■\-–*]|\d{1,3}[.)]|[a-z][.)])\s/;
+
+// Lines, then paragraphs: lines of one size, font and colour, a steady line
+// spacing apart and overlapping across, each starting under the last unless
+// it's indented (a new paragraph's first line) or starts a list item.
+function paragraphsOf(placed: Placed[]): Paragraph[] {
+  const byAngle = new Map<number, Placed[]>();
+  for (const p of placed) {
+    const k = Math.round(p.angle);
+    byAngle.set(k, [...(byAngle.get(k) ?? []), p]);
+  }
+  const out: Paragraph[] = [];
+  for (const group of byAngle.values()) {
+    // Lines: pieces on one baseline, near each other.
+    const sorted = [...group].sort((p, q) => q.base - p.base || p.left - q.left);
+    type Line = { parts: Placed[]; base: number; left: number; right: number; size: number };
+    const lines: Line[] = [];
+    for (const p of sorted) {
+      const line = lines.find((l) => Math.abs(l.base - p.base) < 0.35 * Math.max(l.size, p.size) && p.left - l.right < 1.0 * p.size && p.right - l.left > -1.0 * p.size && Math.abs(l.size - p.size) < 0.5 * p.size);
+      if (line) {
+        line.parts.push(p);
+        line.left = Math.min(line.left, p.left);
+        line.right = Math.max(line.right, p.right);
+      } else lines.push({ parts: [p], base: p.base, left: p.left, right: p.right, size: p.size });
+    }
+    for (const l of lines) l.parts.sort((p, q) => p.left - q.left);
+    lines.sort((p, q) => q.base - p.base || p.left - q.left);
+    // A short line sharing its baseline with another is a table cell (or a
+    // label beside a value): its column isn't a paragraph.
+    const cell = (l: Line) => l.right - l.left < 14 * l.size && lines.some((o) => o !== l && Math.abs(o.base - l.base) < 0.35 * l.size);
+    const styleOf = (l: Line) => {
+      const p = l.parts[0];
+      return `${p.o.text!.font}|${p.size.toFixed(1)}|${p.o.fill?.join(",")}`;
+    };
+    const textOf = (l: Line) => l.parts.reduce((s, p, i) => {
+      const t = p.o.text!.text;
+      if (!i) return t;
+      const gap = p.left - l.parts[i - 1].right;
+      return s + (gap > 0.2 * p.size && !/\s$/.test(s) && !/^\s/.test(t) ? " " : "") + t;
+    }, "");
+    // Paragraphs, top to bottom.
+    type Para = { lines: Line[]; style: string; left: number; right: number; gap: number; size: number };
+    const paras: Para[] = [];
+    for (const l of lines) {
+      const style = styleOf(l);
+      const text = textOf(l);
+      const p = paras.findLast((q) => {
+        const last = q.lines[q.lines.length - 1];
+        const g = last.base - l.base;
+        if (q.style !== style || g < 0.9 * q.size || g > 2.1 * q.size) return false;
+        if (q.gap && Math.abs(g - q.gap) > 0.25 * q.gap) return false;
+        if (l.right < q.left || l.left > q.right) return false;
+        if (START.test(text) || l.left > q.left + q.size) return false;
+        if (cell(l) || cell(last)) return false;
+        return true;
+      });
+      if (p) {
+        p.gap ||= p.lines[p.lines.length - 1].base - l.base;
+        p.lines.push(l);
+        p.left = Math.min(p.left, l.left);
+        p.right = Math.max(p.right, l.right);
+      } else paras.push({ lines: [l], style, left: l.left, right: l.right, gap: 0, size: l.size });
+    }
+    for (const q of paras) {
+      const parts = q.lines.flatMap((l) => l.parts);
+      // Lines joined with a space, a word broken by a hyphen at a line end joined again.
+      const text = q.lines.map(textOf).reduce((s, t, i) => (!i ? t : /\p{L}-$/u.test(s) && /^\p{Ll}/u.test(t) ? s.slice(0, -1) + t : `${s.replace(/\s+$/, "")} ${t.replace(/^\s+/, "")}`), "");
+      const boxes = parts.map((p) => p.box);
+      const x0 = Math.min(...boxes.map((b) => b.x)), y0 = Math.min(...boxes.map((b) => b.y));
+      const x1 = Math.max(...boxes.map((b) => b.x + b.w)), y1 = Math.max(...boxes.map((b) => b.y + b.h));
+      const first = parts[0];
+      const tol = 1.5;
+      const body = q.lines.length > 2 ? q.lines.slice(0, -1) : q.lines;
+      const sameLeft = body.every((l) => Math.abs(l.left - q.left) < tol), sameRight = body.every((l) => Math.abs(l.right - q.right) < tol);
+      const sameMid = body.every((l) => Math.abs((l.left + l.right) / 2 - (q.left + q.right) / 2) < tol);
+      out.push({
+        parts: parts.map((p) => ({ index: p.o.index, sig: p.o.sig })),
+        text, box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, angle: first.angle,
+        font: first.o.text!.font, size: first.size, color: hexOf(first.o.fill) ?? "#000000",
+        bold: first.o.text!.bold, italic: first.o.text!.italic,
+        align: q.lines.length < 2 ? "left" : sameLeft && sameRight && q.lines.length > 2 ? "justify" : sameLeft ? "left" : sameRight ? "right" : sameMid ? "center" : "left",
+        lines: q.lines.length,
+        mixed: new Set(parts.map((p) => `${p.o.text!.font}|${p.size.toFixed(1)}|${p.o.fill?.join(",")}`)).size > 1,
+        invisible: parts.every((p) => p.o.text!.mode === 3),
+      });
+    }
+  }
+  return out.sort((p, q) => p.box.y - q.box.y || p.box.x - q.box.x);
+}
+
+// 3×3 affine matrices as [a b c d e f]: x' = a x + c y + e, y' = b x + d y + f.
+type Mat = [number, number, number, number, number, number];
+const mul = (p: Mat, q: Mat): Mat => [
+  p[0] * q[0] + p[2] * q[1], p[1] * q[0] + p[3] * q[1],
+  p[0] * q[2] + p[2] * q[3], p[1] * q[2] + p[3] * q[3],
+  p[0] * q[4] + p[2] * q[5] + p[4], p[1] * q[4] + p[3] * q[5] + p[5],
+];
+const inv = (p: Mat): Mat => {
+  const det = p[0] * p[3] - p[1] * p[2];
+  return [p[3] / det, -p[1] / det, -p[2] / det, p[0] / det, (p[2] * p[5] - p[3] * p[4]) / det, (p[1] * p[4] - p[0] * p[5]) / det];
+};
+
+// The user-space transform that takes what's in `from` (visual fractions) to
+// `to`, turned `rotate` degrees counter-clockwise about its centre on screen
+// and flipped as asked: what moving, resizing, rotating and flipping an
+// object on screen does to it in the file.
+export function boxTransform(g: PageGeom, from: FracRect, to: FracRect, rotate = 0, flipX = false, flipY = false): number[] {
+  const f = frameOf(g);
+  // Visual points, y up from the bottom-left.
+  const fx = from.x * f.vw, fy = (1 - from.y - from.h) * f.vh, fw = from.w * f.vw, fh = from.h * f.vh;
+  const tx = to.x * f.vw, ty = (1 - to.y - to.h) * f.vh, tw = to.w * f.vw, th = to.h * f.vh;
+  const sx = fw ? tw / fw : 1, sy = fh ? th / fh : 1;
+  const cx = tx + tw / 2, cy = ty + th / 2;
+  const r = (rotate * Math.PI) / 180;
+  let v: Mat = [1, 0, 0, 1, -fx, -fy];
+  v = mul([sx, 0, 0, sy, 0, 0], v);
+  v = mul([1, 0, 0, 1, tx, ty], v);
+  // Flips and rotation about the new box's centre.
+  v = mul([1, 0, 0, 1, -cx, -cy], v);
+  v = mul([flipX ? -1 : 1, 0, 0, flipY ? -1 : 1, 0, 0], v);
+  v = mul([Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0], v);
+  v = mul([1, 0, 0, 1, cx, cy], v);
+  // Visual → user space and back.
+  const [ox, oy] = f.map(0, 0);
+  const M: Mat = [f.u[0], f.u[1], f.v[0], f.v[1], ox, oy];
+  return mul(mul(M, v), inv(M));
+}
+
+// A JPEG's size from its header (SOFn), or null.
+export function jpegSize(b: Uint8Array): [number, number] | null {
+  if (b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) return null;
+    const marker = b[i + 1];
+    const len = (b[i + 2] << 8) | b[i + 3];
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return [(b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]];
+    i += 2 + len;
+  }
+  return null;
+}
+
+// A replacement picture for objects.ts: a JPEG as it is (unless it's CMYK,
+// which some readers draw inverted), anything else as pixels.
+async function newImage(dataUrl: string): Promise<import("./objects").NewImage> {
+  const { bytes } = dataUrlBytes(dataUrl);
+  const size = jpegSize(bytes);
+  const components = size ? jpegComponents(bytes) : 0;
+  if (size && components !== 4) return { jpeg: bytes, width: size[0], height: size[1] };
+  const bmp = await createImageBitmap(new Blob([bytes as BlobPart]));
+  const c = document.createElement("canvas");
+  [c.width, c.height] = [bmp.width, bmp.height];
+  const ctx = c.getContext("2d")!;
+  ctx.drawImage(bmp, 0, 0);
+  const rgba = ctx.getImageData(0, 0, c.width, c.height).data;
+  const bgra = new Uint8Array(rgba.length);
+  for (let i = 0; i < rgba.length; i += 4) [bgra[i], bgra[i + 1], bgra[i + 2], bgra[i + 3]] = [rgba[i + 2], rgba[i + 1], rgba[i], rgba[i + 3]];
+  return { bgra, width: c.width, height: c.height };
+}
+
+function jpegComponents(b: Uint8Array) {
+  let i = 2;
+  while (i + 9 < b.length && b[i] === 0xff) {
+    const marker = b[i + 1];
+    const len = (b[i + 2] << 8) | b[i + 3];
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return b[i + 9];
+    i += 2 + len;
+  }
+  return 0;
+}
+
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-4;
+const sameBox = (a: FracRect, b: { x: number; y: number; w?: number; h?: number }) => near(a.x, b.x) && near(a.y, b.y) && near(a.w, b.w ?? a.w) && near(a.h, b.h ?? a.h);
+
+// The editor's changes to the page's own content, applied to the file.
+async function applyContent(file: File, items: EditorItem[]) {
+  const { editContent } = await import("./objects");
+  // Replacement pictures are decoded first: the change list is built synchronously per page.
+  const pictures = new Map<string, import("./objects").NewImage>();
+  for (const it of items) if (it.kind === "objEdit" && it.image) pictures.set(it.id, await newImage(it.image));
+  const pages = [...new Set(items.map((i) => i.page))];
+  const forPage = (page: number, geom: PageGeom) => {
+    const objects: import("./objects").ObjectChange[] = [];
+    const texts: import("./objects").TextChange[] = [];
+    const paragraphs: import("./objects").ParagraphChange[] = [];
+    for (const it of items.filter((i) => i.page === page)) {
+      const src = it.source!;
+      const from = { x: src.x, y: src.y, w: src.w ?? it.w, h: src.h ?? it.h };
+      const box = { x: it.x, y: it.y, w: it.w, h: it.h };
+      if (it.kind === "objEdit") {
+        const target = { page, index: src.index, sig: src.sig! };
+        if (it.removed) {
+          objects.push({ ...target, remove: true });
+          continue;
+        }
+        const c: import("./objects").ObjectChange = { ...target };
+        if (!sameBox(from, box) || it.rotate || it.flipX || it.flipY) c.transform = boxTransform(geom, from, box, it.rotate ?? 0, it.flipX, it.flipY);
+        if (it.fill && it.fill !== src.fill) c.fill = rgbaOf(it.fill);
+        if (it.color && it.color !== src.color) c.stroke = rgbaOf(it.color);
+        if (it.stroke !== undefined && it.stroke !== src.stroke) c.strokeWidth = it.stroke;
+        if (pictures.has(it.id)) c.image = pictures.get(it.id);
+        if (it.order) c.order = it.order;
+        objects.push(c);
+        continue;
+      }
+      // Text: a paragraph (paraEdit), or one object as listText gave it (textEdit).
+      const parts = src.parts ?? [{ index: src.index, sig: src.sig ?? "" }];
+      const text = it.text ?? "";
+      const moved = !near(it.x, src.x) || !near(it.y, src.y);
+      const move = moved ? moveDelta(geom, [it.x - src.x, it.y - src.y]) : undefined;
+      const fill = it.color && it.color !== src.color ? rgbaOf(it.color) : undefined;
+      if (it.removed || !text.trim()) {
+        for (const p of parts) objects.push({ page, ...p, remove: true });
+        continue;
+      }
+      const scale = it.fontSize && src.size ? it.fontSize / src.size : 1;
+      const rewrap = !near(it.w, src.w ?? it.w) || (it.align && it.align !== src.align) || !near(scale, 1) || text.includes("\n");
+      if (text === src.was && !rewrap) {
+        // Moved or recoloured only: each part keeps its exact text and font.
+        for (const p of parts) objects.push({ page, ...p, ...(move ? { transform: [1, 0, 0, 1, move[0], move[1]] } : {}), ...(fill ? { fill } : {}) });
+        continue;
+      }
+      if (parts.length === 1 && !rewrap) {
+        texts.push({ page, ...parts[0], text, move, fill, was: src.parts ? undefined : src.was });
+        continue;
+      }
+      // Width along the text: the box's side that runs with it.
+      const f = frameOf(geom);
+      const upright = Math.abs(Math.sin(((src.angle ?? 0) * Math.PI) / 180)) < 0.5;
+      const width = !near(it.w, src.w ?? it.w) || !near(it.h, src.h ?? it.h) ? (upright ? it.w * f.vw : it.h * f.vh) : undefined;
+      paragraphs.push({ page, parts, text, move, scale, width, fill, align: it.align });
+    }
+    return { objects, texts, paragraphs };
+  };
   let out;
   try {
-    out = await editTextObjects(await fileBytes(file), changes, fallbackRuns, moveDelta);
+    out = await editContent(await contentBytes(file), pages, forPage, fallbackRuns);
   } catch (e) {
-    throw new PdfError("damaged", file.name, e);
+    throw e instanceof PdfError ? e : new PdfError("damaged", file.name, e);
   }
   if (out.results.some((r) => r.error)) throw new PdfError("text_edit_failed", file.name, out.results.filter((r) => r.error));
-  const swaps = [...new Set(out.results.filter((r) => r.fallback).map((r) => `${r.font} → ${r.fallback!.join(", ")}`))];
+  const swaps = [...new Set(out.results.filter((r) => r.fallback?.length).map((r) => `${r.font} → ${r.fallback!.join(", ")}`))];
   return { bytes: out.bytes, note: swaps.length ? `textFallback:${swaps.join("; ")}` : undefined };
 }
 

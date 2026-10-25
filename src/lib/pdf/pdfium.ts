@@ -150,15 +150,15 @@ export async function decryptedCopy(bytes: Uint8Array, password: string): Promis
 // again, so the old text is not left in it. Text inside form XObjects is not
 // listed and can't be changed.
 
-type Mem = { m: Pdfium; malloc: (n: number) => number; free: (p: number) => void; heap: () => Uint8Array };
+export type Mem = { m: Pdfium; malloc: (n: number) => number; free: (p: number) => void; heap: () => Uint8Array };
 
-function memOf(m: Pdfium): Mem {
+export function memOf(m: Pdfium): Mem {
   const { malloc, free } = m.pdfium.wasmExports as unknown as { malloc: (n: number) => number; free: (p: number) => void };
   return { m, malloc, free, heap: () => (m.pdfium as unknown as { HEAPU8: Uint8Array }).HEAPU8 };
 }
 
 // Calls `fn` with room for `n` values, and reads them back as `type`.
-function values(x: Mem, n: number, type: "float" | "i32", fn: (p: number) => unknown): number[] | null {
+export function values(x: Mem, n: number, type: "float" | "i32", fn: (p: number) => unknown): number[] | null {
   const p = x.malloc(4 * n);
   try {
     if (fn(p) === false) return null;
@@ -169,7 +169,7 @@ function values(x: Mem, n: number, type: "float" | "i32", fn: (p: number) => unk
 }
 
 // A string PDFium writes into a buffer it was asked the size of first.
-function readString(x: Mem, utf16: boolean, fn: (buf: number, len: number) => number): string {
+export function readString(x: Mem, utf16: boolean, fn: (buf: number, len: number) => number): string {
   const len = fn(0, 0);
   if (len <= (utf16 ? 2 : 1)) return "";
   const p = x.malloc(len);
@@ -182,7 +182,7 @@ function readString(x: Mem, utf16: boolean, fn: (buf: number, len: number) => nu
   }
 }
 
-function withWide<T>(x: Mem, s: string, fn: (p: number) => T): T {
+export function withWide<T>(x: Mem, s: string, fn: (p: number) => T): T {
   const p = x.malloc((s.length + 1) * 2);
   try {
     for (let i = 0; i < s.length; i++) x.m.pdfium.setValue(p + i * 2, s.charCodeAt(i), "i16");
@@ -193,7 +193,7 @@ function withWide<T>(x: Mem, s: string, fn: (p: number) => T): T {
   }
 }
 
-async function openDoc(bytes: Uint8Array) {
+export async function openDoc(bytes: Uint8Array) {
   const m = await pdfium();
   const x = memOf(m);
   const file = x.malloc(bytes.length);
@@ -206,7 +206,7 @@ async function openDoc(bytes: Uint8Array) {
   return { x, doc, close: () => (m.FPDF_CloseDocument(doc), x.free(file)) };
 }
 
-function saveDoc(x: Mem, doc: number): Uint8Array {
+export function saveDoc(x: Mem, doc: number): Uint8Array {
   const { m } = x;
   const writer = m.PDFiumExt_OpenFileWriter();
   try {
@@ -225,7 +225,7 @@ function saveDoc(x: Mem, doc: number): Uint8Array {
 // The page's boxes (as stored, left/bottom/right/top) and /Rotate in degrees.
 export type PageGeom = { media: Box; crop: Box | null; rotate: number };
 
-function geomOf(x: Mem, page: number): PageGeom {
+export function geomOf(x: Mem, page: number): PageGeom {
   const { m } = x;
   const box = (fn: (l: number, b: number, r: number, t: number) => unknown) => {
     const v = values(x, 4, "float", (p) => fn(p, p + 4, p + 8, p + 12));
@@ -252,7 +252,7 @@ export type TextObject = {
 
 const TEXT = 1;
 
-function fontInfo(x: Mem, font: number) {
+export function fontInfo(x: Mem, font: number) {
   const name = readString(x, false, (b, l) => x.m.FPDFFont_GetBaseFontName(font, b, l));
   const weight = x.m.FPDFFont_GetWeight(font) as number;
   const angle = values(x, 1, "i32", (p) => x.m.FPDFFont_GetItalicAngle(font, p))?.[0] ?? 0;
@@ -265,7 +265,7 @@ function fontInfo(x: Mem, font: number) {
   };
 }
 
-function textObjectAt(x: Mem, page: number, textPage: number, index: number): (TextObject & { handle: number; fontHandle: number }) | null {
+export function textObjectAt(x: Mem, page: number, textPage: number, index: number): (TextObject & { handle: number; fontHandle: number }) | null {
   const { m } = x;
   const o = m.FPDFPage_GetObject(page, index);
   if (!o || m.FPDFPageObj_GetType(o) !== TEXT) return null;
@@ -324,7 +324,7 @@ export const canSetText = (text: string) => UNSHAPED.test(text) && !/[‌‍‪-
 // Whether `font` can show `text`: every character has a code in the font's
 // encoding (set on a scratch object and read back the same) and every
 // visible character a real glyph, not the one shown for a missing glyph.
-function fontCovers(x: Mem, doc: number, page: number, font: number, text: string): boolean {
+export function fontCovers(x: Mem, doc: number, page: number, font: number, text: string): boolean {
   const { m } = x;
   if (!text) return true;
   const scratch = m.FPDFPageObj_CreateTextObj(doc, font, 12);
