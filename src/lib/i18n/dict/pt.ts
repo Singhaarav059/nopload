@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Os números funcionam em outros alfabetos?",
   "tool.pageNumbers.a3": "Sim. Palavras como “Página” seguem o idioma em que você usa o {brand}, e fontes para escritas não latinas são incorporadas para que os rótulos apareçam corretamente.",
   "tool.pageNumbers.q4": "Posso numerar vários PDFs de uma vez?",
-  "tool.pageNumbers.a4": "Sim. Adicione vários arquivos e cada um é numerado separadamente com as mesmas configurações. Para numerá-los como um único conjunto, ative Continuar a numeração de um arquivo para o outro: cada arquivo começa onde o anterior terminou, na ordem da lista, e você pode adicionar um índice de anexos com o primeiro e o último número de cada arquivo.",
+  "tool.pageNumbers.a4": "Sim. Adicione vários arquivos e cada um é numerado separadamente com as mesmas configurações. Os números Bates seguem como um único conjunto: cada arquivo começa onde o anterior terminou, na ordem da lista (desative Continuar a numeração de um arquivo para o outro para reiniciá-los), e você pode adicionar um índice de anexos com o primeiro e o último número de cada arquivo.",
   "tool.pageNumbers.q5": "Posso mudar o tamanho e a cor dos números?",
   "tool.pageNumbers.a5": "Sim. Defina o tamanho do texto e escolha qualquer cor, para os números se destacarem ou se misturarem ao design da página.",
   "tool.pageNumbers.private": "Os números são desenhados nas páginas por código no seu navegador, e o PDF numerado é salvo direto no seu dispositivo. O documento não é enviado, então manuscritos e relatórios continuam sendo seus.",

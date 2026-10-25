@@ -545,7 +545,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Les numéros fonctionnent-ils avec d’autres alphabets ?",
   "tool.pageNumbers.a3": "Oui. Les mots comme « Page » suivent la langue dans laquelle vous utilisez {brand}, et les polices des écritures non latines sont incorporées pour que les libellés s’affichent correctement.",
   "tool.pageNumbers.q4": "Puis-je numéroter plusieurs PDF à la fois ?",
-  "tool.pageNumbers.a4": "Oui. Ajoutez plusieurs fichiers et chacun est numéroté séparément avec les mêmes réglages. Pour les numéroter comme un seul ensemble, activez Poursuivre la numérotation d’un fichier à l’autre : chaque fichier commence là où le précédent s’est arrêté, dans l’ordre de la liste, et vous pouvez ajouter un bordereau des pièces avec le premier et le dernier numéro de chaque fichier.",
+  "tool.pageNumbers.a4": "Oui. Ajoutez plusieurs fichiers et chacun est numéroté séparément avec les mêmes réglages. Les numéros Bates se suivent comme un seul ensemble : chaque fichier commence là où le précédent s’est arrêté, dans l’ordre de la liste (désactivez Poursuivre la numérotation d’un fichier à l’autre pour les faire recommencer), et vous pouvez ajouter un bordereau des pièces avec le premier et le dernier numéro de chaque fichier.",
   "tool.pageNumbers.q5": "Puis-je changer la taille et la couleur des numéros ?",
   "tool.pageNumbers.a5": "Oui. Réglez la taille du texte et choisissez n’importe quelle couleur, pour que les numéros ressortent ou se fondent dans la mise en page.",
   "tool.pageNumbers.private": "Les numéros sont dessinés sur les pages par du code dans votre navigateur, et le PDF numéroté est enregistré directement sur votre appareil. Le document n’est pas envoyé : manuscrits et rapports restent les vôtres.",

@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Els números funcionen en altres alfabets?",
   "tool.pageNumbers.a3": "Sí. Paraules com «Pàgina» segueixen la llengua en què fas servir {brand}, i s’incrusten tipus de lletra per a escriptures no llatines perquè les etiquetes es vegin correctament.",
   "tool.pageNumbers.q4": "Puc numerar diversos PDF alhora?",
-  "tool.pageNumbers.a4": "Sí. Afegeix diversos fitxers i cadascun es numera per separat amb els mateixos ajustos. Per numerar-los com un sol conjunt, activa Continua la numeració d’un fitxer a l’altre: cada fitxer comença on va acabar l’anterior, en l’ordre de la llista, i pots afegir un índex d’annexos amb el primer i l’últim número de cada fitxer.",
+  "tool.pageNumbers.a4": "Sí. Afegeix diversos fitxers i cadascun es numera per separat amb els mateixos ajustos. Els números Bates continuen com un sol conjunt: cada fitxer comença on va acabar l’anterior, en l’ordre de la llista (desactiva Continua la numeració d’un fitxer a l’altre per reiniciar-los), i pots afegir un índex d’annexos amb el primer i l’últim número de cada fitxer.",
   "tool.pageNumbers.q5": "Puc canviar la mida i el color dels números?",
   "tool.pageNumbers.a5": "Sí. Ajusta la mida del text i tria qualsevol color, perquè els números destaquin o s’integrin en el disseny de la pàgina.",
   "tool.pageNumbers.private": "Els números es dibuixen a les pàgines amb codi al navegador, i el PDF numerat es desa directament al teu dispositiu. El document no es puja, així que manuscrits i informes continuen sent teus.",

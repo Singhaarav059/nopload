@@ -545,7 +545,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Funktionieren Zahlen auch in anderen Alphabeten?",
   "tool.pageNumbers.a3": "Ja. Wörter wie „Seite“ folgen der Sprache, in der du {brand} verwendest, und Schriften für nicht-lateinische Schriftsysteme werden eingebettet, damit die Beschriftungen korrekt angezeigt werden.",
   "tool.pageNumbers.q4": "Kann ich mehrere PDFs auf einmal nummerieren?",
-  "tool.pageNumbers.a4": "Ja. Füge mehrere Dateien hinzu, und jede wird mit denselben Einstellungen einzeln nummeriert. Um sie als einen Satz zu nummerieren, schalte „Nummerierung über die Dateien hinweg fortsetzen“ ein: Jede Datei beginnt dort, wo die vorige aufgehört hat, in der aufgelisteten Reihenfolge, und du kannst ein Anlagenverzeichnis mit der ersten und letzten Nummer jeder Datei hinzufügen.",
+  "tool.pageNumbers.a4": "Ja. Füge mehrere Dateien hinzu, und jede wird mit denselben Einstellungen einzeln nummeriert. Bates-Nummern laufen als ein Satz weiter: Jede Datei beginnt dort, wo die vorige aufgehört hat, in der aufgelisteten Reihenfolge (schalte „Nummerierung über die Dateien hinweg fortsetzen“ aus, damit sie neu beginnen), und du kannst ein Anlagenverzeichnis mit der ersten und letzten Nummer jeder Datei hinzufügen.",
   "tool.pageNumbers.q5": "Kann ich Größe und Farbe der Zahlen ändern?",
   "tool.pageNumbers.a5": "Ja. Leg die Textgröße fest und wähle eine beliebige Farbe, damit die Zahlen hervorstechen oder sich ins Seitendesign einfügen.",
   "tool.pageNumbers.private": "Die Zahlen werden von Code in deinem Browser auf die Seiten gezeichnet, und die nummerierte PDF wird direkt auf deinem Gerät gespeichert. Das Dokument wird nicht hochgeladen, Manuskripte und Berichte bleiben also deine.",

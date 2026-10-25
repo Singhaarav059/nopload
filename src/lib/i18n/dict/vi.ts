@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Số trang có dùng được với chữ viết khác không?",
   "tool.pageNumbers.a3": "Có. Những từ như “Trang” theo ngôn ngữ bạn đang dùng trên {brand}, và phông chữ cho các hệ chữ không phải Latinh được nhúng để nhãn hiển thị đúng.",
   "tool.pageNumbers.q4": "Tôi có thể đánh số nhiều PDF cùng lúc không?",
-  "tool.pageNumbers.a4": "Có. Thêm nhiều tệp và mỗi tệp được đánh số riêng với cùng thiết lập. Để đánh số chúng như một bộ, hãy bật Đánh số tiếp nối giữa các tệp: mỗi tệp bắt đầu từ chỗ tệp trước kết thúc, theo thứ tự trong danh sách, và bạn có thể thêm danh mục chứng cứ ghi số đầu và số cuối của từng tệp.",
+  "tool.pageNumbers.a4": "Có. Thêm nhiều tệp và mỗi tệp được đánh số riêng với cùng thiết lập. Riêng số Bates chạy tiếp như một bộ: mỗi tệp bắt đầu từ chỗ tệp trước kết thúc, theo thứ tự trong danh sách (tắt Đánh số tiếp nối giữa các tệp để bắt đầu lại), và bạn có thể thêm danh mục chứng cứ ghi số đầu và số cuối của từng tệp.",
   "tool.pageNumbers.q5": "Tôi có thể đổi cỡ và màu của số trang không?",
   "tool.pageNumbers.a5": "Có. Đặt cỡ chữ và chọn màu bất kỳ, để số trang nổi bật hoặc hòa vào thiết kế trang.",
   "tool.pageNumbers.private": "Số trang được vẽ lên các trang bằng mã trong trình duyệt, và PDF đã đánh số được lưu thẳng về thiết bị của bạn. Tài liệu không bị tải lên, nên bản thảo và báo cáo vẫn là của riêng bạn.",

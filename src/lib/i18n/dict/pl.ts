@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Czy numery działają w innych alfabetach?",
   "tool.pageNumbers.a3": "Tak. Słowa takie jak „Strona” są w języku, w którym używasz {brand}, a czcionki dla pism niełacińskich są osadzane, aby etykiety wyświetlały się poprawnie.",
   "tool.pageNumbers.q4": "Czy mogę numerować kilka plików PDF naraz?",
-  "tool.pageNumbers.a4": "Tak. Dodaj kilka plików, a każdy zostanie ponumerowany osobno z tymi samymi ustawieniami. Aby ponumerować je jako jeden zestaw, włącz Kontynuuj numerację z pliku na plik: każdy plik zaczyna się tam, gdzie skończył poprzedni, w kolejności z listy, a do tego możesz dodać wykaz załączników z pierwszym i ostatnim numerem każdego pliku.",
+  "tool.pageNumbers.a4": "Tak. Dodaj kilka plików, a każdy zostanie ponumerowany osobno z tymi samymi ustawieniami. Numery Batesa biegną dalej jako jeden zestaw: każdy plik zaczyna się tam, gdzie skończył poprzedni, w kolejności z listy (wyłącz Kontynuuj numerację z pliku na plik, aby zaczynały się od nowa), a do tego możesz dodać wykaz załączników z pierwszym i ostatnim numerem każdego pliku.",
   "tool.pageNumbers.q5": "Czy mogę zmienić rozmiar i kolor numerów?",
   "tool.pageNumbers.a5": "Tak. Ustaw rozmiar tekstu i wybierz dowolny kolor, aby numery się wyróżniały lub wtapiały w projekt strony.",
   "tool.pageNumbers.private": "Numery są rysowane na stronach przez kod w przeglądarce, a ponumerowany PDF zapisuje się prosto na Twoim urządzeniu. Dokument nie jest wysyłany, więc maszynopisy i raporty pozostają Twoje.",

@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Fungerar numren i andra skriftsystem?",
   "tool.pageNumbers.a3": "Ja. Ord som ”Sida” följer språket du använder {brand} på, och typsnitt för icke-latinska skriftsystem bäddas in så att etiketterna visas korrekt.",
   "tool.pageNumbers.q4": "Kan jag numrera flera PDF-filer på en gång?",
-  "tool.pageNumbers.a4": "Ja. Lägg till flera filer så numreras var och en för sig med samma inställningar. För att numrera dem som en serie slår du på Fortsätt numreringen från fil till fil: varje fil börjar där den förra slutade, i listans ordning, och du kan lägga till en bilageförteckning med varje fils första och sista nummer.",
+  "tool.pageNumbers.a4": "Ja. Lägg till flera filer så numreras var och en för sig med samma inställningar. Batesnummer löper vidare som en serie: varje fil börjar där den förra slutade, i listans ordning (slå av Fortsätt numreringen från fil till fil för att låta dem börja om), och du kan lägga till en bilageförteckning med varje fils första och sista nummer.",
   "tool.pageNumbers.q5": "Kan jag ändra numrens storlek och färg?",
   "tool.pageNumbers.a5": "Ja. Ställ in textstorleken och välj valfri färg, så att numren sticker ut eller smälter in i sidans design.",
   "tool.pageNumbers.private": "Numren ritas på sidorna av kod i webbläsaren, och den numrerade PDF-filen sparas direkt på din enhet. Dokumentet laddas inte upp, så manus och rapporter förblir dina.",

@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Je, namba zinafanya kazi kwenye maandishi mengine?",
   "tool.pageNumbers.a3": "Ndiyo. Maneno kama “Ukurasa” hufuata lugha unayotumia {brand}, na fonti za maandishi yasiyo ya Kilatini hupachikwa ili lebo zionekane ipasavyo.",
   "tool.pageNumbers.q4": "Je, ninaweza kuweka namba kwenye PDF kadhaa kwa wakati mmoja?",
-  "tool.pageNumbers.a4": "Ndiyo. Ongeza faili kadhaa na kila moja huwekewa namba peke yake kwa mipangilio ileile. Ili kuziwekea namba kama seti moja, washa Endeleza namba kutoka faili moja hadi nyingine: kila faili huanzia pale faili iliyotangulia ilipoishia, kwa mpangilio wa orodha, na unaweza kuongeza orodha ya vielelezo yenye namba ya kwanza na ya mwisho ya kila faili.",
+  "tool.pageNumbers.a4": "Ndiyo. Ongeza faili kadhaa na kila moja huwekewa namba peke yake kwa mipangilio ileile. Namba za Bates huendelea kama seti moja: kila faili huanzia pale faili iliyotangulia ilipoishia, kwa mpangilio wa orodha (zima Endeleza namba kutoka faili moja hadi nyingine ili zianze upya), na unaweza kuongeza orodha ya vielelezo yenye namba ya kwanza na ya mwisho ya kila faili.",
   "tool.pageNumbers.q5": "Je, ninaweza kubadilisha ukubwa na rangi ya namba?",
   "tool.pageNumbers.a5": "Ndiyo. Weka ukubwa wa maandishi na uchague rangi yoyote, ili namba zionekane wazi au zichanganyike na muundo wa ukurasa.",
   "tool.pageNumbers.private": "Namba huchorwa kwenye kurasa na msimbo ulio kwenye kivinjari chako, na PDF yenye namba huhifadhiwa moja kwa moja kwenye kifaa chako. Hati haipakiwi, kwa hiyo miswada na ripoti zinabaki zako.",

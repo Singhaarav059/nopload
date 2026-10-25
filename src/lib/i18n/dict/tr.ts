@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Numaralar başka alfabelerde çalışır mı?",
   "tool.pageNumbers.a3": "Evet. “Sayfa” gibi sözcükler {brand}’i kullandığınız dili izler; Latin dışı yazılar için yazı tipleri gömülür, böylece etiketler doğru görünür.",
   "tool.pageNumbers.q4": "Birkaç PDF’yi aynı anda numaralandırabilir miyim?",
-  "tool.pageNumbers.a4": "Evet. Birkaç dosya ekleyin, her biri aynı ayarlarla ayrı ayrı numaralandırılır. Onları tek bir set olarak numaralandırmak için Numaraları dosyadan dosyaya sürdür seçeneğini açın: her dosya, listedeki sırayla bir öncekinin bittiği yerden başlar ve her dosyanın ilk ve son numarasını gösteren bir delil dizini ekleyebilirsiniz.",
+  "tool.pageNumbers.a4": "Evet. Birkaç dosya ekleyin, her biri aynı ayarlarla ayrı ayrı numaralandırılır. Bates numaraları ise tek bir set olarak devam eder: her dosya, listedeki sırayla bir öncekinin bittiği yerden başlar (yeniden başlatmak için Numaraları dosyadan dosyaya sürdür seçeneğini kapatın) ve her dosyanın ilk ve son numarasını gösteren bir delil dizini ekleyebilirsiniz.",
   "tool.pageNumbers.q5": "Numaraların boyutunu ve rengini değiştirebilir miyim?",
   "tool.pageNumbers.a5": "Evet. Yazı boyutunu ayarlayın ve istediğiniz rengi seçin; numaralar ister öne çıksın ister sayfa tasarımıyla uyum içinde olsun.",
   "tool.pageNumbers.private": "Numaralar tarayıcınızdaki kodla sayfalara çizilir ve numaralandırılmış PDF doğrudan cihazınıza kaydedilir. Belge yüklenmez; el yazmaları ve raporlar sizde kalır.",

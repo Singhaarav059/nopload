@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Apakah nomor berfungsi di aksara lain?",
   "tool.pageNumbers.a3": "Ya. Kata seperti “Halaman” mengikuti bahasa yang Anda gunakan di {brand}, dan font untuk aksara non-Latin disematkan agar label tampil dengan benar.",
   "tool.pageNumbers.q4": "Bisakah saya memberi nomor beberapa PDF sekaligus?",
-  "tool.pageNumbers.a4": "Bisa. Tambahkan beberapa file dan masing-masing diberi nomor secara terpisah dengan pengaturan yang sama. Untuk menomorinya sebagai satu set, aktifkan Lanjutkan penomoran antarfile: setiap file dimulai dari nomor tempat file sebelumnya berakhir, sesuai urutan dalam daftar, dan Anda bisa menambahkan daftar bukti berisi nomor pertama dan terakhir setiap file.",
+  "tool.pageNumbers.a4": "Bisa. Tambahkan beberapa file dan masing-masing diberi nomor secara terpisah dengan pengaturan yang sama. Nomor Bates berlanjut sebagai satu set: setiap file dimulai dari nomor tempat file sebelumnya berakhir, sesuai urutan dalam daftar (nonaktifkan Lanjutkan penomoran antarfile untuk memulainya ulang), dan Anda bisa menambahkan daftar bukti berisi nomor pertama dan terakhir setiap file.",
   "tool.pageNumbers.q5": "Bisakah saya mengubah ukuran dan warna nomor?",
   "tool.pageNumbers.a5": "Bisa. Atur ukuran teks dan pilih warna apa pun, agar nomor menonjol atau menyatu dengan desain halaman.",
   "tool.pageNumbers.private": "Nomor digambar pada halaman oleh kode di browser Anda, dan PDF bernomor disimpan langsung ke perangkat Anda. Dokumen tidak diunggah, jadi naskah dan laporan tetap milik Anda.",

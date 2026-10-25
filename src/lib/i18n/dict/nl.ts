@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Werken de nummers ook in andere schriften?",
   "tool.pageNumbers.a3": "Ja. Woorden als ‘Pagina’ volgen de taal waarin je {brand} gebruikt, en lettertypen voor niet-Latijnse schriften worden ingesloten zodat de labels goed worden weergegeven.",
   "tool.pageNumbers.q4": "Kan ik meerdere pdf’s tegelijk nummeren?",
-  "tool.pageNumbers.a4": "Ja. Voeg meerdere bestanden toe en elk wordt apart genummerd met dezelfde instellingen. Om ze als één reeks te nummeren, zet je Nummering doorlaten lopen van bestand naar bestand aan: elk bestand begint waar het vorige ophield, in de volgorde van de lijst, en je kunt een productielijst toevoegen met het eerste en laatste nummer van elk bestand.",
+  "tool.pageNumbers.a4": "Ja. Voeg meerdere bestanden toe en elk wordt apart genummerd met dezelfde instellingen. Bates-nummers lopen als één reeks door: elk bestand begint waar het vorige ophield, in de volgorde van de lijst (zet Nummering doorlaten lopen van bestand naar bestand uit om ze opnieuw te laten beginnen), en je kunt een productielijst toevoegen met het eerste en laatste nummer van elk bestand.",
   "tool.pageNumbers.q5": "Kan ik de grootte en kleur van de nummers aanpassen?",
   "tool.pageNumbers.a5": "Ja. Stel de tekstgrootte in en kies elke gewenste kleur, zodat de nummers opvallen of juist opgaan in het paginaontwerp.",
   "tool.pageNumbers.private": "De nummers worden door code in je browser op de pagina’s getekend, en de genummerde pdf wordt direct op je apparaat opgeslagen. Het document wordt niet geüpload, dus manuscripten en rapporten blijven van jou.",

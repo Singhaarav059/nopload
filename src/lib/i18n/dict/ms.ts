@@ -528,7 +528,7 @@ const d: { [K in DictKey]?: string } = {
   "tool.pageNumbers.q3": "Adakah nombor berfungsi dalam tulisan lain?",
   "tool.pageNumbers.a3": "Ya. Perkataan seperti “Halaman” mengikut bahasa yang anda gunakan untuk {brand}, dan fon untuk tulisan bukan Latin dibenamkan supaya label dipaparkan dengan betul.",
   "tool.pageNumbers.q4": "Bolehkah saya menomborkan beberapa PDF sekali gus?",
-  "tool.pageNumbers.a4": "Boleh. Tambah beberapa fail dan setiap satu dinomborkan secara berasingan dengan tetapan yang sama. Untuk menomborkannya sebagai satu set, hidupkan Teruskan penomboran merentas fail: setiap fail bermula dari nombor fail sebelumnya berakhir, mengikut susunan dalam senarai, dan anda boleh menambah indeks ekshibit yang memuatkan nombor pertama dan terakhir setiap fail.",
+  "tool.pageNumbers.a4": "Boleh. Tambah beberapa fail dan setiap satu dinomborkan secara berasingan dengan tetapan yang sama. Nombor Bates bersambung sebagai satu set: setiap fail bermula dari nombor fail sebelumnya berakhir, mengikut susunan dalam senarai (matikan Teruskan penomboran merentas fail untuk memulakannya semula), dan anda boleh menambah indeks ekshibit yang memuatkan nombor pertama dan terakhir setiap fail.",
   "tool.pageNumbers.q5": "Bolehkah saya menukar saiz dan warna nombor?",
   "tool.pageNumbers.a5": "Boleh. Tetapkan saiz teks dan pilih sebarang warna, supaya nombor menonjol atau sebati dengan reka bentuk halaman.",
   "tool.pageNumbers.private": "Nombor dilukis pada halaman oleh kod dalam pelayar anda, dan PDF bernombor disimpan terus ke peranti anda. Dokumen tidak dimuat naik, jadi manuskrip dan laporan kekal milik anda.",
