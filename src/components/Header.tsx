@@ -15,6 +15,7 @@ import { useDialog } from "@/lib/useDialog";
 import { ThemeMenu, ThemeSwitch } from "./ThemeMenu";
 import { openCommandBar } from "./CommandBar";
 import { InstallButton } from "./InstallGuide";
+import { goHome } from "@/lib/home";
 
 // Every tool's icon only shows in the phone menu: loaded when it opens (P3-03).
 const ToolIcon = dynamic(() => import("./ToolIcon").then((m) => m.ToolIcon), { ssr: false });
@@ -66,7 +67,7 @@ export function Header() {
         {/* The frosted island is its own layer: a backdrop-filter on an
             ancestor would make it the containing block of the fixed menus below. */}
         <div aria-hidden className="header-scroll absolute inset-0 -z-10 rounded-full border border-line bg-[color-mix(in_oklab,var(--surface)_86%,transparent)] backdrop-blur-[16px] backdrop-saturate-150" />
-        <Link href={href("/")} className="me-4 rounded-full sm:me-6" aria-label={t("nav.home")}>
+        <Link href={href("/")} className="me-4 rounded-full sm:me-6" aria-label={t("nav.home")} onClick={(e) => { close(); goHome(e, href("/")); }}>
           <Logo />
         </Link>
 
