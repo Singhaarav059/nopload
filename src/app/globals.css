@@ -28,8 +28,8 @@
 
   --organize-tint: #dcf3e6;
   --organize-ink: #17704a;
-  --optimize-tint: #fff0c2;
-  --optimize-ink: #855600;
+  --optimize-tint: #d6f0f7;
+  --optimize-ink: #0a6580;
   --convertTo-tint: #ffe3d6;
   --convertTo-ink: #ad3d14;
   --convertFrom-tint: #dceafe;
@@ -77,8 +77,8 @@
     --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 60px -20px rgb(0 0 0 / 0.8);
     --organize-tint: rgb(85 200 145 / 0.14);
     --organize-ink: #7fdcae;
-    --optimize-tint: rgb(242 197 92 / 0.14);
-    --optimize-ink: #f2c55c;
+    --optimize-tint: rgb(96 205 235 / 0.14);
+    --optimize-ink: #7fd5ec;
     --convertTo-tint: rgb(255 150 119 / 0.15);
     --convertTo-ink: #ffa487;
     --convertFrom-tint: rgb(127 178 255 / 0.15);
@@ -111,8 +111,8 @@
   --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 60px -20px rgb(0 0 0 / 0.8);
   --organize-tint: rgb(85 200 145 / 0.14);
   --organize-ink: #7fdcae;
-  --optimize-tint: rgb(242 197 92 / 0.14);
-  --optimize-ink: #f2c55c;
+  --optimize-tint: rgb(96 205 235 / 0.14);
+  --optimize-ink: #7fd5ec;
   --convertTo-tint: rgb(255 150 119 / 0.15);
   --convertTo-ink: #ffa487;
   --convertFrom-tint: rgb(127 178 255 / 0.15);
@@ -1004,23 +1004,24 @@ body { overflow-x: clip; }
   [data-handle]::after { content: ""; position: absolute; inset: -8px; }
 }
 
-/* The tool machines' colours (src/components/machines): a white and grey
-   body in light, graphite in dark; each machine adds its own accent. */
+/* The tool machines' colours (src/components/machines): a cool violet-grey
+   body in light, a violet graphite in dark, both a step off the page so the
+   white paper on them stands out; the site's violet for knobs and handles. */
 .machine, .sealer {
-  --m-body-1: #ffffff; --m-body-2: #eef0f3; --m-body-3: #dadde2; --m-side-1: #e4e7eb; --m-side-2: #c8ccd2;
-  --m-edge: rgb(255 255 255 / 0.95); --m-slot: #2b2e33; --m-cavity: #2a2d32; --m-mat: #3a3e44; --m-pad: #f4f5f7;
-  --m-shadow: #1b2433; --m-shadow-o: 0.22; --m-engraved: #9aa0a8;
+  --m-body-1: #f4f3f8; --m-body-2: #e4e2ea; --m-body-3: #d2cfda; --m-side-1: #dcd9e3; --m-side-2: #c3bfcd;
+  --m-edge: rgb(255 255 255 / 0.9); --m-line: rgb(33 29 46 / 0.14); --m-slot: #2a2733; --m-cavity: #2b2834; --m-mat: #36323f; --m-pad: #ebe9f0;
+  --m-shadow: #211d2e; --m-shadow-o: 0.2;
 }
 :root[data-theme="dark"] :is(.machine, .sealer) {
-  --m-body-1: #50545b; --m-body-2: #3c3f45; --m-body-3: #2b2d32; --m-side-1: #35383e; --m-side-2: #24262a;
-  --m-edge: rgb(255 255 255 / 0.14); --m-slot: #0e0f11; --m-cavity: #141517; --m-mat: #1c1e21; --m-pad: #2c2f34;
-  --m-shadow: #000; --m-shadow-o: 0.6; --m-engraved: #7c828a;
+  --m-body-1: #48445a; --m-body-2: #363345; --m-body-3: #282633; --m-side-1: #312e3d; --m-side-2: #22202b;
+  --m-edge: rgb(255 255 255 / 0.12); --m-line: rgb(0 0 0 / 0.5); --m-slot: #0d0c11; --m-cavity: #15131b; --m-mat: #1b1922; --m-pad: #2c2938;
+  --m-shadow: #000; --m-shadow-o: 0.6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) :is(.machine, .sealer) {
-    --m-body-1: #50545b; --m-body-2: #3c3f45; --m-body-3: #2b2d32; --m-side-1: #35383e; --m-side-2: #24262a;
-    --m-edge: rgb(255 255 255 / 0.14); --m-slot: #0e0f11; --m-cavity: #141517; --m-mat: #1c1e21; --m-pad: #2c2f34;
-    --m-shadow: #000; --m-shadow-o: 0.6; --m-engraved: #7c828a;
+    --m-body-1: #48445a; --m-body-2: #363345; --m-body-3: #282633; --m-side-1: #312e3d; --m-side-2: #22202b;
+    --m-edge: rgb(255 255 255 / 0.12); --m-line: rgb(0 0 0 / 0.5); --m-slot: #0d0c11; --m-cavity: #15131b; --m-mat: #1b1922; --m-pad: #2c2938;
+    --m-shadow: #000; --m-shadow-o: 0.6;
   }
 }
 
@@ -1036,24 +1037,23 @@ body { overflow-x: clip; }
   box-shadow: 0 1px 0 rgb(255 255 255 / 0.8) inset, 0 -1px 0 rgb(0 0 0 / 0.15) inset, 0 1px 2px rgb(0 0 0 / 0.18); }
 .sealer-lcd { position: relative; width: 100%; height: 100%; border-radius: 7px; padding: 6px 9px; display: flex; flex-direction: column; justify-content: space-between;
   background: radial-gradient(120% 90% at 30% 20%, #3a3f3c, #1a1d1c 70%); box-shadow: 0 2px 3px rgb(0 0 0 / 0.55) inset, 0 1px 0 rgb(255 255 255 / 0.5);
-  font-family: var(--font-mono); color: #9ff0b6; text-shadow: 0 0 6px rgb(120 255 160 / 0.55); }
+  font-family: var(--font-mono); color: #d4ccff; text-shadow: 0 0 6px rgb(170 155 255 / 0.6); }
 .sealer-lcd-size { font-size: 15px; font-weight: 600; letter-spacing: 0.04em; line-height: 1; }
-.sealer-lcd-air { --air: 1; position: relative; height: 6px; border-radius: 2px; background: repeating-linear-gradient(90deg, rgb(159 240 182 / 0.18) 0 7px, transparent 7px 9px); }
-.sealer-lcd-air::after { content: ""; position: absolute; inset: 0; border-radius: 2px; background: repeating-linear-gradient(90deg, #9ff0b6 0 7px, transparent 7px 9px); clip-path: inset(0 calc((1 - var(--air)) * 100%) 0 0); box-shadow: 0 0 6px rgb(120 255 160 / 0.4); }
+.sealer-lcd-air { --air: 1; position: relative; height: 6px; border-radius: 2px; background: repeating-linear-gradient(90deg, rgb(212 204 255 / 0.16) 0 7px, transparent 7px 9px); }
+.sealer-lcd-air::after { content: ""; position: absolute; inset: 0; border-radius: 2px; background: repeating-linear-gradient(90deg, #d4ccff 0 7px, transparent 7px 9px); clip-path: inset(0 calc((1 - var(--air)) * 100%) 0 0); box-shadow: 0 0 6px rgb(170 155 255 / 0.4); }
 .sealer-controls { display: flex; flex-direction: column; align-items: center; gap: 9px; flex: none; }
 .sealer-knob { position: relative; width: 44px; height: 44px; border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, #5d8cf0 0 44%, transparent 45%), repeating-conic-gradient(#2f5fcf 0 6deg, #6f9af5 6deg 12deg);
-  box-shadow: 0 3px 6px rgb(30 50 110 / 0.45), 0 1px 0 rgb(255 255 255 / 0.4) inset; }
-.sealer-knob::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #8fb2ff, #3d6ee0 70%); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
+  background: radial-gradient(circle at 50% 50%, #7a68ee 0 44%, transparent 45%), repeating-conic-gradient(#5a46e0 0 6deg, #a194ff 6deg 12deg);
+  box-shadow: 0 3px 6px rgb(40 25 120 / 0.4), 0 1px 0 rgb(255 255 255 / 0.4) inset; }
+.sealer-knob::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #b9adff, #5a46e0 70%); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
 .sealer-knob i { position: absolute; left: 50%; top: 11px; width: 3px; height: 8px; margin-left: -1.5px; border-radius: 2px; background: #fff; opacity: 0.9; }
-.sealer-button { width: 26px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, #93b4ff, #3d6ee0 55%, #2550b8); box-shadow: 0 2px 3px rgb(20 40 110 / 0.4), 0 1px 0 rgb(255 255 255 / 0.45) inset; }
+.sealer-button { width: 26px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, #b9adff, #5a46e0 55%, #3a2bb0); box-shadow: 0 2px 3px rgb(40 25 120 / 0.4), 0 1px 0 rgb(255 255 255 / 0.45) inset; }
 .sealer-slot { position: absolute; left: 34px; right: 34px; bottom: 8px; height: 6px; border-radius: 3px; background: var(--m-slot); box-shadow: 0 1px 0 var(--m-edge); }
 .sealer-bag { position: relative; z-index: 0; margin-top: -14px; flex: none; filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.14)); }
 
 /* The other tools' machines (src/components/machines/Machines.tsx), in SVG. */
 .machine-stage { display: grid; place-items: center; width: 100%; min-height: 300px; }
 .machine { width: 300px; max-width: 100%; height: auto; overflow: hidden; }
-.machine-lcd { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; fill: #9ff0b6; }
+.machine-lcd { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; fill: #d4ccff; }
 .machine-badge { font-family: var(--font-sans); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; fill: #fff; }
 .machine-num { font-family: var(--font-sans); }
-.machine-engraved { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; fill: var(--m-engraved); }

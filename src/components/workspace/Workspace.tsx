@@ -117,6 +117,15 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
     abort.current = null;
   };
   useEffect(() => () => abort.current?.abort(), []);
+  // A job's machine is what to watch: on a phone the tool's header can push
+  // it below the fold, so it comes up into view when the job starts.
+  const busyView = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = busyView.current;
+    if (stage !== "busy" || !el) return;
+    const top = el.getBoundingClientRect().top;
+    if (top < 0 || top > innerHeight * 0.3) el.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
+  }, [stage]);
   const files = useMemo(() => items.map((i) => i.file), [items]);
   // Rotate turns every page by the chosen angle, on top of each page's own turn.
   const turn = tool.id === "rotate" ? Number(options.angle) || 0 : 0;
@@ -502,7 +511,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
 
   if (view === "busy") {
     return (
-      <div className="mx-auto flex max-w-[520px] flex-col items-center py-8 text-center" aria-live="polite">
+      <div ref={busyView} className="mx-auto flex max-w-[520px] scroll-mt-24 flex-col items-center py-8 text-center" aria-live="polite">
         <Processing tool={tool.id} value={progress.value} label={progress.label} files={files} />
         {fileStates.length > 1 && fileStates.some((st) => st !== "wait") && (
           <ul aria-label={t("ws.fileQueue")} className="mt-6 max-h-[40vh] w-full overflow-y-auto rounded-xl border border-line bg-surface text-start text-[14px]">
