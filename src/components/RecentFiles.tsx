@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpenText, FileText, X } from "lucide-react";
 import { useI18n } from "./I18n";
-import { forget, forgetAll, openRecent, recentFiles, subscribeLibrary, type Recent } from "@/lib/library";
+import { forget, forgetAll, openRecent, recentFiles, remembering, setRemembering, subscribeLibrary, type Recent } from "@/lib/library";
 import { handOffTo } from "@/lib/handoff";
 import { toolById } from "@/lib/tools";
 
@@ -33,7 +33,14 @@ export function RecentFiles({ onOpen, className = "" }: { onOpen?: (file: File) 
     };
   }, []);
 
-  if (!list?.length) return null;
+  // Opened files not kept ("Remember opened files" off): the reader's page
+  // says so, with the switch to turn it back on.
+  if (!list?.length) return onOpen && list && !remembering() ? (
+    <section aria-label={t("recent.title")} className={`recent ${className}`}>
+      <p className="mb-2 text-[13.5px] text-muted">{t("recent.off")}</p>
+      <RememberSwitch />
+    </section>
+  ) : null;
 
   const open = async (r: Recent) => {
     const file = await openRecent(r.id);
@@ -76,6 +83,23 @@ export function RecentFiles({ onOpen, className = "" }: { onOpen?: (file: File) 
         ))}
       </ul>
       <p className="mt-2 text-[12.5px] text-muted">{t("recent.private")}</p>
+      <RememberSwitch className="mt-3" />
     </section>
+  );
+}
+
+// "Remember opened files": whether the PDFs read are kept on this device for
+// Recent. Turned off, those kept so far are removed (src/lib/library.ts).
+export function RememberSwitch({ className = "" }: { className?: string }) {
+  const { t } = useI18n();
+  const on = useSyncExternalStore(subscribeLibrary, remembering, () => true);
+  return (
+    <label className={`flex cursor-pointer items-start gap-3 ${className}`}>
+      <input type="checkbox" role="switch" className="mt-0.5 h-5 w-5 shrink-0 accent-(--brand)" checked={on} onChange={(e) => void setRemembering(e.target.checked)} />
+      <span className="min-w-0">
+        <span className="block text-[14px] font-medium">{t("recent.remember")}</span>
+        <span className="block text-pretty text-[12.5px] text-muted">{t("recent.rememberHint")}</span>
+      </span>
+    </label>
   );
 }

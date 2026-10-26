@@ -9,6 +9,7 @@ import { ThemeSwitch } from "./ThemeMenu";
 import { ToolIcon } from "./ToolIcon";
 import { IntentLink } from "./IntentLink";
 import { AndroidApp, InstallGuide } from "./InstallGuide";
+import { RememberSwitch } from "./RecentFiles";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
@@ -342,6 +343,7 @@ function SettingsList() {
           {LOCALES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
         </select>
       </div>
+      <RememberSwitch />
       <InstallGuide />
       {/* The web app on Android can't be under Open with; the Android app can. */}
       {os === "android" && <AndroidApp />}

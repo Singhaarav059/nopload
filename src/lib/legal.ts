@@ -8,7 +8,7 @@ import { AI_CLOUD, STATIC } from "./mode";
 // The static build has no server or cookies, so its text says so.
 const on = <T,>(when: boolean, items: T[]) => (when ? items : []);
 
-export const LEGAL_UPDATED = "2026-10-24";
+export const LEGAL_UPDATED = "2026-10-26";
 
 // link: a line ending in a link, as [lead-in, text, href]; no href, no link.
 type Section = { id?: string; h: string; p: string[]; list?: string[]; link?: [string, string, string] };
@@ -46,6 +46,14 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
               "Office conversions and web page conversion send the file to our server over HTTPS. We process it in memory or a temporary folder and delete it as soon as the result is returned. We don't keep copies or look at the contents.",
             ],
       },
+      {
+        id: "recent",
+        h: "PDFs you read",
+        p: [
+          "The PDF viewer keeps the PDFs you open in it in your browser's storage on this device (IndexedDB), with the page you reached, so you can open them again from Recent in one tap, offline too. They are never uploaded. The first time a file is kept, the viewer says so.",
+          "At most 12 files and 300 MB are kept; past that, the oldest go first. Remove one with its ✕ in Recent, all of them with Clear, or turn off “Remember opened files” (under Recent in the viewer, or in the app's Settings), which also removes those already kept. Clearing your browser data removes them too. On a shared computer, turn it off or use a private window.",
+        ],
+      },
       ...on(AI_CLOUD, [{
         id: "ai",
         h: "The AI tools",
@@ -80,10 +88,10 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
         h: "Your rights",
         p: STATIC
           ? [
-              `We hold no personal data about you${AI_CLOUD ? ", apart from the hour-long, in-memory count of AI text per IP address described above" : ""}. What this site keeps in your browser (workflows, signatures, your language, your AI choice) is removed when you clear your browser data.`,
+              `We hold no personal data about you${AI_CLOUD ? ", apart from the hour-long, in-memory count of AI text per IP address described above" : ""}. What this site keeps in your browser (workflows, signatures, the PDFs you read and where you stopped, your language, your AI choice) is removed when you clear your browser data.`,
             ]
           : [
-              "What this site keeps in your browser (workflows, signatures, your language) is removed when you clear your browser data. To have a message you sent through the contact form deleted, contact us.",
+              "What this site keeps in your browser (workflows, signatures, the PDFs you read and where you stopped, your language) is removed when you clear your browser data. To have a message you sent through the contact form deleted, contact us.",
               "Depending on where you live you may have further rights, such as access, correction and objection. Contact us through the contact page to use them.",
             ],
       },
@@ -142,6 +150,7 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
         h: "Local storage",
         p: [
           "Signatures and workflows you save, the language you picked and where the AI tools run, are kept in your browser's local storage on your device only. Clearing your browser data removes them.",
+          "The PDF viewer keeps the PDFs you open in it (at most 12 files and 300 MB), the page you reached and your highlights, in your browser's storage on your device only, to open them again from Recent. Turn off “Remember opened files” to stop it and remove them; see the privacy policy.",
           "The installable app stores the site's code in your browser so the on-device tools work offline.",
         ],
       },

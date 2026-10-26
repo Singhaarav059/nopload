@@ -14,7 +14,7 @@ import { docFor, thumbUrl } from "@/lib/pdf/thumbs";
 import { clearOpenedFromOutside, handOffTo, openedFromOutside } from "@/lib/handoff";
 import { toolById, type ToolId } from "@/lib/tools";
 import type { Passage } from "@/lib/ai/speak";
-import { idOf, remember, rememberPage } from "@/lib/library";
+import { docId, markNoticeSeen, noticeSeen, remember, rememberPage, setRemembering } from "@/lib/library";
 import type { Box, Highlight } from "@/lib/pdf/highlights";
 
 export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), import("pdfjs-dist"), import("@/lib/ai/speak")]);
@@ -27,10 +27,21 @@ export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), impo
 
 const MORE: ToolId[] = ["edit", "sign", "compress", "pdfToWord", "listen", "summarize", "split", "protect"];
 const GAP = 14;
-const placeKey = (f: File) => `nopload:viewer:${f.name}:${f.size}`;
+// Where a document was left and its highlights, by its fingerprint (docId);
+// kept under its name and size before, which is still read once.
+const placeKey = (id: string) => `nopload:viewer:${id}`;
+const hlKey = (id: string) => `nopload:viewer:hl:${id}`;
+const legacyPlaceKey = (f: File) => `nopload:viewer:${f.name}:${f.size}`;
+const legacyHlKey = (f: File) => `nopload:viewer:hl:${f.name}:${f.size}`;
+const stored = (key: string, legacy: string) => {
+  try {
+    return localStorage.getItem(key) ?? localStorage.getItem(legacy);
+  } catch {
+    return null;
+  }
+};
 type Panel = null | "pages" | "contents" | "marks" | "search" | "more" | "display";
 const HL_COLORS = ["yellow", "green", "blue", "pink"] as const;
-const hlKey = (f: File) => `nopload:viewer:hl:${f.name}:${f.size}`;
 const isSide = (p: Panel) => p === "pages" || p === "contents" || p === "marks";
 type Theme = "paper" | "sepia" | "night";
 const THEMES: Theme[] = ["paper", "sepia", "night"];
@@ -62,22 +73,43 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   const [hits, setHits] = useState<{ page: number }[] | null>(null);
   const [hit, setHit] = useState(0);
   const [outline, setOutline] = useState<Outline[] | null>(null);
+  // The document's fingerprint, which its place, highlights and ?doc= go by.
+  const [docKey, setDocKey] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    docId(file).then((id) => live && setDocKey(id), () => {});
+    return () => {
+      live = false;
+    };
+  }, [file]);
   // Highlights: kept with the file on this device, saved into a copy on request.
-  const [marks, setMarks] = useState<Highlight[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(hlKey(file)) ?? "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [marks, setMarks] = useState<Highlight[]>([]);
+  useEffect(() => {
+    if (!docKey) return;
+    let live = true;
+    Promise.resolve(stored(hlKey(docKey), legacyHlKey(file))).then((saved) => {
+      try {
+        if (live && saved) setMarks(JSON.parse(saved));
+      } catch {
+        // Unreadable: no highlights.
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [docKey, file]);
   const saveMarks = (next: Highlight[]) => {
     setMarks(next);
+    if (!docKey) return;
     try {
-      localStorage.setItem(hlKey(file), JSON.stringify(next));
+      localStorage.setItem(hlKey(docKey), JSON.stringify(next));
     } catch {
       // Storage blocked or full: kept until the viewer closes.
     }
   };
+  // The first time a file is kept on this device, the reader says so, once,
+  // with a way to stop it (src/lib/library.ts).
+  const [keptNotice, setKeptNotice] = useState(false);
   // The text selected on the pages (or a highlight tapped), and where to offer what to do with it.
   const [picked, setPicked] = useState<null | { at: { x: number; y: number }; text: string; boxes: { page: number; box: Box }[] } | { at: { x: number; y: number }; mark: string }>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -127,7 +159,11 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
       }
       if (!live) return;
       setDoc(d);
-      void remember(file, d.numPages);
+      void remember(file, d.numPages).then((id) => {
+        if (!live || !id || noticeSeen()) return;
+        markNoticeSeen();
+        setKeptNotice(true);
+      });
       setRatios(rs);
     })().catch((e) => live && failed.current(e));
     return () => {
@@ -148,21 +184,19 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
 
   const restored = useRef(false);
   useEffect(() => {
-    if (restored.current || !ratios.length || !scroller.current) return;
+    if (restored.current || !ratios.length || !scroller.current || !docKey) return;
     restored.current = true;
-    let at = 0;
-    try {
-      at = Number(localStorage.getItem(placeKey(file)) ?? 0) || 0;
-    } catch {
-      // Storage blocked: start at the first page.
-    }
+    const at = Number(stored(placeKey(docKey), legacyPlaceKey(file)) ?? 0) || 0;
     if (at > 0 && at < ratios.length) {
       scroller.current.scrollTop = tops[at] - GAP;
-      setCurrent(at);
-      setResumed(at);
-      setTimeout(() => setResumed(null), 3500);
+      // The page and its note follow the scroll just made, in its wake.
+      void Promise.resolve().then(() => {
+        setCurrent(at);
+        setResumed(at);
+        setTimeout(() => setResumed(null), 3500);
+      });
     }
-  }, [ratios, tops, file]);
+  }, [ratios, tops, file, docKey]);
 
   // Full screen while it's open: the page behind doesn't scroll.
   useEffect(() => {
@@ -185,9 +219,10 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     closing.current = onClose;
   });
   useEffect(() => {
+    if (!docKey) return;
     clearOpenedFromOutside();
     const url = new URL(location.href);
-    url.searchParams.set("doc", idOf(file));
+    url.searchParams.set("doc", docKey);
     if (outside || url.searchParams.get("doc") === new URLSearchParams(location.search).get("doc")) history.replaceState(history.state, "", url);
     else {
       history.pushState(history.state, "", url);
@@ -200,7 +235,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     };
     addEventListener("popstate", onPop);
     return () => removeEventListener("popstate", onPop);
-  }, [file, outside]);
+  }, [docKey, outside]);
   const close = () => {
     if (stepped.current) return history.back();
     const url = new URL(location.href);
@@ -252,7 +287,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       try {
-        localStorage.setItem(placeKey(file), String(p));
+        if (docKey) localStorage.setItem(placeKey(docKey), String(p));
       } catch {
         // Storage blocked: the place isn't kept.
       }
@@ -877,6 +912,16 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
       )}
 
       {resumed !== null && <p className="vw-toast" role="status">{t("viewer.resumed", { n: resumed + 1 })}</p>}
+
+      {keptNotice && (
+        <div className="vw-notice" role="status" {...holdProps}>
+          <p>{t("recent.keepNotice", { name: file.name })}</p>
+          <div>
+            <button type="button" className="vw-btn" onClick={() => { setKeptNotice(false); void setRemembering(false); }}>{t("recent.keepOff")}</button>
+            <button type="button" className="vw-btn vw-btn-on" onClick={() => setKeptNotice(false)}>{t("recent.keepOk")}</button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );

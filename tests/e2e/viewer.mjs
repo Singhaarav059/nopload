@@ -6,7 +6,10 @@
 // another tool.
 //
 //   node tests/e2e/viewer.mjs [chromium] [firefox] [webkit]   (see kit.mjs)
-import { dict, open, pick, suite } from "./kit.mjs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { dict, fixture, open, pick, suite } from "./kit.mjs";
 
 const t = dict("en");
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v[k]);
@@ -208,7 +211,8 @@ await suite(async ({ browser, test }) => {
     await viewer().locator(".vw-scroll").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
     await viewer().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor({ state: "attached" });
     // The place is kept a moment after scrolling stops.
-    await page.waitForFunction(() => localStorage.getItem("nopload:viewer:report.pdf:3463") === "2");
+    // (under the document's fingerprint, ?doc= in the address).
+    await page.waitForFunction(() => localStorage.getItem(`nopload:viewer:${new URLSearchParams(location.search).get("doc")}`) === "2");
     await wake();
     step = "close";
     await bar(t["viewer.close"]).click();
@@ -219,7 +223,7 @@ await suite(async ({ browser, test }) => {
     await viewer().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor();
     return "page 3";
     } catch (e) {
-      const where = await page.evaluate(() => [localStorage.getItem("nopload:viewer:report.pdf:3463"), document.querySelector(".vw-count")?.textContent, !!document.querySelector(".vw")]).catch(() => null);
+      const where = await page.evaluate(() => [localStorage.getItem(`nopload:viewer:${new URLSearchParams(location.search).get("doc")}`), document.querySelector(".vw-count")?.textContent, !!document.querySelector(".vw")]).catch(() => null);
       throw new Error(`${step}: ${e.message.split("\n")[0]} ${JSON.stringify(where)}`);
     }
   });
@@ -297,6 +301,97 @@ await suite(async ({ browser, test }) => {
     return "compress holds report.pdf";
   });
   await ctx.close();
+
+  await test("Recent tells two files apart by their bytes, says it keeps them, and keeps nothing when turned off", async () => {
+    // Another report.pdf of the very same size: one byte of its header comment differs.
+    const dir = mkdtempSync(join(tmpdir(), "nopload-twin-"));
+    const bytes = readFileSync(fixture("report.pdf"));
+    bytes[10] = bytes[10] === 0x82 ? 0x83 : 0x82;
+    const twin = join(dir, "report.pdf");
+    writeFileSync(twin, bytes);
+    const own = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
+    const p = await own.newPage();
+    p.setDefaultTimeout(20000);
+    const shown = () => p.getByRole("dialog", { name: "report.pdf" });
+    const recent = () => p.getByRole("region", { name: t["recent.title"] });
+    let step = "first file";
+    try {
+      await open(p, "/en/pdf-viewer");
+      await pick(p, ["report.pdf"]);
+      await shown().waitFor();
+      // Said once, the first time a file is kept.
+      step = "notice";
+      const notice = shown().getByRole("status").filter({ hasText: fill(t["recent.keepNotice"], { name: "report.pdf" }) });
+      await notice.waitFor();
+      await notice.getByRole("button", { name: t["recent.keepOk"] }).click();
+      step = "read to page 3";
+      await p.evaluate(() => { const s = document.querySelector(".vw-scroll"); s.scrollTop = s.scrollHeight; });
+      await p.mouse.move(600, 400);
+      await p.mouse.wheel(0, 400);
+      await shown().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor({ state: "attached" });
+      await p.waitForTimeout(900);
+      await p.keyboard.press("Escape");
+      await shown().waitFor({ state: "detached" });
+      step = "the twin";
+      await p.locator("input[type=file]").first().setInputFiles(twin);
+      await shown().waitFor();
+      await p.waitForTimeout(1200);
+      if (await shown().getByText(fill(t["viewer.page"], { n: 3, total: 3 })).count()) throw new Error("the twin opened at the other file's page");
+      if (await shown().getByRole("status").filter({ hasText: fill(t["recent.keepNotice"], { name: "report.pdf" }) }).count()) throw new Error("notice shown again");
+      await p.keyboard.press("Escape");
+      await shown().waitFor({ state: "detached" });
+      step = "two entries";
+      await p.waitForFunction(() => document.querySelectorAll(".recent-card").length === 2, null, { timeout: 5000 }).catch(async () => {
+        throw new Error(`${await p.locator(".recent-card").count()} entries in Recent`);
+      });
+      step = "turned off";
+      await recent().getByRole("switch", { name: t["recent.remember"] }).uncheck();
+      await p.getByText(t["recent.off"]).waitFor();
+      if (await p.locator(".recent-card").count()) throw new Error("files still listed after turning it off");
+      await pick(p, ["report.pdf"]);
+      await shown().waitFor();
+      await p.waitForTimeout(1200);
+      await p.keyboard.press("Escape");
+      await shown().waitFor({ state: "detached" });
+      const kept = await p.evaluate(() => new Promise((r) => { const o = indexedDB.open("nopload-library", 1); o.onsuccess = () => { const q = o.result.transaction("files").objectStore("files").count(); q.onsuccess = () => r(q.result); }; o.onerror = () => r(-1); }));
+      if (kept !== 0) throw new Error(`${kept} file(s) kept while turned off`);
+      return "two report.pdf kept apart, notice once, nothing kept when off";
+    } catch (e) {
+      throw new Error(`${step}: ${e.message.split("\n")[0]}`);
+    } finally {
+      await own.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  await test("a file kept before fingerprints keeps its place and moves over", async () => {
+    const own = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
+    const p = await own.newPage();
+    p.setDefaultTimeout(20000);
+    try {
+      await open(p, "/en/pdf-viewer");
+      // As an earlier version left it: the row and the place under name:size.
+      const bytes = [...readFileSync(fixture("report.pdf"))];
+      await p.evaluate((bytes) => new Promise((r) => {
+        localStorage.setItem("nopload:viewer:report.pdf:3463", "2");
+        const o = indexedDB.open("nopload-library", 1);
+        o.onupgradeneeded = () => o.result.createObjectStore("files", { keyPath: "id" });
+        o.onsuccess = () => {
+          const tx = o.result.transaction("files", "readwrite");
+          tx.objectStore("files").put({ id: "report.pdf:3463", name: "report.pdf", size: 3463, type: "application/pdf", opened: Date.now(), page: 2, pages: 3, data: new Uint8Array(bytes).buffer });
+          tx.oncomplete = () => r();
+        };
+      }), bytes);
+      await pick(p, ["report.pdf"]);
+      await p.getByRole("dialog", { name: "report.pdf" }).getByText(fill(t["viewer.page"], { n: 3, total: 3 })).waitFor();
+      await p.waitForTimeout(800);
+      const ids = await p.evaluate(() => new Promise((r) => { const o = indexedDB.open("nopload-library", 1); o.onsuccess = () => { const q = o.result.transaction("files").objectStore("files").getAllKeys(); q.onsuccess = () => r(q.result); }; }));
+      if (ids.length !== 1 || !String(ids[0]).startsWith("sha256:")) throw new Error(`library keys ${JSON.stringify(ids)}`);
+      return "back at page 3, row moved to its fingerprint";
+    } finally {
+      await own.close();
+    }
+  });
 
   await test("phone: a tap shows and hides the controls", async () => {
     const phone = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 844 }, hasTouch: true });
