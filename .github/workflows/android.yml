@@ -40,6 +40,11 @@ jobs:
             echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/nopload.jks"
             echo "NOPLOAD_KEYSTORE=$RUNNER_TEMP/nopload.jks" >> "$GITHUB_ENV"
           fi
+      # The app launching as a phone launches it (from its icon, Open with,
+      # the share sheet; with Chrome, another browser or none; after a crash),
+      # on Android 7 to 16: app/src/test (Robolectric).
+      - name: Launch tests
+        run: gradle --no-daemon testReleaseUnitTest
       - name: Build
         env:
           NOPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}

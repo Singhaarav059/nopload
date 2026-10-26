@@ -63,7 +63,14 @@ function apkCerts(buf) {
 
 const manifest = read("android/app/src/main/AndroidManifest.xml").toString();
 const strings = read("android/app/src/main/res/values/strings.xml").toString();
-const string = (name) => strings.match(new RegExp(`name="${name}"[^>]*>([^<]*)<`))?.[1]?.replace(/&amp;/g, "&");
+// As Android's resource compiler reads it: \" is a quote, and a bare quote is
+// dropped (so JSON in a string resource must escape its quotes).
+const string = (name) => {
+  const raw = strings.match(new RegExp(`name="${name}"[^>]*>([^<]*)<`))?.[1];
+  if (raw === undefined) return undefined;
+  ok(!/(^|[^\\])"/.test(raw), `${name} has a bare " (Android drops it): write \\"`);
+  return raw.replace(/\\"/g, '"').replace(/&amp;/g, "&");
+};
 const web = JSON.parse(read("public/manifest.webmanifest"));
 const links = JSON.parse(read("public/.well-known/assetlinks.json"));
 const gradle = read("android/app/build.gradle.kts").toString();
