@@ -183,6 +183,9 @@ jobs:
       - name: Installed app frame on each device
         if: success() || failure()
         run: npm run test:e2e:appshell -- ${{ matrix.browser }}
+      - name: Installed app stays light on a phone
+        if: success() || failure()
+        run: npm run test:e2e:smooth -- ${{ matrix.browser }}
       - name: PDF viewer
         if: success() || failure()
         run: npm run test:e2e:viewer -- ${{ matrix.browser }}

@@ -993,6 +993,23 @@ select.field {
     }
   }
 }
+/* The home page's tool families below the screen aren't laid out or drawn
+   until they are near it: a quicker start, and less to draw while scrolling. */
+.tool-family { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+
+/* Touch screens and the app: none of that while scrolling. Each one is
+   worked out again on every frame of a scroll, which a phone feels as
+   stutter (a native app's lists don't animate as they scroll either). The
+   entrance keeps its fade and slide, without the blur, which is costly to
+   draw on a phone. */
+@media (pointer: coarse) {
+  .reveal, .reveal-line, .header-scroll, .fan, .wordmark { animation: none !important; }
+  @keyframes step-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+:root[data-app] :is(.reveal, .reveal-line, .header-scroll, .fan, .wordmark) { animation: none !important; }
 @keyframes header-firm {
   from { box-shadow: none; background-color: color-mix(in oklab, var(--surface) 55%, transparent); }
   to {

@@ -238,6 +238,7 @@
   display: grid;
   align-items: end;
 }
+.app-sheet-wrap[hidden] { display: none; }
 .app-sheet-scrim {
   position: absolute;
   inset: 0;
@@ -268,6 +269,8 @@
   background: var(--line-strong);
 }
 .app-sheet-body { overflow: auto; overscroll-behavior: contain; }
+/* Only the families on screen are laid out and drawn when a sheet opens. */
+.app-sheet-body section[data-cat] { content-visibility: auto; contain-intrinsic-size: auto 260px; }
 .app-sheet-wrap[data-leaving] .app-sheet { translate: 0 105%; }
 .app-sheet-wrap[data-leaving] .app-sheet-scrim { opacity: 0; }
 /* Bigger screens: a panel in the middle. */

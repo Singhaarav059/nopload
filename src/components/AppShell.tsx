@@ -7,6 +7,7 @@ import { Home, LayoutGrid, Workflow, Settings2, Search, X, ChevronDown, BookOpen
 import { useI18n } from "./I18n";
 import { ThemeSwitch } from "./ThemeMenu";
 import { ToolIcon } from "./ToolIcon";
+import { IntentLink } from "./IntentLink";
 import { AndroidApp, InstallGuide } from "./InstallGuide";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
@@ -41,6 +42,19 @@ type Sheet = null | "tools" | "settings";
 export function AppShell() {
   const { os, form, nav, app } = useDevice();
   const [sheet, setSheet] = useState<Sheet>(null);
+  // The sheets are built once, while the app is idle, and then only shown
+  // and hidden: a tap opens one at once instead of first building a hundred
+  // tool tiles.
+  const [warm, setWarm] = useState(false);
+  useEffect(() => {
+    if (!app) return;
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(() => setWarm(true), { timeout: 4000 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(() => setWarm(true), 1500);
+    return () => clearTimeout(id);
+  }, [app]);
   const pathname = usePathname();
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
@@ -52,7 +66,9 @@ useRipple(os === "android");
   return (
     <>
       {nav === "tabs" ? <TabBar os={os} open={setSheet} sheet={sheet} /> : <Side nav={nav} open={setSheet} />}
-      {sheet && <BottomSheet os={os} phone={form === "phone"} kind={sheet} close={() => setSheet(null)} />}
+      {(["tools", "settings"] as const).map((kind) =>
+        warm || sheet === kind ? <BottomSheet key={kind} os={os} phone={form === "phone"} kind={kind} open={sheet === kind} close={() => setSheet(null)} /> : null,
+      )}
     </>
   );
 }
@@ -204,8 +220,8 @@ function Side({ nav, open }: { nav: Nav | null; open: (s: Sheet) => void }) {
 }
 
 // A sheet from the bottom on phones (drag it down to close), a centred panel
-// on bigger screens.
-function BottomSheet({ os, phone, kind, close }: { os: Os | null; phone: boolean; kind: Exclude<Sheet, null>; close: () => void }) {
+// on bigger screens. Closed, it stays built but out of the page (hidden).
+function BottomSheet({ os, phone, kind, open, close }: { os: Os | null; phone: boolean; kind: Exclude<Sheet, null>; open: boolean; close: () => void }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; dy: number; t: number } | null>(null);
@@ -213,9 +229,18 @@ function BottomSheet({ os, phone, kind, close }: { os: Os | null; phone: boolean
   const shut = () => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return close();
     setLeaving(true);
-    setTimeout(close, 260);
+    setTimeout(() => {
+      setLeaving(false);
+      close();
+    }, 260);
   };
   useEffect(() => {
+    if (!open) return;
+    // Back where it rests, if it was last dragged down to close.
+    if (ref.current) {
+      ref.current.style.transition = "";
+      ref.current.style.translate = "";
+    }
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("keydown", onKey);
     document.documentElement.dataset.sheet = "";
@@ -223,7 +248,7 @@ function BottomSheet({ os, phone, kind, close }: { os: Os | null; phone: boolean
       document.removeEventListener("keydown", onKey);
       delete document.documentElement.dataset.sheet;
     };
-  }, [close]);
+  }, [open, close]);
   const onDown = (e: React.PointerEvent) => {
     if (!phone) return;
     drag.current = { y: e.clientY, dy: 0, t: performance.now() };
@@ -248,7 +273,7 @@ function BottomSheet({ os, phone, kind, close }: { os: Os | null; phone: boolean
     } else ref.current.style.translate = "";
   };
   return (
-    <div className="app-sheet-wrap" data-leaving={leaving || undefined} data-phone={phone || undefined} data-os={os ?? undefined}>
+    <div className="app-sheet-wrap" hidden={!open} data-leaving={leaving || undefined} data-phone={phone || undefined} data-os={os ?? undefined}>
       <button type="button" aria-label={t("nav.close")} className="app-sheet-scrim" onClick={shut} tabIndex={-1} />
       <div ref={ref} role="dialog" aria-modal aria-label={kind === "tools" ? t("app.tools") : t("app.settings")} data-sheet={kind} className="app-sheet">
         <div className="app-sheet-grip" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
@@ -287,10 +312,10 @@ function ToolsList() {
             <ul className="grid grid-cols-4 gap-x-2 gap-y-4 sm:grid-cols-6">
               {list.map((tool) => (
                 <li key={tool.id}>
-                  <Link href={href(`/${tool.slug}`)} className="app-launch group" onClick={() => haptic()}>
+                  <IntentLink href={href(`/${tool.slug}`)} className="app-launch group" onClick={() => haptic()}>
                     <ToolIcon tool={tool} size={52} />
                     <span className="line-clamp-2 text-center text-[11.5px] leading-tight text-ink-2">{t(`tool.${tool.id}.name`)}</span>
-                  </Link>
+                  </IntentLink>
                 </li>
               ))}
             </ul>
