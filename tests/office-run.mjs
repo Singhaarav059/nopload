@@ -45,8 +45,12 @@ register(pathToFileURL(join(out, "office-hooks.mjs")));
 globalThis.crossOriginIsolated = true;
 globalThis.location = { origin: "http://test.local" };
 const part = gzipSync(Buffer.from("x"));
+// net.hang: how many more part downloads answer and then go quiet.
+const net = { hang: 0 };
 globalThis.fetch = async (url) =>
-  String(url).endsWith("manifest.json")
+  !String(url).endsWith("manifest.json") && net.hang > 0 && net.hang--
+    ? new Response(new ReadableStream({ pull: () => new Promise(() => {}) }))
+    : String(url).endsWith("manifest.json")
     ? Response.json({ version: "1", files: { "soffice.wasm": { parts: ["w.gz"], size: part.length }, "soffice.data": { parts: ["d.gz"], size: part.length } } })
     : new Response(part);
 
@@ -56,7 +60,7 @@ const never = () => new Promise(() => {});
 const pdf = async () => ({ data: new Uint8Array([37, 80, 68, 70]) });
 const lo = (globalThis.lo = { made: [], initialize: async () => {}, convert: pdf });
 const reset = (o) => Object.assign(lo, { made: [], initialize: async () => {}, convert: pdf }, o);
-if (officeLimits) Object.assign(officeLimits, { startMs: 200, convertMs: 200, firstMs: 200 });
+if (officeLimits) Object.assign(officeLimits, { startMs: 200, convertMs: 200, firstMs: 200, idleMs: 200 });
 
 const results = { failed: 0 };
 const test = check(results);
@@ -103,6 +107,15 @@ await test("automatic prints as soon as LibreOffice's worker dies", async () => 
   reset({ initialize: (c) => (setTimeout(() => c.options.onError?.(new Error("RuntimeError: Aborted")), 20), never()) });
   eq(names(await job("auto")), "brief.docx.print.html", "output");
   if (officeLimits) officeLimits.startMs = 200;
+});
+
+// Twice, so it ends printed and the next test starts LibreOffice afresh.
+await test("a download that goes quiet is given up and tried again, then printed", async () => {
+  reset();
+  net.hang = 2;
+  eq(names(await job("auto")), "brief.docx.print.html", "output");
+  eq(net.hang, 0, "both tries' downloads went quiet and were given up");
+  eq(lo.made.length, 0, "no LibreOffice started on half a download");
 });
 
 await test("a start that stalls once is tried again with a fresh LibreOffice", async () => {

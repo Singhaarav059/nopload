@@ -25,20 +25,48 @@ export class OfficeError extends Error {
 }
 
 // Downloads one file's parts in order, reporting bytes, and returns an unzipped blob URL.
+// A download that brings nothing for officeLimits.idleMs has stalled (a
+// connection gone quiet, a worker that never answers): it's given up, as a
+// stalled start is, so the job is tried again or printed instead of waiting forever.
 async function fetchParts(file: Manifest["files"]["soffice.wasm"], type: string, onBytes: (n: number) => void, signal?: AbortSignal): Promise<string> {
   const parts: Blob[] = [];
-  for (const part of file.parts) {
-    const res = await fetch(base() + part, { signal });
-    if (!res.ok || !res.body) throw new Error(`Couldn't download ${part} (${res.status})`);
-    const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      onBytes(value.length);
+  const quiet = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const alive = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => quiet.abort(stalled("LibreOffice's download stopped")), officeLimits.idleMs);
+  };
+  // The caller's cancel stops it too (by hand: AbortSignal.any is too new for older Safari).
+  const cancel = () => quiet.abort(signal?.reason);
+  signal?.addEventListener("abort", cancel, { once: true });
+  // Each wait is raced against the deadline itself, not only through fetch's
+  // signal, which not every body stream honours.
+  const given = new Promise<never>((_, reject) => quiet.signal.addEventListener("abort", () => reject(quiet.signal.reason), { once: true }));
+  given.catch(() => {});
+  try {
+    for (const part of file.parts) {
+      alive();
+      const res = await Promise.race([fetch(base() + part, { signal: quiet.signal }), given]);
+      if (!res.ok || !res.body) throw new Error(`Couldn't download ${part} (${res.status})`);
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      for (;;) {
+        const { done, value } = await Promise.race([reader.read(), given]).catch((e) => {
+          void reader.cancel().catch(() => {});
+          throw e;
+        });
+        if (done) break;
+        alive();
+        chunks.push(value);
+        onBytes(value.length);
+      }
+      parts.push(new Blob(chunks as BlobPart[]));
     }
-    parts.push(new Blob(chunks as BlobPart[]));
+  } catch (e) {
+    throw quiet.signal.aborted && !signal?.aborted ? quiet.signal.reason : e;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
   }
   const unzipped = new Blob(parts).stream().pipeThrough(new DecompressionStream("gzip"));
   return URL.createObjectURL(new Blob([await new Response(unzipped).arrayBuffer()], { type }));
@@ -51,7 +79,7 @@ async function fetchParts(file: Manifest["files"]["soffice.wasm"], type: string,
 // first try gives up early (firstMs, firstPerMbMs) and goes again with a
 // fresh one, which gets the full time; a second stall has failed, so
 // Automatic can print instead.
-export const officeLimits = { startMs: 45_000, convertMs: 120_000, perMbMs: 60_000, firstMs: 30_000, firstPerMbMs: 20_000 };
+export const officeLimits = { startMs: 45_000, convertMs: 120_000, perMbMs: 60_000, firstMs: 30_000, firstPerMbMs: 20_000, idleMs: 60_000 };
 
 // Stops a converter whose worker may be dead. Its destroy() waits for the
 // worker to answer, which a dead one never does, so the worker goes directly.
