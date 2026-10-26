@@ -2,10 +2,10 @@
 
 // The parts the tool machines share (src/components/machines/Machines.tsx):
 // the job's progress as a smooth drive, the pictures of the user's pages,
-// and what they are built from: a body in the theme's colours (white and
-// grey in light, graphite in dark; globals.css --m-*), brushed metal, steel,
-// a display, a knurled knob in the machine's own accent colour. Drawn in
-// SVG, in a 300 by 300 box.
+// and what they are built from: a body in the theme's colours (a cool
+// violet-grey in light, graphite in dark; globals.css --m-*), brushed metal,
+// steel, a display, a knurled knob in the site's violet. Drawn in SVG, in a
+// 300 by 300 box.
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { thumbUrl } from "@/lib/pdf/thumbs";
@@ -87,23 +87,11 @@ export function usePictures(files: File[] | undefined, n = 1) {
   return pics;
 }
 
-// A machine's accent: its knob, handles and lamps. Three shades, light to deep.
-export type Accent = readonly [string, string, string];
-export const ACCENTS = {
-  blue: ["#93b4ff", "#3d6ee0", "#2550b8"],
-  orange: ["#ffc08a", "#f07a1a", "#c2560a"],
-  red: ["#ff9c94", "#e5483a", "#b3281d"],
-  green: ["#8ee6c0", "#14a874", "#0b7a52"],
-  cyan: ["#94ecfb", "#0fb0cf", "#08809a"],
-  violet: ["#c7b4ff", "#7c5ce6", "#5638c0"],
-  teal: ["#8fe5dc", "#14a399", "#0b7770"],
-  rose: ["#ffa3b8", "#e3305c", "#b0173e"],
-  indigo: ["#b4bcff", "#5b5ff0", "#3b3fc4"],
-  lime: ["#c6f08a", "#62a816", "#457a0c"],
-  sky: ["#a8dcff", "#2b9be8", "#166fb0"],
-  amber: ["#ffcf85", "#e8890c", "#b06505"],
-  magenta: ["#f5a8f0", "#c13fc0", "#902a90"],
-} as const satisfies Record<string, Accent>;
+// The machines' one accent, the site's own violet: knobs, handles and lamps.
+// Three shades, light to deep. Other colours only where they mean something:
+// green for done, red for stop or ink, a file format's own colour.
+type Accent = readonly [string, string, string];
+const BRAND: Accent = ["#b9adff", "#5a46e0", "#3a2bb0"];
 
 // A machine's id for its gradients and filters, unique on the page.
 export const useSvgId = () => "mc" + useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -118,7 +106,8 @@ export const fill = (token: string): CSSProperties => ({ fill: `var(${token})` }
 export const stroke = (token: string): CSSProperties => ({ stroke: `var(${token})` });
 const stop = (token: string): CSSProperties => ({ stopColor: `var(${token})` });
 
-export function Svg({ id, accent = ACCENTS.blue, children }: { id: string; accent?: Accent; children: ReactNode }) {
+export function Svg({ id, children }: { id: string; children: ReactNode }) {
+  const accent = BRAND;
   const k = (name: string) => `${id}-${name}`;
   return (
     <Ids.Provider value={id}>
@@ -195,6 +184,7 @@ export function Body({ x, y, w, h, r = 18, shadow = true, side = false }: { x: n
     <g>
       <rect x={x} y={y} width={w} height={h} rx={r} fill={url(side ? "side" : "body")} filter={shadow ? url("shadow") : undefined} />
       <rect x={x + 1} y={y + 0.5} width={w - 2} height={h - 1} rx={r - 0.5} fill="none" style={stroke("--m-edge")} />
+      <rect x={x + 0.25} y={y + 0.25} width={w - 0.5} height={h - 0.5} rx={r} fill="none" style={stroke("--m-line")} strokeWidth="0.5" />
     </g>
   );
 }
@@ -276,15 +266,6 @@ export function Meter({ x, y, w, value }: { x: number; y: number; w: number; val
 export function LcdText({ x, y, children, size = 17 }: { x: number; y: number; children: ReactNode; size?: number }) {
   return (
     <text x={x} y={y} fontSize={size}>
-      {children}
-    </text>
-  );
-}
-
-// Lettering moulded into a body panel.
-export function Engraved({ x, y, children, anchor = "start" }: { x: number; y: number; children: ReactNode; anchor?: "start" | "middle" | "end" }) {
-  return (
-    <text x={x} y={y} textAnchor={anchor} className="machine-engraved">
       {children}
     </text>
   );

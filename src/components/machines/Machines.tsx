@@ -6,7 +6,7 @@
 // a flatbed plotter signs, a scanner reads (and blacks out, compares or
 // highlights), a turntable turns, a printer converts, a typewriter edits and
 // a hand stamp marks or numbers. Compress has its vacuum sealer. Each has
-// its own shape and accent colour (kit.tsx ACCENTS). Each is drawn
+// its own shape, in the site's colours (kit.tsx). Each is drawn
 // from the job's progress (kit.tsx useDrive), finished and still for
 // reduced motion.
 
@@ -15,7 +15,7 @@ import type { ToolId } from "@/lib/tools";
 import { VacuumSealer } from "./VacuumSealer";
 import { Camera, Cabinet, Claw, Embosser, Flipper, Funnel, Intercom, LabelMaker, Patcher, Polaroid, Radio, Shredder, Shuffler } from "./PageMachines";
 import { Bookmarker, Clipper, Conveyor, Cropper, DyeBath, Folder, InkRoller, Iron, LightTable, Loupe, Rollers, Squeegee, Tiler, Washer } from "./ShopMachines";
-import { ACCENTS, Ball, Body, Button, Engraved, Knob, Lcd, LcdText, Led, Meter, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
+import { Ball, Body, Button, Knob, Lcd, LcdText, Led, Meter, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
 
 type Props = { files?: File[]; value: number };
 
@@ -37,9 +37,8 @@ function Press({ files, value }: Props) {
   const X = 64;
   const Y = 112;
   return (
-    <Svg id={id} accent={ACCENTS.orange}>
+    <Svg id={id}>
       <Body x={14} y={262} w={272} h={32} r={12} />
-      <Engraved x={272} y={283} anchor="end">{`${files?.length ?? count} → 1`}</Engraved>
       <Body x={232} y={40} w={38} h={226} r={12} side shadow={false} />
       <g transform={`translate(0 ${down * 1.5})`}>
         {Array.from({ length: count }, (_, i) => {
@@ -82,7 +81,7 @@ function Guillotine({ files, value }: Props) {
   const X = 90;
   const Y = 104;
   return (
-    <Svg id={id} accent={ACCENTS.red}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-L`}><rect x="0" y="0" width="150" height="300" /></clipPath>
         <clipPath id={`${id}-R`}><rect x="150" y="0" width="150" height="300" /></clipPath>
@@ -90,7 +89,6 @@ function Guillotine({ files, value }: Props) {
       <rect x="14" y="84" width="12" height="186" rx="4" fill={url("steel")} />
       <rect x="274" y="84" width="12" height="186" rx="4" fill={url("steel")} />
       <Body x={8} y={262} w={284} h={32} r={10} />
-      <Engraved x={280} y={283} anchor="end">1 → 2</Engraved>
       <g transform={`translate(${-30 * apart} ${3 * apart}) rotate(${-5 * apart} 150 260)`} clipPath={`url(#${id}-L)`}>
         <Sheet x={X} y={Y} w={120} h={156} pic={pic} />
       </g>
@@ -135,7 +133,7 @@ function Safe({ files, value, open }: Props & { open?: boolean }) {
   const key = spinning ? Math.floor(t * 6) % 9 : -1;
   const sx = 1 - 0.86 * door;
   return (
-    <Svg id={id} accent={ACCENTS.blue}>
+    <Svg id={id}>
       <Body x={22} y={12} w={256} h={282} r={22} />
       <Lcd x={38} y={22} w={132} h={46}>
         <LcdText x={52} y={51} size={16}>{"●".repeat(dots) + "○".repeat(4 - dots)}</LcdText>
@@ -227,7 +225,7 @@ function Plotter({ files, value, form }: Props & { form?: boolean }) {
     if (q.ink) d += `${i && pts[i - 1].ink ? "L" : "M"}${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
   }
   return (
-    <Svg id={id} accent={ACCENTS.green}>
+    <Svg id={id}>
       <defs>
         <pattern id={`${id}-grid`} width="12" height="12" patternUnits="userSpaceOnUse">
           <path d="M12 0H0V12" fill="none" stroke="#fff" strokeOpacity="0.07" />
@@ -246,7 +244,7 @@ function Plotter({ files, value, form }: Props & { form?: boolean }) {
             <line x1="124" y1={142 + i * 34} x2="202" y2={142 + i * 34} stroke="#b9bfc6" strokeWidth="1.2" />
           </g>
         ))}
-      {d && <path d={d} fill="none" stroke="#1d2d7a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
+      {d && <path d={d} fill="none" stroke="#2b2370" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
       <g transform={`translate(0 ${-lift})`}>
         <rect x="8" y={at.y - 44} width="284" height="11" rx="5" fill={url("steelv")} filter={url("soft")} />
         <rect x="4" y={at.y - 50} width="22" height="23" rx="6" fill={url("accentv")} />
@@ -254,7 +252,7 @@ function Plotter({ files, value, form }: Props & { form?: boolean }) {
         <rect x={at.x - 16} y={at.y - 50} width="32" height="30" rx="7" fill={url("accentv")} filter={url("soft")} />
         <rect x={at.x - 12} y={at.y - 47} width="24" height="4" rx="2" fill="#fff" opacity="0.35" />
         <rect x={at.x - 3.5} y={at.y - 22} width="7" height="14" fill="#23262a" />
-        <path d={`M${at.x - 3.5} ${at.y - 8} L${at.x} ${at.y} L${at.x + 3.5} ${at.y - 8} Z`} fill="#1d2d7a" />
+        <path d={`M${at.x - 3.5} ${at.y - 8} L${at.x} ${at.y} L${at.x + 3.5} ${at.y - 8} Z`} fill="#2b2370" />
       </g>
       <Led cx={276} cy={290} on={p > 0.12 && p < 0.88 ? "green" : null} />
     </Svg>
@@ -264,8 +262,8 @@ function Plotter({ files, value, form }: Props & { form?: boolean }) {
 type ScanMode = "ocr" | "read";
 const ROWS = [1, 0.9, 0.95, 0.6, 1, 0.85, 0.7, 1, 0.5];
 const MARKS: Record<ScanMode, Record<number, string>> = {
-  ocr: Object.fromEntries(ROWS.map((_, i) => [i, "#4f8cff"])),
-  read: { 1: "#2b9be8", 3: "#2b9be8", 6: "#2b9be8" },
+  ocr: Object.fromEntries(ROWS.map((_, i) => [i, "#6d5cf0"])),
+  read: { 1: "#6d5cf0", 3: "#6d5cf0", 6: "#6d5cf0" },
 };
 
 // OCR, Redact, Compare and the reading tools: a scanner's light sweeps
@@ -281,12 +279,12 @@ function Scanner({ files, value, mode, label }: Props & { mode: ScanMode; label:
   const X = 88;
   const Y = 110;
   return (
-    <Svg id={id} accent={ACCENTS.cyan}>
+    <Svg id={id}>
       <defs>
         <linearGradient id={`${id}-beam`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#7ee8ff" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#7ee8ff" stopOpacity="0.55" />
-          <stop offset="1" stopColor="#7ee8ff" stopOpacity="0" />
+          <stop offset="0" stopColor="#c9c0ff" stopOpacity="0" />
+          <stop offset="0.5" stopColor="#c9c0ff" stopOpacity="0.55" />
+          <stop offset="1" stopColor="#c9c0ff" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d="M22 100 L36 14 H264 L278 100 Z" fill={url("side")} filter={url("shadow")} />
@@ -306,7 +304,7 @@ function Scanner({ files, value, mode, label }: Props & { mode: ScanMode; label:
         <g>
           <rect x="24" y={bar - 18} width="252" height="36" fill={`url(#${id}-beam)`} />
           <rect x="18" y={bar - 5} width="264" height="10" rx="4" fill={url("steel")} filter={url("soft")} />
-          <rect x="26" y={bar - 1.5} width="248" height="3" rx="1.5" fill="#d9fbff" filter={url("glow")} />
+          <rect x="26" y={bar - 1.5} width="248" height="3" rx="1.5" fill="#efeaff" filter={url("glow")} />
         </g>
       )}
       <Lcd x={22} y={264} w={206} h={28}>
@@ -327,7 +325,7 @@ function Turntable({ files, value }: Props) {
   const a = easeInOut(seg(p, 0.15, 0.85)) * 90;
   const C = { x: 138, y: 166 };
   return (
-    <Svg id={id} accent={ACCENTS.violet}>
+    <Svg id={id}>
       <Body x={4} y={28} w={292} h={266} r={24} />
       <circle cx={C.x} cy={C.y} r="112" fill="#000" opacity="0.12" />
       <circle cx={C.x} cy={C.y} r="108" fill={url("metal")} stroke="#8d949b" strokeWidth="2.5" />
@@ -335,7 +333,7 @@ function Turntable({ files, value }: Props) {
         <circle key={i} cx={C.x} cy={C.y} r={100 - i * 8} fill="none" stroke="#fff" strokeOpacity={i % 2 ? 0.14 : 0.28} />
       ))}
       <g transform={`rotate(${a} ${C.x} ${C.y})`}>
-        <circle cx={C.x} cy={C.y - 101} r="3" fill="#d7362b" />
+        <circle cx={C.x} cy={C.y - 101} r="3" fill="#5a46e0" />
         <Sheet x={C.x - 60} y={C.y - 78} w={120} h={156} pic={pic} />
       </g>
       <circle cx={C.x} cy={C.y} r="5" fill={url("steel")} stroke="#7d848b" strokeWidth="0.6" />
@@ -383,7 +381,7 @@ function Printer({ files, value, tool }: Props & { tool: ToolId }) {
   const busy = p > 0.06 && p < 0.96;
   const X = 90;
   return (
-    <Svg id={id} accent={ACCENTS.violet}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-in`}><rect x="0" y="0" width="300" height="114" /></clipPath>
         <clipPath id={`${id}-out`}><rect x="0" y="203" width="300" height={out * 94} /></clipPath>
@@ -435,7 +433,7 @@ function Typewriter({ files, value }: Props) {
   const key = typing > 0 && typing < 1 ? Math.floor(t * 11) % 27 : -1;
   let k = 0;
   return (
-    <Svg id={id} accent={ACCENTS.teal}>
+    <Svg id={id}>
       <g>
         <rect x={x} y={top} width="120" height="210" rx="2" fill="#fff" filter={url("soft")} />
         {pic && <image href={pic} x={x + 4} y={top + 4} width="112" height="146" preserveAspectRatio="xMidYMin meet" opacity="0.4" />}
@@ -490,26 +488,26 @@ function Stamp({ files, value, number }: Props & { number?: boolean }) {
   const rest = 122;
   const face = rest + (target - rest) * pos;
   return (
-    <Svg id={id} accent={ACCENTS.rose}>
+    <Svg id={id}>
       <Body x={14} y={262} w={272} h={32} r={10} />
       <rect x="22" y="234" width="58" height="26" rx="6" fill={url("side")} filter={url("soft")} />
-      <rect x="27" y="238" width="48" height="16" rx="3" fill={number ? "#2b2d30" : "#8f241c"} />
+      <rect x="27" y="238" width="48" height="16" rx="3" fill={number ? "#2b2d30" : "#3a2bb0"} />
       <Sheet x={96} y={104} w={120} h={156} pic={pic} />
       {inked > 0 &&
         (number ? (
           <text x="156" y="254" textAnchor="middle" fontSize="13" fontWeight="600" fill="#222" opacity={inked} className="machine-num">1</text>
         ) : (
-          <g transform="rotate(-16 156 186)" fill="none" stroke="#d7362b" opacity={0.78 * inked}>
+          <g transform="rotate(-16 156 186)" fill="none" stroke="#5a46e0" opacity={0.78 * inked}>
             <circle cx="156" cy="186" r="30" strokeWidth="3" />
             <circle cx="156" cy="186" r="24" strokeWidth="1.2" />
-            <path d="M156 170 L160.7 180.5 L172 181.5 L163.4 189 L166 200 L156 194.2 L146 200 L148.6 189 L140 181.5 L151.3 180.5 Z" fill="#d7362b" stroke="none" />
+            <path d="M156 170 L160.7 180.5 L172 181.5 L163.4 189 L166 200 L156 194.2 L146 200 L148.6 189 L140 181.5 L151.3 180.5 Z" fill="#5a46e0" stroke="none" />
           </g>
         ))}
       <g transform={`translate(156 ${face})`}>
         <rect x="-7" y="-64" width="14" height="34" rx="4" fill={url("accentv")} />
         <Ball cx={0} cy={-76} r={19} />
         <rect x={-w / 2 - 8} y="-34" width={w + 16} height="26" rx="7" fill={url("body")} filter={url("soft")} />
-        <rect x={-w / 2} y="-9" width={w} height="9" rx="2" fill={number ? "#2b2d30" : "#c2352a"} />
+        <rect x={-w / 2} y="-9" width={w} height="9" rx="2" fill={number ? "#2b2d30" : "#5a46e0"} />
       </g>
     </Svg>
   );

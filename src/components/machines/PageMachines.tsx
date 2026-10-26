@@ -4,7 +4,7 @@
 // (Machines.tsx machineFor says which tool gets which). Built from kit.tsx,
 // each drawn from the job's progress p (0 to 1).
 
-import { ACCENTS, Ball, Body, Button, Engraved, Knob, Lcd, LcdText, Led, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
+import { Ball, Body, Button, Knob, Lcd, LcdText, Led, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
 
 export type Props = { files?: File[]; value: number };
 
@@ -16,26 +16,25 @@ export function Shuffler({ files, value }: Props) {
   const url = urlOf(id);
   const { p } = useDrive(value);
   const pics = usePictures(files, 2);
-  const W = 96;
-  const H = 124;
+  const W = 84;
+  const H = 108;
   const src = [
-    { x: 16, y: 18 },
-    { x: 188, y: 18 },
+    { x: 22, y: 34 },
+    { x: 194, y: 34 },
   ];
-  const out = { x: 102, y: 150 };
+  const out = { x: 108, y: 166 };
   const pages = Array.from({ length: 6 }, (_, k) => ({ k, side: k % 2, a: easeInOut(seg(p, 0.06 + k * 0.14, 0.2 + k * 0.14)) }));
   const page = (k: number, side: number, x: number, y: number, r: number) => (
     <g key={k} transform={`rotate(${r} ${x + W / 2} ${y + H / 2})`}>
       <Sheet x={x} y={y} w={W} h={H} pic={pics[side] ?? pics[0]} />
-      <rect x={x + W - 26} y={y + 6} width="20" height="5" rx="2.5" fill={side ? "#8d949b" : url("accentv")} />
+      <rect x={x + W - 24} y={y + 6} width="18" height="5" rx="2.5" fill={side ? "#a194ff" : url("accentv")} />
     </g>
   );
   return (
-    <Svg id={id} accent={ACCENTS.amber}>
-      <Body x={6} y={138} w={118} h={20} r={8} />
-      <Body x={176} y={138} w={118} h={20} r={8} />
-      <Body x={84} y={272} w={132} h={22} r={9} />
-      <Engraved x={150} y={288} anchor="middle">A · B · A</Engraved>
+    <Svg id={id}>
+      <Body x={10} y={142} w={108} h={16} r={7} />
+      <Body x={182} y={142} w={108} h={16} r={7} />
+      <Body x={86} y={274} w={128} h={20} r={8} />
       {pages.filter((q) => q.a >= 1).map((q) => page(q.k, q.side, out.x + (q.k % 2 ? 2 : -2), out.y - q.k * 1.5, q.k % 2 ? 1.5 : -1.5))}
       {[0, 1].map((side) =>
         pages
@@ -48,8 +47,8 @@ export function Shuffler({ files, value }: Props) {
         .map((q) => {
           const s = src[q.side];
           const x = s.x + (out.x - s.x) * q.a;
-          const y = s.y + (out.y - s.y) * q.a - Math.sin(q.a * PI) * 40;
-          return page(q.k, q.side, x, y, (q.side ? 1 : -1) * 14 * Math.sin(q.a * PI));
+          const y = s.y + (out.y - s.y) * q.a - Math.sin(q.a * PI) * 24;
+          return page(q.k, q.side, x, y, (q.side ? 1 : -1) * 12 * Math.sin(q.a * PI));
         })}
     </Svg>
   );
@@ -62,13 +61,16 @@ export function Claw({ files, value, reorder }: Props & { reorder?: boolean }) {
   const url = urlOf(id);
   const { p } = useDrive(value);
   const [pic] = usePictures(files, 1);
-  const slot = [22, 92, 162, 232];
-  const PW = 56;
-  const PY = 196;
-  const pickX = slot[2] + PW / 2;
-  const destX = reorder ? slot[0] + PW / 2 : 250;
-  const destY = reorder ? PY : 44;
-  const carry = reorder ? 110 : 28;
+  const slot = [24, 112, 200];
+  const PW = 76;
+  const PH = 100;
+  const PY = 146;
+  const pick = reorder ? 2 : 1;
+  const pickX = slot[pick] + PW / 2;
+  const destX = reorder ? slot[0] + PW / 2 : 238;
+  const destY = reorder ? PY : 16;
+  const carry = reorder ? 40 : 16;
+  const home = { x: 150, y: 40 };
   const m1 = easeInOut(seg(p, 0.04, 0.2));
   const d1 = easeInOut(seg(p, 0.2, 0.32));
   const g = seg(p, 0.32, 0.38);
@@ -77,41 +79,41 @@ export function Claw({ files, value, reorder }: Props & { reorder?: boolean }) {
   const d2 = easeInOut(seg(p, 0.72, 0.82));
   const r = seg(p, 0.82, 0.87);
   const up = easeInOut(seg(p, 0.87, 1));
-  let hx = 150 + (pickX - 150) * m1;
-  let hy = 110 + (PY - 110) * d1;
+  let hx = home.x + (pickX - home.x) * m1;
+  let hy = home.y + (PY - home.y) * d1;
   if (p >= 0.38) hy = PY + (carry - PY) * l1;
   if (p >= 0.54) hx = pickX + (destX - pickX) * m2;
   if (p >= 0.72) hy = carry + (destY - carry) * d2;
   if (p >= 0.87) {
-    hy = destY + (100 - destY) * up;
-    hx = destX + (150 - destX) * up;
+    hy = destY + (home.y - destY) * up;
+    hx = destX + (home.x - destX) * up;
   }
   const held = g >= 1 && r < 1;
   const grip = held ? 1 : g < 1 ? g : 1 - r;
   const shift = reorder ? easeInOut(seg(p, 0.56, 0.74)) : 0;
-  const mini = (n: number, x: number, y: number) => (
+  const page = (n: number, x: number, y: number) => (
     <g key={n}>
-      <Sheet x={x} y={y} w={PW} h={74} pic={pic} />
-      <text x={x + PW / 2} y={y + 68} textAnchor="middle" className="machine-num" fontSize="10" fill="#8a9099">{n + 1}</text>
+      <Sheet x={x} y={y} w={PW} h={PH} pic={pic} />
+      <circle cx={x + PW - 12} cy={y + PH - 12} r="8" fill={n === pick ? url("accentv") : "#e4e2ea"} />
+      <text x={x + PW - 12} y={y + PH - 8.5} textAnchor="middle" className="machine-num" fontSize="10" fontWeight="700" fill={n === pick ? "#fff" : "#6b6f75"}>{n + 1}</text>
     </g>
   );
   return (
-    <Svg id={id} accent={ACCENTS.sky}>
-      <Body x={8} y={268} w={284} h={26} r={10} />
-      <Engraved x={280} y={286} anchor="end">{reorder ? "3 → 1" : "p.3 →"}</Engraved>
-      {!reorder && <Body x={204} y={118} w={88} h={10} r={4} />}
-      {[0, 1, 3].map((n) => mini(n, slot[n] + (n < 2 ? 70 * shift : 0), PY))}
-      {!held && r < 1 && mini(2, slot[2], PY)}
-      {r >= 1 && mini(2, destX - PW / 2, destY)}
-      <line x1={hx} y1="34" x2={hx} y2={hy - 24} stroke="#5f656c" strokeWidth="1.5" />
-      {held && mini(2, hx - PW / 2, hy)}
+    <Svg id={id}>
+      <Body x={8} y={250} w={284} h={44} r={12} />
+      {!reorder && <Body x={196} y={118} w={96} h={10} r={4} />}
+      {[0, 1, 2].filter((n) => n !== pick).map((n) => page(n, slot[n] + (reorder ? 88 * shift : 0), PY))}
+      {!held && r < 1 && page(pick, slot[pick], PY)}
+      {r >= 1 && page(pick, destX - PW / 2, destY)}
+      {held && page(pick, hx - PW / 2, hy)}
+      <line x1={hx} y1="12" x2={hx} y2={hy - 22} stroke="#6b6f75" strokeWidth="1.5" />
       <g transform={`translate(${hx} ${hy})`}>
-        <rect x="-15" y="-27" width="30" height="17" rx="5" fill={url("accentv")} filter={url("soft")} />
-        <path d="M-6 -10 L-11 6" stroke={url("steelv")} strokeWidth="4" strokeLinecap="round" transform={`rotate(${-22 * (1 - grip)} -6 -10)`} />
-        <path d="M6 -10 L11 6" stroke={url("steelv")} strokeWidth="4" strokeLinecap="round" transform={`rotate(${22 * (1 - grip)} 6 -10)`} />
+        <rect x="-18" y="-30" width="36" height="20" rx="6" fill={url("accentv")} filter={url("soft")} />
+        <path d="M-8 -10 L-13 7" stroke={url("steelv")} strokeWidth="4.5" strokeLinecap="round" transform={`rotate(${-22 * (1 - grip)} -8 -10)`} />
+        <path d="M8 -10 L13 7" stroke={url("steelv")} strokeWidth="4.5" strokeLinecap="round" transform={`rotate(${22 * (1 - grip)} 8 -10)`} />
       </g>
-      <rect x="6" y="24" width="288" height="10" rx="5" fill={url("steelv")} filter={url("soft")} />
-      <rect x={hx - 18} y="20" width="36" height="18" rx="6" fill={url("body")} filter={url("soft")} />
+      <rect x="6" y="4" width="288" height="10" rx="5" fill={url("steelv")} filter={url("soft")} />
+      <rect x={hx - 20} y="0" width="40" height="18" rx="6" fill={url("body")} filter={url("soft")} />
     </Svg>
   );
 }
@@ -123,11 +125,11 @@ export function Shredder({ files, value, blank }: Props & { blank?: boolean }) {
   const { p } = useDrive(value);
   const [pic] = usePictures(files, 1);
   const feed = seg(p, 0.08, 0.86);
-  const top = -60 + feed * 200;
+  const top = -24 + feed * 142;
   const fed = Math.max(0, Math.min(156, top + 156 - 118));
   const X = 90;
   return (
-    <Svg id={id} accent={ACCENTS.red}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-in`}><rect x="0" y="0" width="300" height="118" /></clipPath>
         <clipPath id={`${id}-bin`}><rect x="62" y="190" width="176" height="92" rx="6" /></clipPath>
@@ -153,7 +155,6 @@ export function Shredder({ files, value, blank }: Props & { blank?: boolean }) {
       <Body x={36} y={104} w={228} h={78} r={16} />
       <rect x="76" y="112" width="148" height="7" rx="3.5" style={fill("--m-slot")} />
       <Led cx={236} cy={160} on={feed > 0 && feed < 1 ? "red" : null} />
-      <Engraved x={52} y={164}>{blank ? "∅ ✕" : "✕"}</Engraved>
     </Svg>
   );
 }
@@ -168,7 +169,7 @@ export function Camera({ files, value }: Props) {
   const taken = shots.filter((s) => p >= s).length;
   const flash = Math.max(0, ...shots.map((s) => 1 - Math.abs(p - s) / 0.035));
   return (
-    <Svg id={id} accent={ACCENTS.indigo}>
+    <Svg id={id}>
       <Body x={16} y={112} w={268} h={182} r={20} />
       <Sheet x={78} y={124} w={122} h={152} pic={pics[Math.min(taken, Math.max(0, pics.length - 1))] ?? pics[0]} />
       <path d="M138 60 L162 60 L206 126 L74 126 Z" fill="#fff" opacity={0.1 + flash * 0.5} />
@@ -195,7 +196,8 @@ export function Polaroid({ files, value }: Props) {
   const out = easeOut(seg(p, 0.2, 0.6));
   const develop = easeInOut(seg(p, 0.55, 0.95));
   return (
-    <Svg id={id} accent={ACCENTS.magenta}>
+    <Svg id={id}>
+      <g transform="translate(0 -26)">
       <defs>
         <clipPath id={`${id}-out`}><rect x="0" y="188" width="300" height={out * 112} /></clipPath>
       </defs>
@@ -217,12 +219,20 @@ export function Polaroid({ files, value }: Props) {
       <circle cx="140" cy="101" r="7" fill="#fff" opacity="0.18" />
       <Button x={204} y={28} w={30} h={12} />
       <rect x="78" y="180" width="144" height="7" rx="3.5" style={fill("--m-slot")} />
+      </g>
     </Svg>
   );
 }
 
-const TEAR = "M90 100 H146 L156 116 L166 110 L172 128 L184 124 L188 142 L200 140 L210 162 V256 H90 Z";
-const PIECE = "M146 100 H210 V162 L200 140 L188 142 L184 124 L172 128 L166 110 L156 116 Z";
+// Repair's page, and its torn top corner: a jagged line from the top edge
+// to the right edge.
+const PAGE = { x: 76, y: 28, w: 148, h: 206 };
+const JAG = [
+  [70, 0], [80, 16], [90, 10], [97, 28], [110, 24], [115, 44], [128, 42], [148, 70],
+].map(([dx, dy]) => [PAGE.x + dx, PAGE.y + dy]);
+const TEAR_AT = { x: JAG[0][0], y: JAG[0][1] };
+const TEAR = `M${PAGE.x} ${PAGE.y} H${JAG[0][0]} ${JAG.map(([x, y]) => `L${x} ${y}`).join(" ")} V${PAGE.y + PAGE.h} H${PAGE.x} Z`;
+const PIECE = `M${JAG[0][0]} ${JAG[0][1]} H${PAGE.x + PAGE.w} V${JAG.at(-1)![1]} ${[...JAG].reverse().map(([x, y]) => `L${x} ${y}`).join(" ")} Z`;
 
 // Repair: the torn corner slides back into place and a strip of tape holds it.
 export function Patcher({ files, value }: Props) {
@@ -234,34 +244,30 @@ export function Patcher({ files, value }: Props) {
   const tape = easeInOut(seg(p, 0.55, 0.86));
   const done = p > 0.9;
   // The tape runs along the tear, from its top end down to the page's edge.
-  const a = { x: 142, y: 96 };
-  const b = { x: 214, y: 166 };
+  const a = { x: TEAR_AT.x - 8, y: TEAR_AT.y - 8 };
+  const b = { x: PAGE.x + PAGE.w + 8, y: PAGE.y + 78 };
   const end = { x: a.x + (b.x - a.x) * tape, y: a.y + (b.y - a.y) * tape };
+  const sheet = <Sheet x={PAGE.x} y={PAGE.y} w={PAGE.w} h={PAGE.h} pic={pic} />;
   return (
-    <Svg id={id} accent={ACCENTS.sky}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-page`}><path d={TEAR} /></clipPath>
         <clipPath id={`${id}-piece`}><path d={PIECE} /></clipPath>
       </defs>
-      <Body x={14} y={262} w={272} h={32} r={10} />
-      <Engraved x={272} y={283} anchor="end">{done ? "✓" : "…"}</Engraved>
-      <g clipPath={`url(#${id}-page)`}>
-        <Sheet x={90} y={100} w={120} h={156} pic={pic} />
+      <Body x={14} y={242} w={272} h={52} r={12} />
+      <g clipPath={`url(#${id}-page)`}>{sheet}</g>
+      <g transform={`translate(${24 * (1 - m)} ${-14 * (1 - m)}) rotate(${14 * (1 - m)} 200 80)`}>
+        <g clipPath={`url(#${id}-piece)`}>{sheet}</g>
       </g>
-      <g transform={`translate(${40 * (1 - m)} ${-34 * (1 - m)}) rotate(${20 * (1 - m)} 186 124)`}>
-        <g clipPath={`url(#${id}-piece)`}>
-          <Sheet x={90} y={100} w={120} h={156} pic={pic} />
-        </g>
-      </g>
-      {tape > 0 && <line x1={a.x} y1={a.y} x2={end.x} y2={end.y} style={{ stroke: "var(--accent-m-hi)" }} strokeOpacity="0.55" strokeWidth="16" strokeLinecap="square" />}
+      {tape > 0 && <line x1={a.x} y1={a.y} x2={end.x} y2={end.y} stroke="#b9adff" strokeOpacity="0.5" strokeWidth="20" strokeLinecap="square" />}
       {tape > 0 && tape < 1 && (
         <g transform={`translate(${end.x} ${end.y})`}>
-          <circle r="15" fill={url("body")} filter={url("soft")} />
-          <circle r="9" style={{ fill: "var(--accent-m-hi)" }} opacity="0.6" />
-          <circle r="4" fill={url("steel")} />
+          <circle r="17" fill={url("body")} filter={url("soft")} />
+          <circle r="11" fill="#b9adff" />
+          <circle r="4.5" fill={url("steel")} />
         </g>
       )}
-      <Led cx={30} cy={278} on={done ? "green" : null} />
+      <Led cx={266} cy={268} on={done ? "green" : null} />
     </Svg>
   );
 }
@@ -288,13 +294,13 @@ export function Cabinet({ files, value }: Props) {
     </g>
   );
   return (
-    <Svg id={id} accent={ACCENTS.red}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-in`}><rect x="0" y="0" width="300" height={front} /></clipPath>
       </defs>
       <Body x={70} y={26} w={160} h={268} r={14} />
       <rect x="84" y="36" width="132" height={Math.max(4, front - 36)} rx="4" style={fill("--m-cavity")} />
-      {[0, 1, 2, 3, 4].map((i) => <rect key={i} x={92 + i * 24} y={front - 12} width="18" height="10" rx="2" fill={["#e5483a", "#2f6fd6", "#14a874", "#e8890c", "#7c5ce6"][i]} opacity={open > 0.1 ? 0.8 : 0} />)}
+      {[0, 1, 2, 3, 4].map((i) => <rect key={i} x={92 + i * 24} y={front - 12} width="18" height="10" rx="2" fill={["#5a46e0", "#a194ff", "#ff7a59", "#8a9099", "#c3bfcd"][i]} opacity={open > 0.1 ? 0.8 : 0} />)}
       <g clipPath={`url(#${id}-in)`}>
         <Sheet x={90} y={-160 + drop * 200} w={120} h={156} pic={pic} />
       </g>
@@ -319,9 +325,8 @@ export function Embosser({ files, value }: Props) {
   const hy = 112 + row * 28;
   const busy = p > 0.05 && p < 0.94;
   return (
-    <Svg id={id} accent={ACCENTS.teal}>
+    <Svg id={id}>
       <Body x={6} y={76} w={288} h={218} r={20} />
-      <Engraved x={150} y={288} anchor="middle">⠁⠉⠉⠑⠎⠎</Engraved>
       <Sheet x={76} y={88} w={148} h={186} pic={pic} opacity={0.98} />
       {pic && <rect x="76" y="88" width="148" height="186" fill="#fff" opacity="0.6" />}
       {Array.from({ length: 6 }, (_, r) =>
@@ -353,39 +358,36 @@ export function Funnel({ files, value }: Props) {
   const url = urlOf(id);
   const { p, t } = useDrive(value);
   const [pic] = usePictures(files, 1);
-  const drop = easeIn(seg(p, 0.05, 0.34));
+  const drop = easeIn(seg(p, 0.06, 0.34));
   const swirl = seg(p, 0.25, 0.4) * (1 - seg(p, 0.6, 0.7));
   const card = easeOut(seg(p, 0.6, 0.86));
   return (
-    <Svg id={id} accent={ACCENTS.indigo}>
+    <Svg id={id}>
       <defs>
-        <clipPath id={`${id}-top`}><rect x="0" y="0" width="300" height="70" /></clipPath>
-        <clipPath id={`${id}-cone`}><path d="M54 72 H246 L170 168 H130 Z" /></clipPath>
+        <clipPath id={`${id}-top`}><rect x="0" y="0" width="300" height="134" /></clipPath>
+        <clipPath id={`${id}-cone`}><path d="M60 136 H240 L168 204 H132 Z" /></clipPath>
       </defs>
-      <rect x="26" y="60" width="9" height="226" rx="4" fill={url("steel")} />
-      <rect x="265" y="60" width="9" height="226" rx="4" fill={url("steel")} />
-      <Body x={56} y={268} w={188} h={26} r={10} />
+      <Body x={60} y={272} w={180} h={22} r={9} />
       <g clipPath={`url(#${id}-top)`}>
-        <Sheet x={90} y={-150 + drop * 200} w={120} h={156} pic={pic} />
+        <Sheet x={102} y={8 + drop * 140} w={96} h={124} pic={pic} />
       </g>
-      <path d="M50 70 H250 L172 170 V196 H128 V170 Z" fill={url("metal")} filter={url("soft")} />
-      <path d="M50 70 H250 L172 170 V196 H128 V170 Z" fill={url("brush")} />
+      <path d="M56 134 H244 L170 206 V226 H130 V206 Z" fill={url("metal")} filter={url("soft")} />
+      <path d="M56 134 H244 L170 206 V226 H130 V206 Z" fill={url("brush")} />
       <g clipPath={`url(#${id}-cone)`} opacity={swirl}>
-        <rect x="54" y="72" width="192" height="100" style={fill("--m-cavity")} opacity="0.8" />
-        {Array.from({ length: 7 }, (_, i) => (
-          <rect key={i} x={-22} y="-2.5" width="44" height="5" rx="2.5" fill="#d7dbdf" transform={`translate(150 ${100 + i * 9}) rotate(${(t * 220 + i * 51) % 360}) translate(${20 + i * 4} 0)`} />
+        <rect x="60" y="136" width="180" height="70" style={fill("--m-cavity")} opacity="0.85" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <rect key={i} x={-18} y="-2.5" width="36" height="5" rx="2.5" fill="#d7dbdf" transform={`translate(150 ${152 + i * 8}) rotate(${(t * 220 + i * 51) % 360}) translate(${16 + i * 4} 0)`} />
         ))}
       </g>
-      <ellipse cx="150" cy="70" rx="100" ry="8" fill="#8d949b" />
-      <ellipse cx="150" cy="69" rx="96" ry="6" style={fill("--m-cavity")} />
-      <rect x="28" y="66" width="244" height="6" rx="3" fill={url("steelv")} />
+      <ellipse cx="150" cy="134" rx="94" ry="7" fill="#8d949b" />
+      <ellipse cx="150" cy="133" rx="90" ry="5" style={fill("--m-cavity")} />
       {card > 0 && (
-        <g transform={`translate(150 ${200 + card * 40}) scale(${0.25 + card * 0.75}) translate(-55 -33)`}>
-          <rect width="110" height="66" rx="5" fill="#fff" filter={url("soft")} />
-          <rect x="8" y="10" width="4" height="46" rx="2" fill={url("accentv")} />
-          <rect x="20" y="12" width="70" height="6" rx="3" fill="#b9bfc6" />
-          <rect x="20" y="28" width="80" height="5" rx="2.5" fill="#d7dbdf" />
-          <rect x="20" y="42" width="56" height="5" rx="2.5" fill="#d7dbdf" />
+        <g transform={`translate(150 ${222 + card * 26}) scale(${0.25 + card * 0.75}) translate(-60 -26)`}>
+          <rect width="120" height="52" rx="6" fill="#fff" filter={url("soft")} />
+          <rect x="10" y="10" width="4" height="32" rx="2" fill={url("accentv")} />
+          <rect x="22" y="12" width="74" height="6" rx="3" fill="#b9bfc6" />
+          <rect x="22" y="24" width="86" height="5" rx="2.5" fill="#d7dbdf" />
+          <rect x="22" y="35" width="58" height="5" rx="2.5" fill="#d7dbdf" />
         </g>
       )}
     </Svg>
@@ -401,7 +403,7 @@ export function Intercom({ files, value }: Props) {
   const [pic] = usePictures(files, 1);
   const bubbles = [0.08, 0.3, 0.52, 0.74];
   return (
-    <Svg id={id} accent={ACCENTS.sky}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-grille`}><circle cx="222" cy="200" r="42" /></clipPath>
         <pattern id={`${id}-holes`} width="8" height="8" patternUnits="userSpaceOnUse">
@@ -435,6 +437,9 @@ export function Intercom({ files, value }: Props) {
   );
 }
 
+// The other script's words: lengths of the marks along a line.
+const GLYPHS = [12, 18, 9, 15, 20, 11, 14, 8, 16];
+
 // Translate: the page turns over on its axle, and the back of it reads in
 // another script.
 export function Flipper({ files, value }: Props) {
@@ -446,11 +451,10 @@ export function Flipper({ files, value }: Props) {
   const c = Math.cos(th);
   const sy = Math.max(0.02, Math.abs(c));
   return (
-    <Svg id={id} accent={ACCENTS.violet}>
+    <Svg id={id}>
       <rect x="34" y="60" width="10" height="214" rx="4" fill={url("steel")} />
       <rect x="256" y="60" width="10" height="214" rx="4" fill={url("steel")} />
       <Body x={14} y={268} w={272} h={26} r={10} />
-      <Engraved x={150} y={286} anchor="middle">A → 文</Engraved>
       <rect x="40" y="166" width="220" height="8" rx="4" fill={url("steelv")} />
       <g transform={`translate(0 170) scale(1 ${sy}) translate(0 -170)`}>
         {c >= 0 ? (
@@ -458,13 +462,18 @@ export function Flipper({ files, value }: Props) {
         ) : (
           <g>
             <rect x="90" y="92" width="120" height="156" rx="2" fill="#fff" filter={url("soft")} />
-            {Array.from({ length: 9 }, (_, i) => (
-              <g key={i}>
-                {Array.from({ length: 6 - (i % 3) }, (_, j) => (
-                  <rect key={j} x={102 + j * 16} y={106 + i * 15} width="11" height="9" rx="2" fill={i === 0 ? url("accentv") : "#aab0b8"} opacity={i === 0 ? 0.9 : 0.75} />
-                ))}
-              </g>
-            ))}
+            {Array.from({ length: 9 }, (_, i) => {
+              let x = 102;
+              return (
+                <g key={i}>
+                  {GLYPHS.slice(i % 4, (i % 4) + 6 - (i % 3)).map((w, j) => {
+                    const at = x;
+                    x += w + 5;
+                    return <rect key={j} x={at} y={110 + i * 15} width={w} height="6" rx="3" fill={i === 0 ? url("accentv") : "#aab0b8"} opacity={i === 0 ? 0.9 : 0.8} />;
+                  })}
+                </g>
+              );
+            })}
           </g>
         )}
       </g>
@@ -489,7 +498,7 @@ export function Radio({ files, value }: Props) {
   const row = Math.min(7, Math.floor(q * 8));
   const playing = p > 0.05 && p < 0.97;
   return (
-    <Svg id={id} accent={ACCENTS.rose}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-grille`}><circle cx="100" cy="198" r="52" /></clipPath>
         <pattern id={`${id}-holes`} width="9" height="9" patternUnits="userSpaceOnUse">
@@ -497,7 +506,7 @@ export function Radio({ files, value }: Props) {
         </pattern>
       </defs>
       <Sheet x={100} y={8} w={100} h={130} pic={pic} />
-      <rect x="108" y={22 + row * 13} width="84" height="9" rx="2" fill="#2b9be8" opacity="0.3" />
+      <rect x="108" y={22 + row * 13} width="84" height="9" rx="2" fill="#6d5cf0" opacity="0.3" />
       {playing &&
         [0, 1, 2].map((k) => {
           const r = 62 + ((t * 34 + k * 16) % 48);
@@ -507,7 +516,7 @@ export function Radio({ files, value }: Props) {
       <circle cx="100" cy="198" r="56" fill={url("side")} />
       <rect x="44" y="142" width="112" height="112" fill={`url(#${id}-holes)`} clipPath={`url(#${id}-grille)`} />
       <rect x="174" y="146" width="86" height="46" rx="8" fill={url("lcd")} />
-      {Array.from({ length: 9 }, (_, i) => <rect key={i} x={182 + i * 9} y={i % 2 ? 158 : 154} width="1.5" height={i % 2 ? 8 : 12} fill="#9ff0b6" opacity="0.6" />)}
+      {Array.from({ length: 9 }, (_, i) => <rect key={i} x={182 + i * 9} y={i % 2 ? 158 : 154} width="1.5" height={i % 2 ? 8 : 12} fill="#d4ccff" opacity="0.6" />)}
       <rect x={182 + q * 70} y="150" width="2.5" height="36" rx="1" fill="#ff5a4e" />
       <Knob cx={196} cy={236} r={17} angle={q * 300} />
       <Knob cx={242} cy={236} r={17} angle={-40 + q * 80} />
@@ -522,37 +531,39 @@ export function LabelMaker({ files, value, tag }: Props & { tag?: boolean }) {
   const url = urlOf(id);
   const { p } = useDrive(value);
   const [pic] = usePictures(files, 1);
-  const X = 160;
-  const Y = 34;
+  const X = 132;
+  const Y = 18;
+  const W = 140;
+  const H = 182;
   const jobs = tag
-    ? [{ start: 0.1, to: { x: 214, y: 30, w: 66, r: 32 } }]
+    ? [{ start: 0.1, to: { x: X + W - 58, y: Y - 2, w: 66, r: 32 } }]
     : [
-        { start: 0.08, to: { x: X + 8, y: Y + 8, w: 104, r: 0 } },
-        { start: 0.5, to: { x: X + 8, y: Y + 134, w: 104, r: 0 } },
+        { start: 0.08, to: { x: X + 9, y: Y + 9, w: W - 18, r: 0 } },
+        { start: 0.5, to: { x: X + 9, y: Y + H - 23, w: W - 18, r: 0 } },
       ];
-  const strip = (w: number, key: string | number, x: number, y: number, r: number) => (
+  const from = { x: 172, y: 208 };
+  const strip = (w: number, key: number, x: number, y: number, r: number) => (
     <g key={key} transform={`translate(${x} ${y}) rotate(${r})`}>
       <rect width={w} height="14" rx="2" fill={url("accentv")} filter={url("soft")} />
       {Array.from({ length: Math.floor((w - 10) / 9) }, (_, i) => <rect key={i} x={6 + i * 9} y="5" width="6" height="4" rx="1" fill="#fff" opacity="0.85" />)}
     </g>
   );
   return (
-    <Svg id={id} accent={tag ? ACCENTS.teal : ACCENTS.sky}>
-      <Sheet x={X} y={Y} w={120} h={156} pic={pic} />
+    <Svg id={id}>
+      <Sheet x={X} y={Y} w={W} h={H} pic={pic} />
       {jobs.map((j, n) => {
         const print = seg(p, j.start, j.start + 0.24);
         const fly = easeInOut(seg(p, j.start + 0.26, j.start + 0.4));
         if (print <= 0) return null;
-        const from = { x: 168, y: 216 };
-        if (fly <= 0) return strip(Math.max(10, j.to.w * print), n, from.x, from.y, 0);
+        if (fly <= 0) return strip(Math.max(10, Math.min(110, j.to.w) * print), n, from.x, from.y, 0);
         return strip(j.to.w, n, from.x + (j.to.x - from.x) * fly, from.y + (j.to.y - from.y) * fly - Math.sin(fly * PI) * 30, j.to.r * fly);
       })}
-      <Body x={14} y={194} w={152} h={96} r={24} />
-      <Lcd x={26} y={204} w={128} h={34}>
-        <LcdText x={38} y={226} size={12}>{tag ? "#  ⓘ" : "▔ ▁"}</LcdText>
+      <Body x={14} y={186} w={160} h={106} r={26} />
+      <Lcd x={28} y={198} w={132} h={36}>
+        <LcdText x={42} y={221} size={12}>{tag ? "# i" : "▔  ▁"}</LcdText>
       </Lcd>
-      {Array.from({ length: 14 }, (_, i) => <rect key={i} x={30 + (i % 7) * 17} y={246 + Math.floor(i / 7) * 17} width="13" height="12" rx="3" fill={url("side")} stroke="#000" strokeOpacity="0.1" />)}
-      <rect x="160" y="214" width="8" height="18" rx="2" style={fill("--m-slot")} />
+      {Array.from({ length: 14 }, (_, i) => <rect key={i} x={30 + (i % 7) * 18} y={244 + Math.floor(i / 7) * 19} width="14" height="13" rx="3.5" fill={url("side")} stroke="#000" strokeOpacity="0.1" />)}
+      <rect x="168" y="206" width="8" height="18" rx="2" style={fill("--m-slot")} />
     </Svg>
   );
 }

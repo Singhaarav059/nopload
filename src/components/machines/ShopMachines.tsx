@@ -4,7 +4,7 @@
 // (Machines.tsx machineFor says which tool gets which). Built from kit.tsx,
 // each drawn from the job's progress p (0 to 1).
 
-import { ACCENTS, Ball, Body, Engraved, Knob, Lcd, LcdText, Led, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
+import { Ball, Body, Knob, Lcd, LcdText, Led, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
 import type { Props } from "./PageMachines";
 
 const PI = Math.PI;
@@ -39,7 +39,7 @@ export function Cropper({ files, value }: Props) {
     return <path key={k} d={`M${x + sx * 16} ${y} H${x} V${y + sy * 16}`} fill="none" style={{ stroke: "var(--accent-m)" }} strokeWidth="4" strokeLinecap="round" />;
   };
   return (
-    <Svg id={id} accent={ACCENTS.lime}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-in`}><rect x={I.x} y={I.y} width={I.w} height={I.h} /></clipPath>
         <pattern id={`${id}-grid`} width="14" height="14" patternUnits="userSpaceOnUse">
@@ -83,7 +83,8 @@ export function Rollers({ files, value }: Props) {
   const out = easeOut(seg(p, 0.45, 0.95));
   const crank = p * 900;
   return (
-    <Svg id={id} accent={ACCENTS.amber}>
+    <Svg id={id}>
+      <g transform="translate(0 -34)">
       <defs>
         <clipPath id={`${id}-in`}><rect x="0" y="0" width="300" height="114" /></clipPath>
         <clipPath id={`${id}-out`}><rect x="0" y="176" width="300" height={out * 124} /></clipPath>
@@ -98,7 +99,6 @@ export function Rollers({ files, value }: Props) {
       {Array.from({ length: 6 }, (_, i) => (
         <rect key={i} x={76 + ((i * 26 + crank / 4) % 150)} y="124" width="2" height="30" fill="#fff" opacity="0.35" />
       ))}
-      <Engraved x={150} y={172} anchor="middle">⤡</Engraved>
       <rect x="58" y="176" width="34" height="14" rx="4" fill={url("side")} />
       <rect x="208" y="176" width="34" height="14" rx="4" fill={url("side")} />
       <g clipPath={`url(#${id}-out)`}>
@@ -109,11 +109,12 @@ export function Rollers({ files, value }: Props) {
         <Ball cx={270} cy={112} r={9} />
       </g>
       <circle cx="270" cy="143" r="9" fill={url("steel")} stroke="#7d848b" strokeWidth="0.6" />
+      </g>
     </Svg>
   );
 }
 
-const RIBBONS = ["var(--accent-m)", "#14a874", "#e5483a"];
+const RIBBONS = ["#5a46e0", "#ff7a59", "#a194ff"];
 
 // Bookmarks: the dispenser drops a ribbon into the book at each chapter,
 // and snips it, so the ends stand out of the top.
@@ -124,15 +125,15 @@ export function Bookmarker({ files, value }: Props) {
   const X = 80;
   const Y = 100;
   return (
-    <Svg id={id} accent={ACCENTS.indigo}>
+    <Svg id={id}>
       {RIBBONS.map((color, i) => {
         const drop = easeOut(seg(p, 0.08 + i * 0.26, 0.22 + i * 0.26));
         const snipped = p > 0.26 + i * 0.26;
         if (drop <= 0) return null;
-        const x = 116 + i * 34;
-        const tip = 52 + drop * 100;
-        const top = snipped ? 78 - i * 4 : 52;
-        return <path key={i} d={`M${x} ${top} V${tip} H${x + 12} V${top} L${x + 6} ${top + (snipped ? 6 : 0)} Z`} style={{ fill: color }} />;
+        const x = 113 + i * 34;
+        const tip = 54 + drop * 100;
+        const top = snipped ? 62 + i * 6 : 54;
+        return <path key={i} d={`M${x} ${top} V${tip} H${x + 16} V${top} L${x + 8} ${top + (snipped ? 7 : 0)} Z`} style={{ fill: color }} />;
       })}
       {[4, 3, 2, 1].map((k) => <rect key={k} x={X + k * 2} y={Y - k * 2} width="140" height="180" rx="2" fill="#f2f3f5" stroke="#000" strokeOpacity="0.08" />)}
       <Sheet x={X} y={Y} w={140} h={180} pic={pic} />
@@ -165,16 +166,16 @@ export function Loupe({ files, value }: Props) {
   const k = easeInOut(seg(p, 0.08, 0.7));
   const away = easeInOut(seg(p, 0.72, 0.86));
   const on = sigAt(k);
-  const c = { x: on.x + (236 - on.x) * away, y: on.y + (84 - on.y) * away };
+  const c = { x: on.x + (196 - on.x) * away, y: on.y + (80 - on.y) * away };
   const seal = easeOut(seg(p, 0.84, 0.96));
   const page = (
     <g>
       <Sheet x={70} y={36} w={160} h={210} pic={pic} />
-      <path d={SIG} fill="none" stroke="#1d2d7a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={SIG} fill="none" stroke="#2b2370" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </g>
   );
   return (
-    <Svg id={id} accent={ACCENTS.green}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-lens`}><circle cx={c.x} cy={c.y} r="36" /></clipPath>
       </defs>
@@ -183,7 +184,7 @@ export function Loupe({ files, value }: Props) {
       {page}
       {seal > 0 && (
         <g transform={`translate(204 170) scale(${seal})`}>
-          <circle r="20" fill="#14a874" filter={url("soft")} />
+          <circle r="20" fill="#22a565" filter={url("soft")} />
           <path d="M-9 0 L-3 7 L10 -7" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
         </g>
       )}
@@ -212,9 +213,8 @@ export function InkRoller({ files, value }: Props) {
   const X = 80;
   const Y = 40;
   return (
-    <Svg id={id} accent={ACCENTS.rose}>
+    <Svg id={id}>
       <Body x={14} y={252} w={272} h={42} r={12} />
-      <Engraved x={150} y={278} anchor="middle">███ ██</Engraved>
       <Sheet x={X} y={Y} w={140} h={200} pic={pic} />
       {ROWS.map((w, i) => {
         const y = Y + 18 + i * 19;
@@ -251,7 +251,7 @@ export function Washer({ files, value }: Props) {
     { x: 170, y: 224 },
   ];
   return (
-    <Svg id={id} accent={ACCENTS.sky}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-glass`}><circle cx={C.x} cy={C.y} r="70" /></clipPath>
       </defs>
@@ -265,14 +265,14 @@ export function Washer({ files, value }: Props) {
       <circle cx={C.x} cy={C.y} r="82" fill="none" stroke={url("steelv")} strokeWidth="10" />
       <circle cx={C.x} cy={C.y} r="70" style={fill("--m-cavity")} />
       <g clipPath={`url(#${id}-glass)`}>
-        <rect x="70" y={C.y + 26 - Math.sin(t * 3) * 3} width="160" height="70" fill="#5ab8f0" opacity="0.28" />
+        <rect x="70" y={C.y + 26 - Math.sin(t * 3) * 3} width="160" height="70" fill="#8f84e0" opacity="0.28" />
         <g transform={`rotate(${spin} ${C.x} ${C.y})`}>
           <Sheet x={106} y={124} w={88} h={116} pic={pic} />
           {marks.map((m, i) => {
             const gone = seg(p, 0.28 + i * 0.12, 0.4 + i * 0.12);
             return (
               <g key={i} opacity={1 - gone} transform={`translate(${(m.x - C.x) * gone * 0.8} ${(m.y - C.y) * gone * 0.8})`}>
-                <circle cx={m.x} cy={m.y} r="7" fill="#e5483a" />
+                <circle cx={m.x} cy={m.y} r="7" fill="#ff7a59" />
                 <rect x={m.x - 1} y={m.y - 4} width="2" height="5" fill="#fff" />
                 <rect x={m.x - 1} y={m.y + 2.5} width="2" height="2" fill="#fff" />
               </g>
@@ -302,17 +302,16 @@ export function LightTable({ files, value }: Props) {
   const X = 80;
   const Y = 62;
   return (
-    <Svg id={id} accent={ACCENTS.cyan}>
+    <Svg id={id}>
       <defs>
         <radialGradient id={`${id}-light`} cx="0.5" cy="0.45" r="0.7">
           <stop offset="0" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#dcecf8" />
+          <stop offset="1" stopColor="#e9e6f8" />
         </radialGradient>
         <clipPath id={`${id}-table`}><rect x="22" y="42" width="256" height="230" rx="10" /></clipPath>
       </defs>
       <Body x={6} y={28} w={288} h={266} r={22} />
       <rect x="22" y="42" width="256" height="230" rx="10" fill={`url(#${id}-light)`} />
-      <Engraved x={150} y={287} anchor="middle">A ⇄ B</Engraved>
       <g clipPath={`url(#${id}-table)`}>
         <g transform={`translate(${-170 * (1 - a)} 0)`}>
           <Sheet x={X} y={Y} w={140} h={190} pic={pics[0]} />
@@ -342,18 +341,18 @@ export function Iron({ files, value }: Props) {
   const [pic] = usePictures(files, 1);
   const pass1 = easeInOut(seg(p, 0.08, 0.46));
   const pass2 = easeInOut(seg(p, 0.5, 0.88));
-  const ix = p < 0.48 ? 40 + pass1 * 220 : 260 - pass2 * 220;
+  const ix = p < 0.48 ? 62 + pass1 * 176 : 238 - pass2 * 176;
   const iy = p < 0.48 ? 108 : 202;
   const items = [
-    { x: 92, y: 88, w: 58, h: 30, row: 0, color: "#2b9be8" },
-    { x: 162, y: 112, w: 46, h: 18, row: 0, color: "#7c5ce6" },
-    { x: 96, y: 186, w: 80, h: 16, row: 1, color: "#14a874" },
-    { x: 150, y: 212, w: 52, h: 26, row: 1, color: "#e5483a" },
+    { x: 92, y: 88, w: 58, h: 30, row: 0, color: "#5a46e0" },
+    { x: 162, y: 112, w: 46, h: 18, row: 0, color: "#a194ff" },
+    { x: 96, y: 186, w: 80, h: 16, row: 1, color: "#ff7a59" },
+    { x: 150, y: 212, w: 52, h: 26, row: 1, color: "#5a46e0" },
   ];
   const flat = (it: (typeof items)[number]) => (it.row === 0 ? (p >= 0.48 ? 1 : ix > it.x + it.w / 2 ? 1 : 0) : p >= 0.88 ? 1 : p >= 0.48 && ix < it.x + it.w / 2 ? 1 : 0);
   const steaming = p > 0.08 && p < 0.88;
   return (
-    <Svg id={id} accent={ACCENTS.rose}>
+    <Svg id={id}>
       <defs>
         <pattern id={`${id}-quilt`} width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <path d="M0 0H16M0 0V16" stroke="#000" strokeOpacity="0.06" />
@@ -399,7 +398,7 @@ export function Clipper({ files, value }: Props) {
   const slide = easeOut(seg(p, 0.08, 0.42));
   const clip = easeInOut(seg(p, 0.48, 0.78));
   return (
-    <Svg id={id} accent={ACCENTS.indigo}>
+    <Svg id={id}>
       <Body x={14} y={252} w={272} h={42} r={12} />
       <Sheet x={50} y={52} w={150} h={196} pic={pic} />
       <g transform={`translate(${170 * (1 - slide)} 0) rotate(${-6 + 6 * (1 - slide)} 190 140)`}>
@@ -425,25 +424,28 @@ export function Conveyor({ files, value }: Props) {
   const url = urlOf(id);
   const { p, t } = useDrive(value);
   const [pic] = usePictures(files, 1);
-  const xs = [0, 1, 2, 3].map((i) => -80 + easeInOut(seg(p, 0.04 + i * 0.1, 0.62 + i * 0.1)) * (320 - i * 64));
-  const lit = xs.some((x) => Math.abs(x + 30 - 150) < 26);
+  // Each page rides from off the left to the pile on the right, in order.
+  const xs = [0, 1, 2].map((i) => -72 + easeInOut(seg(p, 0.05 + i * 0.17, 0.45 + i * 0.17)) * (292 - i * 9));
+  const lit = xs.some((x) => Math.abs(x + 32 - 150) < 28);
+  const moving = p > 0.05 && p < 0.79;
   return (
-    <Svg id={id} accent={ACCENTS.amber}>
-      <rect x="30" y="226" width="16" height="68" rx="5" fill={url("side")} />
-      <rect x="254" y="226" width="16" height="68" rx="5" fill={url("side")} />
-      <rect x="8" y="200" width="284" height="28" rx="14" fill={url("rubber")} filter={url("shadow")} />
-      {Array.from({ length: 12 }, (_, i) => <rect key={i} x={14 + ((i * 24 + t * 60) % 270)} y="203" width="10" height="3" rx="1.5" fill="#fff" opacity="0.18" />)}
-      {[22, 150, 278].map((x) => <circle key={x} cx={x} cy="214" r="10" fill={url("steel")} stroke="#5f656c" strokeWidth="0.8" />)}
+    <Svg id={id}>
+      <rect x="36" y="232" width="16" height="62" rx="5" fill={url("side")} />
+      <rect x="248" y="232" width="16" height="62" rx="5" fill={url("side")} />
+      <rect x="8" y="208" width="284" height="28" rx="14" fill={url("rubber")} filter={url("shadow")} />
+      {Array.from({ length: 12 }, (_, i) => <rect key={i} x={14 + ((i * 24 + (moving ? t * 60 : 0)) % 270)} y="211" width="10" height="3" rx="1.5" fill="#fff" opacity="0.18" />)}
+      {[22, 150, 278].map((x) => <circle key={x} cx={x} cy="222" r="10" fill={url("steel")} stroke="#5f656c" strokeWidth="0.8" />)}
       {xs.map((x, i) => (
         <g key={i}>
-          <Sheet x={x} y={122} w={60} h={78} pic={pic} />
-          <text x={x + 30} y={194} textAnchor="middle" className="machine-num" fontSize="10" fill="#8a9099">{i + 1}</text>
+          <Sheet x={x} y={122} w={64} h={84} pic={pic} />
+          <circle cx={x + 52} cy={194} r="7.5" fill={url("accentv")} />
+          <text x={x + 52} y={197.5} textAnchor="middle" className="machine-num" fontSize="10" fontWeight="700" fill="#fff">{i + 1}</text>
         </g>
       ))}
-      <path d="M112 200 V92 Q112 70 134 70 H166 Q188 70 188 92 V200 H172 V100 Q172 88 160 88 H140 Q128 88 128 100 V200 Z" fill={url("body")} filter={url("soft")} />
-      <circle cx="150" cy="79" r="5" fill={lit ? url("accentv") : "#6b6f75"} filter={lit ? url("glow") : undefined} />
-      <Lcd x={104} y={22} w={92} h={40}>
-        <LcdText x={118} y={47} size={14}>{"» » »"}</LcdText>
+      <path d="M108 208 V98 Q108 76 130 76 H170 Q192 76 192 98 V208 H176 V104 Q176 92 164 92 H136 Q124 92 124 104 V208 Z" fill={url("body")} filter={url("soft")} />
+      <circle cx="150" cy="84" r="5" fill={lit ? url("accentv") : "#6b6f75"} filter={lit ? url("glow") : undefined} />
+      <Lcd x={100} y={26} w={100} h={42}>
+        <LcdText x={120} y={52} size={14}>{"» » »"}</LcdText>
       </Lcd>
     </Svg>
   );
@@ -463,9 +465,8 @@ export function Tiler({ files, value }: Props) {
     { x: 280, y: 300 },
   ];
   return (
-    <Svg id={id} accent={ACCENTS.violet}>
+    <Svg id={id}>
       <Body x={10} y={272} w={280} h={22} r={9} />
-      <Engraved x={280} y={288} anchor="end">4 → 1</Engraved>
       <rect x={S.x} y={S.y} width={S.w} height={S.h} rx="2" fill="#fff" filter={url("soft")} />
       {from.map((f, i) => {
         const a = easeInOut(seg(p, 0.06 + i * 0.16, 0.3 + i * 0.16));
@@ -498,13 +499,19 @@ export function Folder({ files, value }: Props) {
   const slide = easeInOut(seg(p, 0.9, 1)) * 60;
   const Y = 78;
   return (
-    <Svg id={id} accent={ACCENTS.teal}>
+    <Svg id={id}>
       <Body x={10} y={250} w={280} h={44} r={12} />
       <g transform={`translate(${slide} 0)`}>
         <Sheet x={30} y={Y} w={120} h={160} pic={pic} />
         <g transform={`translate(150 0) scale(${c} 1) skewY(${Math.sin(th) * -6}) translate(-150 0)`}>
-          {c >= 0 ? <Sheet x={150} y={Y} w={120} h={160} pic={pic} /> : <Sheet x={150} y={Y} w={120} h={160} blank />}
+          {c >= 0 && <Sheet x={150} y={Y} w={120} h={160} pic={pic} />}
         </g>
+        {/* Over the fold: the booklet's cover, the right way round. */}
+        {c < 0 && (
+          <g transform={`translate(${150 - 270 * -c} 0) scale(${-c} 1)`}>
+            <Sheet x={150} y={Y} w={120} h={160} pic={pic} />
+          </g>
+        )}
         {c < 0.98 && <rect x="148" y={Y} width="4" height="160" fill="#000" opacity={0.1 * (1 - c)} />}
         {stapled && [118, 196].map((y) => <rect key={y} x="146" y={y} width="3" height="16" rx="1" fill={url("steelv")} stroke="#6b7177" strokeWidth="0.5" />)}
       </g>
@@ -527,8 +534,9 @@ export function DyeBath({ files, value }: Props) {
   const dripping = p > 0.7 && p < 0.98;
   const wave = (k: number) => `M56 ${162 + k} ${Array.from({ length: 9 }, (_, i) => `Q${66 + i * 22} ${162 + k + (i % 2 ? 4 : -4) * Math.sin(t * 2 + i)} ${78 + i * 22} ${162 + k}`).join(" ")} V282 H56 Z`;
   return (
-    <Svg id={id} accent={ACCENTS.sky}>
+    <Svg id={id}>
       <defs>
+        <clipPath id={`${id}-tank`}><rect x="0" y="0" width="300" height="282" /></clipPath>
         <filter id={`${id}-sat`}>
           <feColorMatrix type="saturate" values={sat.toFixed(3)} />
         </filter>
@@ -538,13 +546,13 @@ export function DyeBath({ files, value }: Props) {
       <line x1="150" y1="26" x2="150" y2={y - 6} stroke="#5f656c" strokeWidth="1.5" />
       <rect x="142" y={y - 8} width="16" height="10" rx="3" fill={url("accentv")} />
       <Body x={40} y={140} w={220} h={154} r={18} />
-      <g filter={`url(#${id}-sat)`}>
+      <g filter={`url(#${id}-sat)`} clipPath={`url(#${id}-tank)`}>
         <Sheet x={90} y={y} w={120} h={156} pic={pic} />
         {!pic && (
           <g>
-            <rect x="102" y={y + 70} width="44" height="30" rx="3" fill="#e5483a" />
-            <rect x="152" y={y + 70} width="44" height="30" rx="3" fill="#2b9be8" />
-            <rect x="102" y={y + 106} width="94" height="14" rx="3" fill="#14a874" />
+            <rect x="102" y={y + 70} width="44" height="30" rx="3" fill="#ff7a59" />
+            <rect x="152" y={y + 70} width="44" height="30" rx="3" fill="#5a46e0" />
+            <rect x="102" y={y + 106} width="94" height="14" rx="3" fill="#22a565" />
           </g>
         )}
       </g>
@@ -566,7 +574,7 @@ export function Squeegee({ files, value }: Props) {
   const X = 86;
   const Y = 50;
   return (
-    <Svg id={id} accent={ACCENTS.cyan}>
+    <Svg id={id}>
       <defs>
         <clipPath id={`${id}-clean`}><rect x="0" y="0" width="300" height={sy} /></clipPath>
         <clipPath id={`${id}-dirty`}><rect x="0" y={sy} width="300" height={300 - sy} /></clipPath>
