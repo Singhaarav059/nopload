@@ -186,6 +186,12 @@ jobs:
       - name: Installed app stays light on a phone
         if: success() || failure()
         run: npm run test:e2e:smooth -- ${{ matrix.browser }}
+      - name: Work kept across a change of language
+        if: success() || failure()
+        run: npm run test:e2e:session -- ${{ matrix.browser }}
+      - name: Menus and dialogs by keyboard, names for icon buttons
+        if: success() || failure()
+        run: npm run test:e2e:dialogs -- ${{ matrix.browser }}
       - name: PDF viewer
         if: success() || failure()
         run: npm run test:e2e:viewer -- ${{ matrix.browser }}

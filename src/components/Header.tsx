@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Globe2, Menu, Search, X } from "lucide-react";
 import { Logo } from "./Logo";
@@ -10,6 +10,8 @@ import { useI18n } from "./I18n";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
+import { goToLanguage } from "@/lib/session";
+import { useDialog } from "@/lib/useDialog";
 import { ThemeMenu, ThemeSwitch } from "./ThemeMenu";
 import { openCommandBar } from "./CommandBar";
 import { InstallButton } from "./InstallGuide";
@@ -36,11 +38,11 @@ function useDismiss(open: boolean, close: () => void) {
 export function Header() {
   const { t, href, locale } = useI18n();
   const pathname = usePathname();
-  const router = useRouter();
   const [menu, setMenu] = useState<null | "tools" | "lang" | "mobile">(null);
   const close = () => setMenu(null);
   const toolsRef = useDismiss(menu === "tools", close);
   const langRef = useDismiss(menu === "lang", close);
+  const mobileRef = useDialog<HTMLDivElement>(menu === "mobile", close);
 
   // Close any open menu when the route changes.
   const [lastPath, setLastPath] = useState(pathname);
@@ -52,9 +54,10 @@ export function Header() {
     document.body.style.overflow = menu === "mobile" ? "hidden" : "";
   }, [menu]);
 
+  // A change of language loads a new page; the work on this one goes along (src/lib/session.ts).
   const switchLocale = (code: Locale) => {
-    router.push(switchLanguage(pathname, code));
     close();
+    void goToLanguage(switchLanguage(pathname, code));
   };
 
   return (
@@ -133,7 +136,12 @@ export function Header() {
                     hrefLang={l.code}
                     lang={l.code}
                     aria-current={l.code === locale ? "true" : undefined}
-                    onClick={close}
+                    onClick={(e) => {
+                      close();
+                      if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                      e.preventDefault();
+                      void goToLanguage(switchLanguage(pathname, l.code));
+                    }}
                     className={`rounded-xl px-3 py-1.5 text-start text-[14px] transition-colors hover:bg-surface-2 ${l.code === locale ? "bg-surface-2 font-medium text-ink" : "text-ink-2"}`}
                   >
                     {l.name}
@@ -151,14 +159,14 @@ export function Header() {
 
           <ThemeMenu />
 
-          <button data-web-only className="icon-btn md:hidden" aria-label={t("nav.menu")} onClick={() => setMenu("mobile")}>
+          <button data-web-only className="icon-btn md:hidden" aria-label={t("nav.menu")} aria-haspopup="dialog" aria-expanded={menu === "mobile"} onClick={() => setMenu("mobile")}>
             <Menu size={22} />
           </button>
         </div>
       </div>
 
       {menu === "mobile" && (
-        <div className="rise fixed inset-0 z-50 flex flex-col bg-bg md:hidden" role="dialog" aria-modal>
+        <div ref={mobileRef} className="rise fixed inset-0 z-50 flex flex-col bg-bg md:hidden" role="dialog" aria-modal aria-label={t("nav.menu")}>
           <div className="flex h-16 items-center justify-between border-b border-line px-4">
             <Logo />
             <button className="icon-btn" aria-label={t("nav.close")} onClick={close}>

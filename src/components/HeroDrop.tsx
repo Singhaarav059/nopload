@@ -99,6 +99,8 @@ export function HeroDrop() {
       <div className="min-w-0 flex-1">
         <p className="text-pretty text-[16px] font-semibold leading-snug tracking-[-0.01em]">{over ? t("ws.dropActive") : t("home.dropTitle")}</p>
         <p className="mt-1 text-pretty text-[14px] leading-snug text-muted">{t("home.dropBody")}</p>
+        {/* Phones: a visible button says the card is tapped to choose (the whole card is the picker). */}
+        <span aria-hidden className="btn btn-primary btn-sm mt-3 sm:hidden"><Upload size={15} strokeWidth={1.75} /> {t("ws.selectOne")}</span>
       </div>
       <label className="btn btn-primary hidden shrink-0 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-(--focus) sm:inline-flex">
         <Upload size={17} strokeWidth={1.75} /> {t("ws.selectOne")}

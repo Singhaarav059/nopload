@@ -12,6 +12,8 @@ import { AndroidApp, InstallGuide } from "./InstallGuide";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
+import { goToLanguage } from "@/lib/session";
+import { useDialog } from "@/lib/useDialog";
 import { haptic, subscribeDevice, type Form, type Nav, type Os } from "@/lib/device";
 
 // The installed app's frame (data-app on <html>, src/lib/device.ts). Each
@@ -223,7 +225,8 @@ function Side({ nav, open }: { nav: Nav | null; open: (s: Sheet) => void }) {
 // on bigger screens. Closed, it stays built but out of the page (hidden).
 function BottomSheet({ os, phone, kind, open, close }: { os: Os | null; phone: boolean; kind: Exclude<Sheet, null>; open: boolean; close: () => void }) {
   const { t } = useI18n();
-  const ref = useRef<HTMLDivElement>(null);
+  // A modal while open: focus inside, Tab kept in, Escape closes, focus back after.
+  const ref = useDialog<HTMLDivElement>(open, close);
   const drag = useRef<{ y: number; dy: number; t: number } | null>(null);
   const [leaving, setLeaving] = useState(false);
   const shut = () => {
@@ -241,14 +244,11 @@ function BottomSheet({ os, phone, kind, open, close }: { os: Os | null; phone: b
       ref.current.style.transition = "";
       ref.current.style.translate = "";
     }
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
-    document.addEventListener("keydown", onKey);
     document.documentElement.dataset.sheet = "";
     return () => {
-      document.removeEventListener("keydown", onKey);
       delete document.documentElement.dataset.sheet;
     };
-  }, [open, close]);
+  }, [open, ref]);
   const onDown = (e: React.PointerEvent) => {
     if (!phone) return;
     drag.current = { y: e.clientY, dy: 0, t: performance.now() };
@@ -338,7 +338,7 @@ function SettingsList() {
       </div>
       <div>
         <label className="mb-2 block text-[13px] font-semibold text-muted" htmlFor="app-lang">{t("nav.language")}</label>
-        <select id="app-lang" className="field" value={locale} onChange={(e) => { location.href = switchLanguage(pathname, e.target.value as Locale); }}>
+        <select id="app-lang" className="field" value={locale} onChange={(e) => void goToLanguage(switchLanguage(pathname, e.target.value as Locale))}>
           {LOCALES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
         </select>
       </div>
