@@ -212,9 +212,16 @@ export function rank(doc: Doc, lang?: string): Sentence[] {
   return sentences;
 }
 
+// Contact details, links and legal lines: true of the document, but not
+// what it says. They're left out of a summary whenever there's anything else.
+const CONTACT = /[\w.+-]+@[\w-]+\.[\w.-]+|https?:\/\/|www\.|\+?\d[\d ().-]{7,}\d|©|\b(contact|e-?mail|tel|phone|fax|call us|write to|copyright|all rights reserved|privacy policy|terms of (use|service)|unsubscribe)\b/i;
+export const boilerplate = (s: string) => CONTACT.test(s);
+
 // Picks the best sentences, skipping ones that repeat a sentence already kept.
 export function pick(sentences: Sentence[], length: Length): Sentence[] {
-  const scored = sentences.filter((s) => s.score > 0);
+  const ranked = sentences.filter((s) => s.score > 0);
+  const content = ranked.filter((s) => !boilerplate(s.text));
+  const scored = content.length ? content : ranked;
   const { share, min, max } = KEEP[length];
   const k = Math.min(scored.length, Math.max(min, Math.min(max, Math.ceil(scored.length * share))));
   const kept: Sentence[] = [];
