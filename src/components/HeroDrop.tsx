@@ -40,7 +40,7 @@ export function HeroDrop() {
 
   const open = async (tool: Tool) => {
     if (!files) return;
-    await handOffTo(tool.id, files);
+    void handOffTo(tool.id, files);
     router.push(href(`/${tool.slug}`));
   };
 

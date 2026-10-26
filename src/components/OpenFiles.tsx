@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileText, Upload } from "lucide-react";
 import { useI18n } from "./I18n";
 import { ToolIcon } from "./ToolIcon";
-import { handOffTo, stashShared, takeShared, toolsFor } from "@/lib/handoff";
+import { handOffTo, markOpenedFromOutside, stashShared, takeShared, toolsFor } from "@/lib/handoff";
 import { hasLocale } from "@/lib/i18n/locales";
 import { BRAND } from "@/lib/brand";
 import { toolById, type Tool } from "@/lib/tools";
@@ -64,7 +64,8 @@ export function OpenFiles() {
       }
       if (launched && incoming.length === 1 && /\.pdf$/i.test(incoming[0].name)) {
         live = false;
-        await handOffTo("view", incoming);
+        markOpenedFromOutside();
+        void handOffTo("view", incoming);
         router.replace(href(`/${toolById("view").slug}`));
         return;
       }
@@ -91,7 +92,7 @@ export function OpenFiles() {
 
   const open = async (tool: Tool) => {
     if (!files) return;
-    await handOffTo(tool.id, files);
+    void handOffTo(tool.id, files);
     router.push(href(`/${tool.slug}`));
   };
 

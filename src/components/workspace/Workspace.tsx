@@ -49,14 +49,22 @@ const load = {
   Results: () => import("./Results"),
   StampPreview: () => import("./StampPreview"),
 };
-const Editor = dynamic(() => load.Editor().then((m) => m.Editor), { ssr: false });
+// While a view's code loads, its place is held: the viewer's backdrop full
+// screen at once, the editor's room on the page, so nothing jumps when it arrives.
+function ViewerShell() {
+  return <div className="vw vw-shell" aria-busy="true"><p className="vw-loading"><Loader2 size={22} className="animate-spin" /></p></div>;
+}
+function EditorShell() {
+  return <div className="flex min-h-[70vh] items-center justify-center rounded-2xl border border-line bg-surface" aria-busy="true"><Loader2 size={22} className="animate-spin text-muted" /></div>;
+}
+const Editor = dynamic(() => load.Editor().then((m) => m.Editor), { ssr: false, loading: EditorShell });
 const PageBoard = dynamic(() => load.PageBoard().then((m) => m.PageBoard), { ssr: false });
 const Scanner = dynamic(() => load.Scanner().then((m) => m.Scanner), { ssr: false });
 const CompareView = dynamic(() => load.CompareView().then((m) => m.CompareView), { ssr: false });
 const SignatureCheck = dynamic(() => load.SignatureCheck().then((m) => m.SignatureCheck), { ssr: false });
 const ChatView = dynamic(() => load.ChatView().then((m) => m.ChatView), { ssr: false });
 const ListenView = dynamic(() => load.ListenView().then((m) => m.ListenView), { ssr: false });
-const ViewerView = dynamic(() => load.ViewerView().then((m) => m.ViewerView), { ssr: false });
+const ViewerView = dynamic(() => load.ViewerView().then((m) => m.ViewerView), { ssr: false, loading: ViewerShell });
 const PrintResults = dynamic(() => load.PrintResults().then((m) => m.PrintResults), { ssr: false });
 const PasteHtml = dynamic(() => load.PasteHtml().then((m) => m.PasteHtml), { ssr: false });
 const Results = dynamic(() => load.Results().then((m) => m.Results), { ssr: false });
@@ -81,6 +89,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   const [items, setItems] = useState<Item[]>(() => handed().map((file) => ({ id: uid(), file })));
   const [options, setOptions] = useState<Record<string, unknown>>(() => ({ ...defaultOptions(tool), ...preset }));
   const [stage, setStage] = useState<Stage>(() => (handed().length ? "work" : "select"));
+  const openedWithFiles = useRef(items.length > 0);
   const [progress, setProgress] = useState<{ value: number; label?: string }>({ value: 0 });
   const [outputs, setOutputs] = useState<Output[]>([]);
   const [error, setError] = useState<Problem | null>(null);
@@ -152,6 +161,13 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   // come from storage once the page is up.
   const restored = useEffectEvent((handed: File[]) => void (handed.length && addFiles(handed, [])));
   useEffect(() => void restoreHandoff(toolId).then(restored), [toolId]);
+  // The reader opened at a document (?doc=, from Back after handing it to a
+  // tool, or a reload): it comes from Recent, where it was kept.
+  useEffect(() => {
+    if (tool.mode !== "view" || openedWithFiles.current) return;
+    const doc = new URLSearchParams(location.search).get("doc");
+    if (doc) void import("@/lib/library").then((m) => m.openRecent(doc)).then((f) => f && restored([f]));
+  }, [tool.mode]);
 
   // Once the page has settled, load what this tool runs on, so it also works
   // offline. The imports match the ones each stage makes when it runs.
@@ -543,16 +559,10 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
     );
   }
 
-  // The viewer opens full screen as soon as the file is in; closing it starts over.
+  // The viewer opens full screen as soon as the file is in, straight to the
+  // document (nothing of the tool page shows first); closing it starts over.
   if (tool.mode === "view") {
-    return (
-      <div>
-        {dropHint}
-        {errorBox}
-        <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
-        <ViewerView key={items[0].id} file={files[0]} onClose={reset} onError={(e) => void drop(items[0].id, files[0], e)} />
-      </div>
-    );
+    return <ViewerView key={items[0].id} file={files[0]} onClose={reset} onError={(e) => void drop(items[0].id, files[0], e)} />;
   }
 
   // Chat reads the file as soon as it's in, and answers questions about it.

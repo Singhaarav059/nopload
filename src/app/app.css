@@ -558,9 +558,10 @@ html[data-viewer] body { overflow: hidden; }
 }
 .vw[data-night] { --vw-bg: #121214; --vw-glass: rgb(30 30 34 / 0.8); color: #e8e6e3; }
 @keyframes vw-in { from { opacity: 0; transform: scale(0.985); } }
-.vw-scroll { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; outline: none; padding-top: calc(env(safe-area-inset-top) + 58px); padding-bottom: 96px; transition: padding-top 380ms var(--ease-spring); }
-/* Controls hidden: the page moves up into the space the bar left, no empty band. */
-.vw:not([data-chrome]) .vw-scroll { padding-top: calc(env(safe-area-inset-top) + 8px); }
+/* Held while the viewer loads: there at once, the viewer then fades in over it. */
+.vw.vw-shell { animation: none; }
+.vw-scroll { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; outline: none; padding-top: calc(env(safe-area-inset-top) + 58px); padding-bottom: 96px; }
+/* The bar floats over the pages: showing or hiding it never moves them. */
 .vw-pages { position: relative; margin: 0 auto; }
 /* At fit width the browser keeps vertical scrolling and leaves sideways swipes to the viewer (page turns). */
 .vw-scroll { touch-action: pan-y; }
