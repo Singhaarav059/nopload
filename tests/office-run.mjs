@@ -56,7 +56,7 @@ const never = () => new Promise(() => {});
 const pdf = async () => ({ data: new Uint8Array([37, 80, 68, 70]) });
 const lo = (globalThis.lo = { made: [], initialize: async () => {}, convert: pdf });
 const reset = (o) => Object.assign(lo, { made: [], initialize: async () => {}, convert: pdf }, o);
-if (officeLimits) Object.assign(officeLimits, { startMs: 200, convertMs: 200 });
+if (officeLimits) Object.assign(officeLimits, { startMs: 200, convertMs: 200, firstMs: 200 });
 
 const results = { failed: 0 };
 const test = check(results);
@@ -103,6 +103,13 @@ await test("automatic prints as soon as LibreOffice's worker dies", async () => 
   reset({ initialize: (c) => (setTimeout(() => c.options.onError?.(new Error("RuntimeError: Aborted")), 20), never()) });
   eq(names(await job("auto")), "brief.docx.print.html", "output");
   if (officeLimits) officeLimits.startMs = 200;
+});
+
+await test("a start that stalls once is tried again with a fresh LibreOffice", async () => {
+  let starts = 0;
+  reset({ initialize: () => (++starts === 1 ? never() : Promise.resolve()) });
+  eq(names(await job("auto")), "brief.pdf", "output");
+  eq(lo.made.length === 2 && lo.made[0].terminated === true, true, "the stuck one stopped, a second started");
 });
 
 await test("automatic writes the PDF with LibreOffice", async () => {

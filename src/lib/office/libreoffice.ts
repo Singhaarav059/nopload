@@ -45,9 +45,13 @@ async function fetchParts(file: Manifest["files"]["soffice.wasm"], type: string,
 }
 
 // LibreOffice can die without a word: in WebKit its worker aborts and the
-// promise it was asked for never settles. A start or a conversion that takes
-// longer than this has failed, so Automatic can print instead.
-export const officeLimits = { startMs: 120_000, convertMs: 120_000, perMbMs: 60_000 };
+// promise it was asked for never settles; and now and then a start or a
+// conversion just stops, on any file, and goes through at once on a fresh
+// LibreOffice. A start takes seconds and a small file a few more, so the
+// first try gives up early (firstMs, firstPerMbMs) and goes again with a
+// fresh one, which gets the full time; a second stall has failed, so
+// Automatic can print instead.
+export const officeLimits = { startMs: 45_000, convertMs: 120_000, perMbMs: 60_000, firstMs: 30_000, firstPerMbMs: 20_000 };
 
 // Stops a converter whose worker may be dead. Its destroy() waits for the
 // worker to answer, which a dead one never does, so the worker goes directly.
@@ -138,12 +142,21 @@ export async function officeToPdf(file: File, progress?: Progress, options: Reco
   signal?.throwIfAborted();
   const current = load(progress, signal);
   const input = new Uint8Array(await file.arrayBuffer());
-  const limit = officeLimits.convertMs + (input.length / 1e6) * officeLimits.perMbMs;
+  const mb = input.length / 1e6;
   // LibreOffice now and then stops responding on a file it converts fine the
   // next time: a stalled conversion is tried once more with a fresh one, and
   // only a second stall gives up (and the caller prints instead).
   for (let attempt = 0, office = current; ; attempt++) {
-    const { converter, died } = await abortable(office, signal);
+    const limit = attempt ? officeLimits.convertMs + mb * officeLimits.perMbMs : Math.min(officeLimits.convertMs, officeLimits.firstMs) + mb * officeLimits.firstPerMbMs;
+    let converter: Converter, died: Promise<never>;
+    try {
+      ({ converter, died } = await abortable(office, signal));
+    } catch (e) {
+      // A start that stalled is tried once more, afresh, like a conversion.
+      if (attempt || !isStalled(e) || signal?.aborted) throw e;
+      office = load(progress, signal);
+      continue;
+    }
     const convert: Convert = async (data, outputFormat, name, filterOptions) =>
       (await settle(converter.convert(data, { outputFormat, filterOptions }, name), died, limit, signal)).data;
     try {

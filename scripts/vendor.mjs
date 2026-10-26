@@ -202,8 +202,15 @@ console.log(`vendor: ${fontFiles} font slices`);
     }
     manifest.files[name] = { parts, size: data.length };
   }
-  for (const [from, to] of [["wasm/soffice.js", "soffice.js"], ["wasm/soffice.worker.js", "soffice.worker.js"]])
-    copyFileSync(join(pkg, from), join(loOut, to));
+  copyFileSync(join(pkg, "wasm/soffice.worker.js"), join(loOut, "soffice.worker.js"));
+  // LibreOffice starts 4 threads ready and makes more as it asks for them.
+  // Loading a document (or starting up) asks for a 5th, and a thread made
+  // then can't start while the thread asking waits for it: the conversion
+  // hangs until the timeout, now and then and on any file. Enough threads
+  // ready from the start that it never has to make one mid-way.
+  const glue = readFileSync(join(pkg, "wasm/soffice.js"), "utf8");
+  if (!glue.includes("var pthreadPoolSize=4;")) throw new Error("vendor: LibreOffice's soffice.js changed; its thread pool size not found");
+  writeFileSync(join(loOut, "soffice.js"), glue.replace("var pthreadPoolSize=4;", "var pthreadPoolSize=8;"));
   // The converter's worker turns on every LibreOffice log (SAL_LOG=+ALL) and
   // prints it all to the console: thousands of lines a second during a
   // conversion, each a task on the page's main thread, which then can't
