@@ -59,6 +59,7 @@
     "test:office": "node tests/office.mjs",
     "test:office-route": "node tests/office-route.mjs",
     "test:office-run": "node tests/office-run.mjs",
+    "test:storage": "node tests/storage.mjs",
     "test:pdfa": "node tests/pdfa.mjs",
     "test:pdfua": "node tests/pdfua.mjs",
     "test:a11y": "node tests/a11y.mjs",

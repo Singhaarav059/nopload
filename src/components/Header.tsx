@@ -57,7 +57,7 @@ export function Header() {
   // A change of language loads a new page; the work on this one goes along (src/lib/session.ts).
   const switchLocale = (code: Locale) => {
     close();
-    void goToLanguage(switchLanguage(pathname, code));
+    void goToLanguage(switchLanguage(pathname, code), () => confirm(t("session.notKept")));
   };
 
   return (
@@ -140,7 +140,7 @@ export function Header() {
                       close();
                       if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                       e.preventDefault();
-                      void goToLanguage(switchLanguage(pathname, l.code));
+                      void goToLanguage(switchLanguage(pathname, l.code), () => confirm(t("session.notKept")));
                     }}
                     className={`rounded-xl px-3 py-1.5 text-start text-[14px] transition-colors hover:bg-surface-2 ${l.code === locale ? "bg-surface-2 font-medium text-ink" : "text-ink-2"}`}
                   >

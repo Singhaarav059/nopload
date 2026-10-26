@@ -90,7 +90,10 @@ export function Workflows() {
   const copyLink = async () => {
     setError(null);
     if (!steps.length) return say(t("wf.needSteps"));
-    const link = `${location.origin}${location.pathname}${recipeHash({ name: name.trim(), steps })}`;
+    const hash = recipeHash({ name: name.trim(), steps });
+    // Too long to open again as a link: the workflow stays as it is, and a file is the way to share it.
+    if (!hash) return setError({ text: t("wf.linkTooLong") });
+    const link = `${location.origin}${location.pathname}${hash}`;
     // The address bar carries it too, so it can be copied from there, or bookmarked.
     history.replaceState(null, "", link);
     try {

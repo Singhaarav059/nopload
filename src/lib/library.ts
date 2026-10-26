@@ -20,27 +20,29 @@ type Row = Recent & { data: ArrayBuffer | Blob };
 // existing row over to its fingerprint.
 export const legacyId = (f: { name: string; size: number }) => `${f.name}:${f.size}`;
 
-// A document's id: a fingerprint of its bytes, so two files that only share
-// a name and size are kept apart, and the same file renamed is the same
-// document. Files up to 32 MB are hashed whole; bigger ones by their size and
-// three 1 MB slices (start, middle, end), which tells PDFs apart (a PDF's
-// cross-reference table and trailer are at its end) without reading 100 MB.
-const WHOLE = 32 * 1024 * 1024;
-const SLICE = 1024 * 1024;
+// A document's id: a fingerprint of all its bytes, so two files that only
+// share a name and size, or differ anywhere inside, are kept apart, and the
+// same file renamed is the same document.
 const ids = new WeakMap<Blob, Promise<string>>();
-export function docId(file: Blob): Promise<string> {
+const fingerprint = (bytes: BufferSource) =>
+  crypto.subtle.digest("SHA-256", bytes).then((hash) => `sha256:${[...new Uint8Array(hash).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("")}`);
+export function docId(file: Blob, bytes?: ArrayBuffer): Promise<string> {
   let id = ids.get(file);
   if (!id) {
-    const mid = Math.floor(file.size / 2 - SLICE / 2);
-    const parts: BlobPart[] = file.size <= WHOLE
-      ? [file]
-      : [String(file.size), file.slice(0, SLICE), file.slice(mid, mid + SLICE), file.slice(file.size - SLICE)];
-    id = new Blob(parts).arrayBuffer()
-      .then((bytes) => crypto.subtle.digest("SHA-256", bytes))
-      .then((hash) => `sha256:${[...new Uint8Array(hash).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("")}`);
+    id = (bytes ? Promise.resolve(bytes) : file.arrayBuffer()).then(fingerprint);
     ids.set(file, id);
   }
   return id;
+}
+
+// The id files over 32 MB had before: their size and three 1 MB slices. A
+// row kept under it is moved to the whole-file id when its bytes match.
+const SAMPLED = 32 * 1024 * 1024;
+const SLICE = 1024 * 1024;
+function sampledId(file: Blob): Promise<string | null> {
+  if (file.size <= SAMPLED) return Promise.resolve(null);
+  const mid = Math.floor(file.size / 2 - SLICE / 2);
+  return new Blob([String(file.size), file.slice(0, SLICE), file.slice(mid, mid + SLICE), file.slice(file.size - SLICE)]).arrayBuffer().then(fingerprint);
 }
 
 // Whether opened files are kept at all ("Remember opened files", on unless
@@ -62,9 +64,21 @@ const write = (key: string, value: string) => {
   }
 };
 export const remembering = () => read(REMEMBER) !== "0";
+// Each time remembering is turned off (here or in another tab) a save still
+// under way is called off: it checks, as it writes, that it began in the
+// same epoch and that remembering is on.
+let epoch = 0;
+if (typeof window !== "undefined") {
+  addEventListener("storage", (e) => {
+    if (e.key !== REMEMBER) return;
+    if (e.newValue === "0") epoch++;
+    changed();
+  });
+}
 // Turned off, the files kept so far are removed too.
 export async function setRemembering(on: boolean) {
   write(REMEMBER, on ? "1" : "0");
+  if (!on) epoch++;
   changed();
   if (!on) await forgetAll();
 }
@@ -145,23 +159,36 @@ export function openRecent(id: string): Promise<File | null> {
 // Returns its id, or null when opened files aren't kept (or can't be).
 export async function remember(file: File, pages: number): Promise<string | null> {
   if (!remembering()) return null;
+  const began = epoch;
+  // Still wanted: remembering on, and not turned off since this save began.
+  const wanted = () => began === epoch && remembering();
   // Asks the browser not to clear the library when space runs low (granted
   // to installed apps; elsewhere a no-op).
   void navigator.storage?.persist?.().catch(() => {});
-  const id = await docId(file).catch(() => null);
   const data = await file.arrayBuffer().catch(() => null);
+  const id = data && (await docId(file, data).catch(() => null));
   if (!id || !data) return null;
   let old = await withStore<Row>("readonly", (s) => s.get(id));
-  // A row kept before fingerprints, under this name and size: moved over
-  // (with its page) if it holds these same bytes, left alone if it doesn't.
+  // A row kept under an earlier kind of id (name and size; or, over 32 MB,
+  // sampled bytes): moved over (with its page) if it holds these same bytes,
+  // left alone if it doesn't.
   if (!old) {
-    const legacy = await withStore<Row>("readonly", (s) => s.get(legacyId(file)));
-    if (legacy?.data && (await docId(new Blob([legacy.data])).catch(() => null)) === id) {
-      old = legacy;
-      await withStore("readwrite", (s) => s.delete(legacy.id));
+    for (const was of [legacyId(file), await sampledId(file).catch(() => null)]) {
+      if (!was) continue;
+      const prior = await withStore<Row>("readonly", (s) => s.get(was));
+      if (prior?.data && (await docId(new Blob([prior.data])).catch(() => null)) === id) {
+        old = prior;
+        await withStore("readwrite", (s) => s.delete(prior.id));
+        break;
+      }
     }
   }
-  await withStore("readwrite", (s) => s.put({ id, name: file.name, size: file.size, type: file.type, opened: Date.now(), page: old?.page ?? 0, pages, data } satisfies Row));
+  // Checked as the write is made, in the same transaction: nothing lands once remembering is off.
+  const kept = await withStore<boolean>("readwrite", (s) => {
+    if (!wanted()) return;
+    s.put({ id, name: file.name, size: file.size, type: file.type, opened: Date.now(), page: old?.page ?? 0, pages, data } satisfies Row);
+  }).then(() => wanted());
+  if (!kept) return null;
   const rows = await all();
   let bytes = 0;
   const drop = rows.filter((r, i) => (bytes += r.size) > MAX_BYTES || i >= MAX_FILES).map((r) => r.id);

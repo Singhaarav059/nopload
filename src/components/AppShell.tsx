@@ -342,7 +342,7 @@ function SettingsList() {
       </div>
       <div>
         <label className="mb-2 block text-[13px] font-semibold text-muted" htmlFor="app-lang">{t("nav.language")}</label>
-        <select id="app-lang" className="field" value={locale} onChange={(e) => void goToLanguage(switchLanguage(pathname, e.target.value as Locale))}>
+        <select id="app-lang" className="field" value={locale} onChange={(e) => void goToLanguage(switchLanguage(pathname, e.target.value as Locale), () => confirm(t("session.notKept")))}>
           {LOCALES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
         </select>
       </div>
