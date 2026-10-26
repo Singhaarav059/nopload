@@ -328,5 +328,13 @@
   },
   "allowScripts": {
     "onnxruntime-node@1.30.0": true
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    },
+    "pptxgenjs": {
+      "image-size": "^2.0.3"
+    }
   }
 }
