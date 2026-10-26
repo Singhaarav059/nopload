@@ -89,8 +89,11 @@
   grid-template-columns: repeat(5, 1fr);
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
-  animation: app-rise 420ms var(--ease-out) both;
 }
+/* The tab bar in the page as built, before the app has started: shown at
+   once where the app will show it, so the first frame is the app's. */
+.app-tabbar[data-tabbar="pre"] { display: none; }
+:root[data-app][data-nav="tabs"] .app-tabbar[data-tabbar="pre"] { display: grid; }
 .app-tab {
   display: flex;
   flex-direction: column;
@@ -101,6 +104,8 @@
   color: var(--muted);
   cursor: default;
 }
+/* Android's icons are a little smaller. */
+:root[data-os="android"] .app-tab-icon svg { width: 22px; height: 22px; }
 .app-tab-icon {
   display: grid;
   place-items: center;
@@ -115,31 +120,31 @@
 }
 
 /* iPhone: frosted, hairline on top, icons tinted when chosen. */
-[data-tabbar="ios"] {
+[data-tabbar="ios"], :root:not([data-os="android"]) [data-tabbar="pre"] {
   background: color-mix(in oklab, var(--surface) 88%, transparent);
   -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
   border-top: 0.5px solid var(--line-strong);
 }
-[data-tabbar="ios"] .app-tab { padding-top: 5px; justify-content: flex-start; }
-[data-tabbar="ios"] .app-tab-label { font-size: 10px; font-weight: 560; letter-spacing: 0.01em; }
-[data-tabbar="ios"] .app-tab[aria-current] { color: var(--brand); }
+[data-tabbar="ios"] .app-tab, :root:not([data-os="android"]) [data-tabbar="pre"] .app-tab { padding-top: 5px; justify-content: flex-start; }
+[data-tabbar="ios"] .app-tab-label, :root:not([data-os="android"]) [data-tabbar="pre"] .app-tab-label { font-size: 10px; font-weight: 560; letter-spacing: 0.01em; }
+[data-tabbar="ios"] .app-tab[aria-current], :root:not([data-os="android"]) [data-tabbar="pre"] .app-tab[aria-current] { color: var(--brand); }
 
 /* Android: Material's navigation bar, a pill behind the chosen icon. */
-[data-tabbar="material"] {
+[data-tabbar="material"], :root[data-os="android"] [data-tabbar="pre"] {
   background: var(--surface-2);
 }
-[data-tabbar="material"] .app-tab { gap: 4px; }
-[data-tabbar="material"] .app-tab-icon {
+[data-tabbar="material"] .app-tab, :root[data-os="android"] [data-tabbar="pre"] .app-tab { gap: 4px; }
+[data-tabbar="material"] .app-tab-icon, :root[data-os="android"] [data-tabbar="pre"] .app-tab-icon {
   width: 64px;
   height: 32px;
   border-radius: 16px;
 }
-[data-tabbar="material"] .app-tab[aria-current] { color: var(--ink); }
-[data-tabbar="material"] .app-tab[aria-current] .app-tab-icon {
+[data-tabbar="material"] .app-tab[aria-current], :root[data-os="android"] [data-tabbar="pre"] .app-tab[aria-current] { color: var(--ink); }
+[data-tabbar="material"] .app-tab[aria-current] .app-tab-icon, :root[data-os="android"] [data-tabbar="pre"] .app-tab[aria-current] .app-tab-icon {
   background: color-mix(in oklab, var(--brand) 24%, transparent);
   animation: app-pill 360ms var(--ease-out);
 }
-[data-tabbar="material"] .app-tab-label { font-size: 12px; font-weight: 600; }
+[data-tabbar="material"] .app-tab-label, :root[data-os="android"] [data-tabbar="pre"] .app-tab-label { font-size: 12px; font-weight: 600; }
 
 /* ---------- Side navigation (tablets, desktops) ---------- */
 .app-side {
@@ -152,7 +157,7 @@
   display: flex;
   flex-direction: column;
   padding-top: env(safe-area-inset-top);
-  animation: app-slide-in 460ms var(--ease-out) both;
+
 }
 .app-side-drag { height: 8px; flex: none; }
 :root[data-app="wco"] .app-side-drag { height: env(titlebar-area-height, 40px); -webkit-app-region: drag; app-region: drag; }
@@ -336,11 +341,24 @@
 :root[data-os="android"] :is(.icon-btn, .app-tab, .app-row) { position: relative; overflow: hidden; }
 :root[data-os="android"][data-app] .btn { min-height: 48px; }
 
+/* The app opens already there: the website's entrance animations don't run. */
+:root[data-app] :is(.words > span, .stagger > *, .fade-up, .page-in, .unfold) { animation: none; }
+
 /* ---------- Moving between pages ---------- */
 ::view-transition { pointer-events: none; }
 ::view-transition-old(.app-out) { animation: 160ms var(--ease-in-out) both app-page-out; }
 ::view-transition-new(.app-in) { animation: 380ms var(--ease-out) 60ms both app-page-in; }
 :root[data-nav="tabs"]::view-transition-new(.app-in) { animation-name: app-page-push; }
+
+/* The bars stay put while the page under them changes: each is its own
+   layer, above the page's, so the page sliding in never shows through or
+   over them. */
+:root[data-app] .app-tabbar { view-transition-name: app-tabbar; }
+:root[data-app] .app-side { view-transition-name: app-side; }
+:root[data-app] [data-site-header] { view-transition-name: app-header; }
+::view-transition-group(app-tabbar), ::view-transition-group(app-side), ::view-transition-group(app-header) { animation: none; }
+::view-transition-old(app-tabbar), ::view-transition-old(app-side), ::view-transition-old(app-header) { display: none; }
+::view-transition-new(app-tabbar), ::view-transition-new(app-side), ::view-transition-new(app-header) { animation: none; }
 
 @keyframes app-page-out { to { opacity: 0; scale: 0.985; } }
 @keyframes app-page-in { from { opacity: 0; translate: 0 10px; } }

@@ -100,7 +100,10 @@ export function ContentLayer({
   snapshot: () => void;
 }) {
   const { t } = useI18n();
-  const drag = useRef<null | { id: string; mode: "move" | "rotate" | string; x0: number; y0: number; orig: FracRect; angle0: number; rot0: number; ratio: boolean }>(null);
+  const drag = useRef<null | { id: string; mode: "move" | "rotate" | string; x0: number; y0: number; orig: FracRect; angle0: number; rot0: number; ratio: boolean; slop: number; sx: number; sy: number; moved: boolean }>(null);
+
+  // The last press on a target was a finger's.
+  const touched = useRef(false);
 
   const frac = (e: { clientX: number; clientY: number }) => {
     const r = stage.current!.getBoundingClientRect();
@@ -110,6 +113,12 @@ export function ContentLayer({
   const start = (e: React.PointerEvent, it: EditorItem, mode: string) => {
     if (e.button !== 0 || editing === it.id) return;
     e.stopPropagation();
+    // A finger on something not yet selected selects it and no more: the
+    // page scrolls on under it, and nothing moves by accident.
+    if (e.pointerType === "touch" && mode === "move" && sel !== it.id) {
+      onSelect(it.id);
+      return;
+    }
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     onSelect(it.id);
@@ -121,6 +130,7 @@ export function ContentLayer({
       angle0: Math.atan2(p.y * p.r.height - cy, p.x * p.r.width - cx), rot0: it.rotate ?? 0,
       // Pictures keep their proportions from a corner, unless Shift is held.
       ratio: it.source?.kind === "image" && mode.length === 2,
+      slop: e.pointerType === "touch" ? 8 : 3, sx: e.clientX, sy: e.clientY, moved: false,
     };
   };
 
@@ -128,6 +138,9 @@ export function ContentLayer({
     const d = drag.current;
     if (!d) return;
     e.stopPropagation();
+    // A press that barely moves is a tap: nothing moves.
+    if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < d.slop) return;
+    d.moved = true;
     const p = frac(e);
     const dx = p.x - d.x0, dy = p.y - d.y0, o = d.orig;
     if (d.mode === "move") {
@@ -180,9 +193,13 @@ export function ContentLayer({
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               e.stopPropagation();
+              touched.current = e.pointerType === "touch";
+              if (touched.current) return;
               e.preventDefault();
               onPick(x, false);
             }}
+            // A tap (a mouse press picked it already; the keyboard has its own).
+            onClick={() => touched.current && onPick(x, false)}
             onDoubleClick={() => text && onPick(x, true)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -265,14 +282,14 @@ export function ContentLayer({
           <div key={it.id} role="button" tabIndex={0} data-content-item={src.kind ?? "text"} data-selected={isSel || undefined}
             aria-label={`${t(text ? "ed.objText" : "ed.object")}: ${text ? it.text : t(src.kind === "image" ? "ed.objImage" : "ed.objShape")}`}
             className={`absolute ${isSel ? "outline outline-2 outline-[var(--accent)]" : "outline-dashed outline-1 outline-[var(--accent)]"} ${text ? "cursor-text" : "cursor-move"}`}
-            style={{ ...style, touchAction: "none" }}
+            style={{ ...style, touchAction: isSel ? "none" : undefined }}
             onFocus={() => onSelect(it.id)}
             onPointerDown={(e) => start(e, it, "move")} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
             onDoubleClick={() => text && onEdit(it.id)}
             onKeyDown={(e) => { if (e.key === "Enter" && text) { e.preventDefault(); onEdit(it.id); } }}>
             {isSel && handles.map((h) => (
               <span key={h} aria-hidden onPointerDown={(e) => start(e, it, h)} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
-                className="absolute h-3.5 w-3.5 rounded-full border-2 border-white bg-accent shadow"
+                data-handle className="absolute h-3.5 w-3.5 rounded-full border-2 border-white bg-accent shadow"
                 style={{
                   left: h.includes("w") ? -7 : h.includes("e") ? "calc(100% - 7px)" : "calc(50% - 7px)",
                   top: h.includes("n") ? -7 : h.includes("s") ? "calc(100% - 7px)" : "calc(50% - 7px)",
@@ -281,7 +298,7 @@ export function ContentLayer({
             ))}
             {isSel && !text && (
               <span aria-hidden title={t("ed.rotate")} onPointerDown={(e) => start(e, it, "rotate")} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
-                className="absolute left-[calc(50%-11px)] top-[-34px] grid h-[22px] w-[22px] cursor-grab place-items-center rounded-full border-2 border-white bg-accent text-white shadow"
+                data-handle className="absolute left-[calc(50%-11px)] top-[-34px] grid h-[22px] w-[22px] cursor-grab place-items-center rounded-full border-2 border-white bg-accent text-white shadow"
                 style={{ touchAction: "none" }}>
                 <RotateCw size={12} />
               </span>

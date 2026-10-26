@@ -8,7 +8,7 @@
 //   npm run build:static
 //   node scripts/serve-static.mjs out 3202 &
 //   node tests/e2e/appshell.mjs chromium
-import { dict, open, suite } from "./kit.mjs";
+import { base, dict, open, suite } from "./kit.mjs";
 
 const t = dict("en");
 const UA = {
@@ -48,6 +48,8 @@ await suite(async ({ name, browser, test }) => {
         const nav = page.getByRole("navigation", { name: t["app.nav"] });
         await nav.waitFor();
         if (mobileOk) {
+          // The bar in the page as built is "pre" until the app has started.
+          await page.waitForFunction(() => document.querySelector('[aria-label="App navigation"]')?.dataset.tabbar !== "pre");
           const kind = await nav.evaluate((n) => n.dataset.tabbar ?? n.dataset.side);
           if (kind !== (d.look ?? d.nav)) throw new Error(`navigation is ${kind}`);
         }
@@ -165,6 +167,25 @@ await suite(async ({ name, browser, test }) => {
       if (await page.getByRole("navigation", { name: t["app.nav"] }).count()) throw new Error("app navigation shown");
       await page.locator("[data-site-footer]").waitFor({ state: "attached" });
       return "website as before";
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  await test("phone: the app's first frame, before its code runs, is already the app", async () => {
+    const ctx = await browser.newContext({ locale: "en-US", ...DEVICES[0].ctx, ...(mobileOk ? {} : { isMobile: undefined }) });
+    const page = await ctx.newPage();
+    try {
+      // The page as built, with none of its scripts: what shows while they load.
+      await page.route(/\/_next\/static\/chunks\/.*\.js$/, (r) => r.abort());
+      await page.goto(`${base}/en?app=1`, { waitUntil: "load" });
+      const bar = page.getByRole("navigation", { name: t["app.nav"] });
+      if (!(await bar.isVisible())) throw new Error("no tab bar until the app starts");
+      // Nothing fading or lifting in: the title and the drop area are there, still
+      // (the mascot blinking, on a loop, is no entrance).
+      const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity && a.effect?.target?.closest?.("main")).length);
+      if (moving) throw new Error(`${moving} entrance animations running`);
+      return "tab bar there, nothing animating in";
     } finally {
       await ctx.close();
     }

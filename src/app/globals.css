@@ -1113,3 +1113,8 @@ select.field {
 .install-banner.aurora .text-ink-2 { color: rgb(255 255 255 / 0.85); }
 .install-banner.aurora .btn-primary { background: #fff; color: #1d1534; }
 .install-banner.aurora .icon-btn { color: #fff; }
+
+/* The editor's handles on a touch screen: the dot stays small, the finger's target doesn't. */
+@media (pointer: coarse) {
+  [data-handle]::after { content: ""; position: absolute; inset: -8px; }
+}

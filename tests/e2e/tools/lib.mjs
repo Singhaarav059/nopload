@@ -23,7 +23,7 @@ export const helpers = (page, fx) => ({
   select: (key, v) => page.locator(`main select[id$="-${key}"]`).first().selectOption(v),
   fill: (key, v) => page.locator(`main input[id$="-${key}"]`).first().fill(v),
   icon: (name, scope = "main") => page.locator(`${scope} button:has(svg.lucide-${name})`).first(),
-  stage: () => page.locator("main div.touch-none.select-none.bg-white").first(),
+  stage: () => page.locator("main [data-stage]").first(),
   async drag(x0, y0, x1, y1) {
     const box = await this.stage().boundingBox();
     await page.mouse.move(box.x + box.width * x0, box.y + box.height * y0);
@@ -41,7 +41,7 @@ export const helpers = (page, fx) => ({
     return imgs.length >= n && imgs.every((i) => i.naturalWidth > 0);
   }, n, { timeout: 30000 }),
   thumb: (i) => page.locator("main ul li button[aria-pressed]").nth(i),
-  waitStage: () => page.waitForFunction(() => !!document.querySelector("main div.touch-none img"), null, { timeout: 30000 }),
+  waitStage: () => page.waitForFunction(() => !!document.querySelector("main [data-stage] img"), null, { timeout: 30000 }),
 });
 
 // Waits until the workspace shows an error, a result, or a print preview.

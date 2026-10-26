@@ -90,7 +90,7 @@ await suite(async ({ name, browser, test }) => {
 
       step = "cursors";
       // Each tool its own pointer: a pencil, a round eraser, not the same crosshair for all.
-      const cursorOf = () => page.evaluate(() => getComputedStyle(document.querySelector("main div.touch-none")).cursor);
+      const cursorOf = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-stage]")).cursor);
       await tool("ed.draw").click();
       const pencil = await cursorOf();
       await tool("ed.erase").click();

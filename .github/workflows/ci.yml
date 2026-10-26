@@ -197,6 +197,9 @@ jobs:
       - name: PDF viewer
         if: success() || failure()
         run: npm run test:e2e:viewer -- ${{ matrix.browser }}
+      - name: Edit PDF with fingers on a phone
+        if: success() || failure()
+        run: npm run test:e2e:phone-editor -- ${{ matrix.browser }}
       - name: Office to PDF with LibreOffice, first visit
         if: matrix.browser == 'chromium'
         run: npm run test:e2e-office
