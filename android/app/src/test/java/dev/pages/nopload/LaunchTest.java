@@ -117,7 +117,8 @@ public class LaunchTest {
         open(i);
     }
 
-    // After a crash, the next launch shows why, then opens the site.
+    // After a crash, the next launch shows why (CrashActivity), with Copy,
+    // instead of opening the site; Open then opens it.
     @Test
     public void afterACrash() throws Exception {
         android.content.Context c = ApplicationProvider.getApplicationContext();
@@ -129,18 +130,37 @@ public class LaunchTest {
         i.setComponent(new ComponentName(c, Launcher.class));
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         Launcher a = started(Robolectric.buildActivity(Launcher.class, i).setup()).get();
-        android.app.AlertDialog d = (android.app.AlertDialog) org.robolectric.shadows.ShadowDialog.getLatestDialog();
-        assertNotNull("no report shown", d);
-        org.junit.Assert.assertTrue(Shadows.shadowOf(d).getMessage().toString().contains("IllegalStateException: test"));
+        Intent report = Shadows.shadowOf(a).getNextStartedActivity();
+        assertNotNull("no report shown", report);
+        org.junit.Assert.assertEquals(CrashActivity.class.getName(), report.getComponent().getClassName());
+        org.junit.Assert.assertTrue("the site opened anyway", a.isFinishing());
+
+        CrashActivity shown = Robolectric.buildActivity(CrashActivity.class, report).setup().get();
+        android.view.View root = shown.findViewById(android.R.id.content);
+        org.junit.Assert.assertTrue("trace not shown", text(root).contains("IllegalStateException: test"));
         org.junit.Assert.assertFalse("report kept", new java.io.File(c.getFilesDir(), App.CRASH).exists());
-        d.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
-        a.onEnterAnimationComplete();
-        for (int n = 0; n < 20; n++) {
-            ShadowLooper.idleMainLooper();
-            ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        }
+        find(root, c.getString(R.string.crash_copy)).performClick();
         android.content.ClipboardManager clip = (android.content.ClipboardManager) c.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
         org.junit.Assert.assertTrue(clip.getPrimaryClip().getItemAt(0).getText().toString().contains("test"));
+        find(root, c.getString(R.string.crash_open)).performClick();
+        Intent again = Shadows.shadowOf(shown).getNextStartedActivity();
+        org.junit.Assert.assertEquals(Launcher.class.getName(), again.getComponent().getClassName());
+    }
+
+    private static String text(android.view.View v) {
+        StringBuilder out = new StringBuilder();
+        if (v instanceof android.widget.TextView) out.append(((android.widget.TextView) v).getText()).append('\n');
+        if (v instanceof android.view.ViewGroup) for (int i = 0; i < ((android.view.ViewGroup) v).getChildCount(); i++) out.append(text(((android.view.ViewGroup) v).getChildAt(i)));
+        return out.toString();
+    }
+
+    private static android.view.View find(android.view.View v, String label) {
+        if (v instanceof android.widget.Button && label.contentEquals(((android.widget.Button) v).getText())) return v;
+        if (v instanceof android.view.ViewGroup) for (int i = 0; i < ((android.view.ViewGroup) v).getChildCount(); i++) {
+            android.view.View f = find(((android.view.ViewGroup) v).getChildAt(i), label);
+            if (f != null) return f;
+        }
+        return null;
     }
 
     // The library counts the launchers alive (a second one means the app is

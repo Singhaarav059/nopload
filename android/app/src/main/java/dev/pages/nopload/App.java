@@ -1,6 +1,7 @@
 package dev.pages.nopload;
 
 import android.app.Application;
+import android.content.Context;
 import android.os.Build;
 
 import java.io.File;
@@ -14,9 +15,11 @@ import java.nio.charset.StandardCharsets;
 public class App extends Application {
     static final String CRASH = "last-crash.txt";
 
+    // Set before the libraries' start-up code (content providers) runs, which
+    // is before onCreate, so a crash there is kept too.
     @Override
-    public void onCreate() {
-        super.onCreate();
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
         final Thread.UncaughtExceptionHandler next = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, e) -> {
             try {
@@ -25,7 +28,7 @@ public class App extends Application {
                 String report = "Nopload " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n"
                         + "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + "), "
                         + Build.MANUFACTURER + " " + Build.MODEL + "\n\n" + trace;
-                try (FileOutputStream out = new FileOutputStream(new File(getFilesDir(), CRASH))) {
+                try (FileOutputStream out = new FileOutputStream(new File(base.getFilesDir(), CRASH))) {
                     out.write(report.getBytes(StandardCharsets.UTF_8));
                 }
             } catch (Throwable ignored) {

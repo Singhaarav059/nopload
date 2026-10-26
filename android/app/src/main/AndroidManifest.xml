@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The whole app is Google's LauncherActivity (android-browser-helper, with a
-     crash report added: Launcher.java): it opens
+     crash report added: Launcher.java, CrashActivity.java): it opens
      the site in Chrome full screen, verified by Digital Asset Links, and hands
      it the files Android opens or shares with Nopload. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -85,6 +85,13 @@
         </activity>
 
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
+
+        <!-- The last crash, in its own process so it shows even if the launch crashes again. -->
+        <activity
+            android:name=".CrashActivity"
+            android:process=":crash"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
 
         <activity
             android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"

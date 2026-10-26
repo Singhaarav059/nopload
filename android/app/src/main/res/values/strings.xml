@@ -7,7 +7,8 @@
     <string name="asset_statements" translatable="false">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://nopload.pages.dev\"}}]</string>
     <string name="crash_title">Nopload closed unexpectedly</string>
     <string name="crash_body">Copy this and send it to the developer, so it can be fixed.</string>
-    <string name="crash_copy">Copy and open</string>
+    <string name="crash_copy">Copy</string>
     <string name="crash_copied">Copied</string>
+    <string name="crash_share">Share</string>
     <string name="crash_open">Open</string>
 </resources>
