@@ -117,6 +117,26 @@ public class LaunchTest {
         open(i);
     }
 
+    // Every activity the library turns on or opens is declared: a missing one
+    // crashes every launch on a phone (Android refuses to enable it), which the
+    // test package manager doesn't.
+    @Test
+    public void everyLibraryActivityIsDeclared() throws Exception {
+        android.content.Context c = ApplicationProvider.getApplicationContext();
+        android.content.pm.PackageManager pm = c.getPackageManager();
+        for (String name : new String[] {
+                "com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity",
+                "com.google.androidbrowserhelper.trusted.FocusActivity",
+                "com.google.androidbrowserhelper.trusted.WebViewFallbackActivity",
+                "com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity",
+                "com.google.androidbrowserhelper.trusted.ColdShortcutActivity"}) {
+            pm.getActivityInfo(new ComponentName(c, name), 0);
+        }
+        android.content.pm.ActivityInfo manage = pm.getActivityInfo(new ComponentName(c, "com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"), android.content.pm.PackageManager.GET_META_DATA);
+        org.junit.Assert.assertEquals("https://nopload.pages.dev/?source=android", manage.metaData.getString("android.support.customtabs.trusted.MANAGE_SPACE_URL"));
+        org.junit.Assert.assertEquals("com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity", c.getApplicationInfo().manageSpaceActivityName);
+    }
+
     // After a crash, the next launch shows why (CrashActivity), with Copy,
     // instead of opening the site; Open then opens it.
     @Test
