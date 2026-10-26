@@ -65,7 +65,10 @@ export function AppShell() {
     setSheet(null);
   }
 useRipple(os === "android");
-  if (!app) return null;
+  // Until the app has started (and in the page as built), the tab bar is
+  // there anyway, hidden unless the page turns out to be the app on a phone
+  // (app.css): the app's first frame already has it, instead of it arriving.
+  if (!app) return <TabBar os={null} open={setSheet} sheet={null} pre />;
   return (
     <>
       {nav === "tabs" ? <TabBar os={os} open={setSheet} sheet={sheet} /> : <Side nav={nav} open={setSheet} />}
@@ -91,18 +94,18 @@ function useTabs() {
   ];
 }
 
-function TabBar({ os, open, sheet }: { os: Os | null; open: (s: Sheet) => void; sheet: Sheet }) {
+function TabBar({ os, open, sheet, pre }: { os: Os | null; open: (s: Sheet) => void; sheet: Sheet; pre?: boolean }) {
   const { t } = useI18n();
   const tabs = useTabs();
   const material = os === "android";
   return (
-    <nav aria-label={t("app.nav")} data-tabbar={material ? "material" : "ios"} className="app-tabbar">
+    <nav aria-label={t("app.nav")} data-tabbar={pre ? "pre" : material ? "material" : "ios"} className="app-tabbar">
       {tabs.map((tab) => {
         // A sheet tab is lit while its sheet is open, or while on one of its pages (Tools on a tool page).
         const on = sheet ? sheet === tab.sheet : !!tab.current;
         const body = (
           <>
-            <span className="app-tab-icon"><tab.icon size={material ? 22 : 24} strokeWidth={on ? 2.1 : 1.75} /></span>
+            <span className="app-tab-icon"><tab.icon size={24} strokeWidth={on ? 2.1 : 1.75} /></span>
             <span className="app-tab-label">{tab.label}</span>
           </>
         );

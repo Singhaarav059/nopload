@@ -116,6 +116,7 @@
     "test:e2e:smooth": "node tests/e2e/smooth.mjs",
     "test:e2e:session": "node tests/e2e/session.mjs",
     "test:e2e:dialogs": "node tests/e2e/dialogs.mjs",
+    "test:e2e:phone-editor": "node tests/e2e/phone-editor.mjs",
     "test:e2e:viewer": "node tests/e2e/viewer.mjs",
     "test:e2e:edittools": "node tests/e2e/edittools.mjs",
     "test:e2e:editcontent": "node tests/e2e/editcontent.mjs",

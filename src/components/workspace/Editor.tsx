@@ -1,7 +1,7 @@
 "use client";
 
 import { colorKey } from "@/lib/colors";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   MousePointer2, Type, ImagePlus, Square, Circle, Minus, Pencil, Highlighter, Eraser, Undo2, Redo2, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Signature as SignatureIcon, CalendarDays, Search, ScanEye, Crop as CropIcon,
@@ -132,7 +132,7 @@ export function Editor({
     zoomRef.current = zoom;
   }, [zoom]);
   const [fit, setFit] = useState(640);
-  const [rendered, setRendered] = useState<{ key: string; url: string } | null>(null);
+  const [rendered, setRendered] = useState<{ key: string; url: string; page: number } | null>(null);
   const items = useHistory<EditorItem[]>((resume?.items as EditorItem[]) ?? []);
   const marks = useHistory<Mark[]>((resume?.marks as Mark[]) ?? []);
   // What has changed, for a change of language to keep, and for leaving to warn about.
@@ -208,7 +208,12 @@ export function Editor({
   const stage = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
-  const drag = useRef<null | { kind: "new" | "move" | "resize" | "crop-move" | "crop-resize"; id?: string; x0: number; y0: number; orig?: FracRect; handle?: string }>(null);
+  const drag = useRef<null | { kind: "new" | "move" | "resize" | "crop-move" | "crop-resize"; id?: string; x0: number; y0: number; orig?: FracRect; handle?: string; slop?: number; sx?: number; sy?: number }>(null);
+  // A finger down on the page that may be a tap (not a scroll), and where.
+  const tap = useRef<{ x: number; y: number } | null>(null);
+  const lastTap = useRef<{ x: number; y: number; at: number } | null>(null);
+  // Where a zoom keeps its spot: that point of the page (fractions) at that point of the screen.
+  const anchor = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
   // The Eraser wipes as it goes: each bit of its path is painted at once in
   // the colour of the paper around it (wipe), until the preview, with the
   // page's own content really deleted, takes over. A stroke that starts on
@@ -245,7 +250,7 @@ export function Editor({
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setFit(Math.max(260, Math.min(900, el.clientWidth - 32))));
+    const ro = new ResizeObserver(() => setFit(Math.max(260, Math.min(900, el.clientWidth - (innerWidth < 640 ? 16 : 32)))));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -255,11 +260,11 @@ export function Editor({
   const height = size ? Math.round((width * size.h) / size.w) : Math.round(width * 1.414);
   const ptToPx = size ? width / size.w : 1;
 
-  const imgKey = `${page}:${width}`;
-  const original = rendered?.key === imgKey ? rendered.url : null;
+  // At a new zoom the page drawn at the old size stays, stretched, until the new one is ready.
+  const original = rendered?.page === page ? rendered.url : null;
   useEffect(() => {
     let live = true;
-    thumbUrl(file, page, width).then((r) => live && setRendered({ key: `${page}:${width}`, url: r.url })).catch(() => {});
+    thumbUrl(file, page, width).then((r) => live && setRendered({ key: `${page}:${width}`, url: r.url, page })).catch(() => {});
     return () => {
       live = false;
     };
@@ -391,6 +396,13 @@ export function Editor({
 
   const onDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    tap.current = null;
+    // A finger on the page with nothing to draw scrolls it: a tap (not a
+    // scroll, which the browser takes over) clears the selection when lifted.
+    if (e.pointerType === "touch" && (tool === "select" || tool === "editText" || (tool === "place" && !pending))) {
+      tap.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
     // Stops the browser moving focus to the page on mousedown, which would
     // immediately blur a text box created by this same press.
     e.preventDefault();
@@ -517,6 +529,11 @@ export function Editor({
       return;
     }
     if ((d.kind === "move" || d.kind === "resize") && d.id && d.orig) {
+      // A press that barely moves is a tap: the item stays where it was.
+      if (d.slop) {
+        if (Math.hypot(e.clientX - d.sx!, e.clientY - d.sy!) < d.slop) return;
+        d.slop = 0;
+      }
       const dx = p.x - d.x0, dy = p.y - d.y0;
       const it = items.value.find((i) => i.id === d.id);
       if (!it) return;
@@ -681,9 +698,24 @@ export function Editor({
     setSel(it.id);
   };
 
-  const onUp = () => {
+  const onUp = (e?: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
+    const t0 = tap.current;
+    tap.current = null;
+    if (t0 && e && Math.hypot(e.clientX - t0.x, e.clientY - t0.y) < 10) {
+      setSel(null);
+      setEditing(null);
+      // A second tap close by: zoom in there, or back out to the page's width.
+      const last = lastTap.current;
+      lastTap.current = { x: e.clientX, y: e.clientY, at: e.timeStamp };
+      const r = stage.current?.getBoundingClientRect();
+      if (r && last && e.timeStamp - last.at < 320 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 30) {
+        lastTap.current = null;
+        anchor.current = { fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height, cx: e.clientX, cy: e.clientY };
+        setZoom(zoom > 1.2 ? 1 : 2.5);
+      }
+    }
     if (!d) return;
     if (tool === "redact" && d.id) {
       marks.set((l) => l.filter((m) => m.rect.w > 0.004 && m.rect.h > 0.004), false);
@@ -753,43 +785,91 @@ export function Editor({
     if (tool !== "select" && tool !== "place" && tool !== "editText") return;
     e.stopPropagation();
     if (editing === it.id && kind === "move") return;
+    // A finger on something not yet selected selects it, nothing more: the
+    // page still scrolls under it, and nothing moves by accident.
+    if (e.pointerType === "touch" && kind === "move" && sel !== it.id) {
+      tap.current = null;
+      setSel(it.id);
+      return;
+    }
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setSel(it.id);
     // Snapshot once per gesture so a whole drag undoes in one step.
     items.set((l) => [...l]);
     const p = frac(e);
-    drag.current = { kind, id: it.id, x0: p.x, y0: p.y, orig: { x: it.x, y: it.y, w: it.w, h: it.h } };
+    drag.current = { kind, id: it.id, x0: p.x, y0: p.y, orig: { x: it.x, y: it.y, w: it.w, h: it.h }, slop: e.pointerType === "touch" ? 8 : 3, sx: e.clientX, sy: e.clientY };
   };
 
   // Pinch to zoom: two fingers on a touch screen, or a trackpad pinch (which
   // browsers send as a wheel with Ctrl). Two fingers stop any stroke the
-  // first one started.
+  // first one started. While the fingers move only the page's picture is
+  // stretched (a transform, cheap every frame); the page is laid out and
+  // drawn at the new size once, when they lift, with the spot pinched kept
+  // under them.
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    let pinch: { d: number; z: number } | null = null;
+    let pinch: { d: number; z: number; fx: number; fy: number; mx: number; my: number; s: number; cx: number; cy: number } | null = null;
+    let wheelEnd: ReturnType<typeof setTimeout> | undefined;
     const gap = (e: TouchEvent) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    const clamp = (z: number) => Math.min(3, Math.max(0.5, +z.toFixed(2)));
+    const mid = (e: TouchEvent) => ({ x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 });
+    const clamp = (z: number) => Math.min(4, Math.max(0.5, +z.toFixed(2)));
+    const begin = (x: number, y: number, d: number) => {
+      const st = stage.current;
+      if (!st) return null;
+      const r = st.getBoundingClientRect();
+      const fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
+      st.style.transformOrigin = `${fx * 100}% ${fy * 100}%`;
+      st.style.willChange = "transform";
+      return { d, z: zoomRef.current, fx, fy, mx: x, my: y, s: 1, cx: x, cy: y };
+    };
+    const stretch = (p: NonNullable<typeof pinch>, s: number, x: number, y: number) => {
+      p.s = clamp(p.z * s) / p.z;
+      p.cx = x;
+      p.cy = y;
+      if (stage.current) stage.current.style.transform = `translate(${x - p.mx}px, ${y - p.my}px) scale(${p.s})`;
+    };
+    const finish = (p: NonNullable<typeof pinch>) => {
+      const next = clamp(p.z * p.s);
+      if (next === zoomRef.current) return unstretch(stage.current);
+      // The transform comes off in the same frame the page is laid out at its new size (below).
+      anchor.current = { fx: p.fx, fy: p.fy, cx: p.cx, cy: p.cy };
+      setZoom(next);
+    };
     const start = (e: TouchEvent) => {
       if (e.touches.length !== 2) return;
       const d = drag.current;
       drag.current = null;
+      tap.current = null;
       if (d?.kind === "new" && d.id) items.set((l) => l.filter((o) => o.id !== d.id), false);
       setErasing(null);
-      pinch = { d: gap(e), z: zoomRef.current };
+      const m = mid(e);
+      pinch = begin(m.x, m.y, gap(e));
     };
     const move = (e: TouchEvent) => {
       if (!pinch || e.touches.length !== 2) return;
       e.preventDefault();
-      setZoom(clamp(pinch.z * (gap(e) / pinch.d)));
+      const m = mid(e);
+      stretch(pinch, gap(e) / pinch.d, m.x, m.y);
     };
     const end = (e: TouchEvent) => {
-      if (e.touches.length < 2) pinch = null;
+      if (!pinch || e.touches.length >= 2) return;
+      const p = pinch;
+      pinch = null;
+      finish(p);
     };
     const wheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
-      setZoom((z) => clamp(z * Math.exp(-e.deltaY / 200)));
+      pinch ??= begin(e.clientX, e.clientY, 1);
+      if (!pinch) return;
+      stretch(pinch, (pinch.s * Math.exp(-e.deltaY / 200)), pinch.mx, pinch.my);
+      clearTimeout(wheelEnd);
+      wheelEnd = setTimeout(() => {
+        const p = pinch;
+        pinch = null;
+        if (p) finish(p);
+      }, 180);
     };
     el.addEventListener("touchstart", start, { passive: true });
     el.addEventListener("touchmove", move, { passive: false });
@@ -797,6 +877,7 @@ export function Editor({
     el.addEventListener("touchcancel", end);
     el.addEventListener("wheel", wheel, { passive: false });
     return () => {
+      clearTimeout(wheelEnd);
       el.removeEventListener("touchstart", start);
       el.removeEventListener("touchmove", move);
       el.removeEventListener("touchend", end);
@@ -805,6 +886,18 @@ export function Editor({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // The page at its new size: the pinch's stretch comes off, and the page
+  // scrolls so the spot pinched is where the fingers left it.
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    anchor.current = null;
+    unstretch(stage.current);
+    const st = stage.current, el = wrap.current;
+    if (!a || !st || !el) return;
+    const r = st.getBoundingClientRect();
+    el.scrollLeft += r.left + a.fx * r.width - a.cx;
+    scrollerOf(el).scrollBy(0, r.top + a.fy * r.height - a.cy);
+  }, [width]);
 
   // Keyboard: delete, undo/redo, nudge.
   useEffect(() => {
@@ -1147,11 +1240,13 @@ export function Editor({
         </div>
 
         {/* Page */}
-        <div ref={wrap} className="overflow-auto rounded-xl bg-surface-2 p-4">
+        <div ref={wrap} className="overflow-auto rounded-xl bg-surface-2 p-2 sm:p-4">
           <div
             ref={stage}
-            className="relative mx-auto touch-none select-none bg-white data-[drawing]:[&_[data-item]]:pointer-events-none shadow-[0_0_0_1px_var(--line),0_8px_24px_rgb(0_0_0/0.08)]"
-            style={{ width, height, cursor }}
+            data-stage
+            className="relative mx-auto select-none bg-white data-[drawing]:[&_[data-item]]:pointer-events-none shadow-[0_0_0_1px_var(--line),0_8px_24px_rgb(0_0_0/0.08)]"
+            // A finger scrolls the page unless a tool draws with it; two fingers zoom (below).
+            style={{ width, height, cursor, touchAction: ["select", "editText", "place"].includes(tool) && !pending ? "pan-x pan-y" : "none" }}
             // With a tool that draws or places, what's already on the page lets the pointer through: the tool's own pointer stays, and it draws over them.
             data-drawing={!["select", "editText", "place"].includes(tool) || undefined}
             onPointerDown={onDown}
@@ -1255,8 +1350,9 @@ export function Editor({
               })}
             </svg>
             {pageItems.map((i) => {
-              const boxStyle: React.CSSProperties = { left: `${i.x * 100}%`, top: `${i.y * 100}%`, width: `${i.w * 100}%`, height: `${i.h * 100}%` };
               const isSel = sel === i.id;
+              // Only what's selected takes a finger's drag; the rest lets the page scroll.
+              const boxStyle: React.CSSProperties = { left: `${i.x * 100}%`, top: `${i.y * 100}%`, width: `${i.w * 100}%`, height: `${i.h * 100}%`, touchAction: isSel ? "none" : undefined };
               const frame = isSel ? "outline outline-2 outline-offset-2 outline-[var(--accent)]" : "";
               // Items take focus, so the arrow keys and Delete work on them without a mouse.
               const common = {
@@ -1277,7 +1373,7 @@ export function Editor({
                 return (
                   <div key={i.id} {...common} onDoubleClick={() => setEditing(i.id)}
                     className={`absolute whitespace-pre ${frame} ${editing === i.id ? "" : "cursor-move"}`}
-                    style={{ left: `${i.x * 100}%`, top: `${i.y * 100}%`, fontSize: fs, lineHeight: 1.25, color: i.color, fontWeight: i.bold ? 700 : 400, fontFamily: "Helvetica, Arial, sans-serif", minWidth: 8, minHeight: fs * 1.25 }}>
+                    style={{ left: `${i.x * 100}%`, top: `${i.y * 100}%`, touchAction: isSel ? "none" : undefined, fontSize: fs, lineHeight: 1.25, color: i.color, fontWeight: i.bold ? 700 : 400, fontFamily: "Helvetica, Arial, sans-serif", minWidth: 8, minHeight: fs * 1.25 }}>
                     {editing === i.id ? (
                       <textarea ref={(el) => { if (el && document.activeElement !== el) el.focus(); }} value={i.text ?? ""} rows={Math.max(1, (i.text ?? "").split("\n").length)}
                         onPointerDown={(e) => e.stopPropagation()}
@@ -1330,7 +1426,7 @@ export function Editor({
                   {inner}
                   {isFieldKind(i.kind) && <FieldPreview item={i} px={ptToPx} />}
                   {isSel && (
-                    <span onPointerDown={(e) => startItemDrag(e, i, "resize")}
+                    <span onPointerDown={(e) => startItemDrag(e, i, "resize")} data-handle style={{ touchAction: "none" }}
                       className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full border-2 border-white bg-accent shadow" />
                   )}
                 </div>
@@ -1721,4 +1817,21 @@ function CropOverlay({ rect, onStart }: { rect: FracRect; onStart: (e: React.Poi
       </div>
     </>
   );
+}
+
+// What scrolls el up and down: the nearest box that scrolls, else the page.
+function scrollerOf(el: HTMLElement): Element {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const y = getComputedStyle(p).overflowY;
+    if ((y === "auto" || y === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
+// A pinch's stretch taken off the page.
+function unstretch(st: HTMLElement | null) {
+  if (!st) return;
+  st.style.transform = "";
+  st.style.transformOrigin = "";
+  st.style.willChange = "";
 }

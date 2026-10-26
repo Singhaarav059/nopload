@@ -14,7 +14,7 @@ const spec = {
     "e-mail preset": {
       set: async (h) => {
         await h.page.locator("main aside .flex-wrap > button").first().click();
-        await h.page.waitForFunction(() => document.querySelectorAll("main div.touch-none [data-mark], main div.touch-none div.absolute").length > 0, null, { timeout: 10000 }).catch(() => {});
+        await h.page.waitForFunction(() => document.querySelectorAll("main [data-stage] [data-mark], main [data-stage] div.absolute").length > 0, null, { timeout: 10000 }).catch(() => {});
       },
       check: async (r, h) => {
         must(r.type === "pdf" && r.pages === 3, `${r.type} ${r.pages}p`);
@@ -26,7 +26,7 @@ const spec = {
     "everything personal": {
       set: async (h) => {
         await h.page.locator("main aside [data-redact-all]").click();
-        await h.page.waitForFunction(() => document.querySelectorAll("main div.touch-none div.absolute").length > 1, null, { timeout: 10000 }).catch(() => {});
+        await h.page.waitForFunction(() => document.querySelectorAll("main [data-stage] div.absolute").length > 1, null, { timeout: 10000 }).catch(() => {});
       },
       check: (r) => {
         must(r.type === "pdf" && r.pages === 3, `${r.type} ${r.pages}p`);
@@ -52,7 +52,7 @@ const spec = {
       set: async (h) => {
         await h.page.locator("main aside form input.field").fill("4471");
         await h.page.locator("main aside form button").click();
-        await h.page.waitForFunction(() => document.querySelectorAll("main div.touch-none div.absolute").length > 0, null, { timeout: 90000 });
+        await h.page.waitForFunction(() => document.querySelectorAll("main [data-stage] div.absolute").length > 0, null, { timeout: 90000 });
       },
       check: async (r, h) => {
         must(r.type === "pdf" && r.pages === 1, `${r.type} ${r.pages}p`);
