@@ -1942,6 +1942,7 @@ const en = {
   "ed.undo": "Undo",
   "ed.redo": "Redo",
   "ed.deleteItem": "Delete item",
+  "ed.discardChanges": "Discard your changes to this PDF?",
   "ed.prevPage": "Previous page",
   "ed.nextPage": "Next page",
   "ed.zoomIn": "Zoom in",

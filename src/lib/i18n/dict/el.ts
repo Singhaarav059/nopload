@@ -987,6 +987,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "Αναίρεση",
   "ed.redo": "Επανάληψη",
   "ed.deleteItem": "Διαγραφή στοιχείου",
+  "ed.discardChanges": "Απόρριψη των αλλαγών σας σε αυτό το PDF;",
   "ed.prevPage": "Προηγούμενη σελίδα",
   "ed.nextPage": "Επόμενη σελίδα",
   "ed.zoomIn": "Μεγέθυνση",

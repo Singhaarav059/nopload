@@ -393,6 +393,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "पहले जैसा करें",
   "ed.redo": "फिर से करें",
   "ed.deleteItem": "आइटम हटाएँ",
+  "ed.discardChanges": "इस PDF में किए गए बदलाव छोड़ दें?",
   "ed.prevPage": "पिछला पेज",
   "ed.nextPage": "अगला पेज",
   "ed.zoomIn": "ज़ूम इन",

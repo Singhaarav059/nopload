@@ -30,6 +30,8 @@ export function hasUnsavedEdits() {
   const e = editor?.();
   return !!e && (e.items.length > 0 || e.marks.length > 0);
 }
+// Anything open on this page that a reload would lose.
+export const hasOpenWork = () => !!live?.()?.files.length || hasUnsavedEdits();
 if (typeof window !== "undefined") {
   addEventListener("beforeunload", (e) => {
     if (leaving || !hasUnsavedEdits()) return;

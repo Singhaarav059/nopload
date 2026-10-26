@@ -1622,6 +1622,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "செயல்தவிர்",
   "ed.redo": "மீண்டும் செய்",
   "ed.deleteItem": "உருப்படியை நீக்கு",
+  "ed.discardChanges": "இந்த PDF-இல் செய்த மாற்றங்களை நிராகரிக்கவா?",
   "ed.prevPage": "முந்தைய பக்கம்",
   "ed.nextPage": "அடுத்த பக்கம்",
   "ed.zoomIn": "பெரிதாக்கு",

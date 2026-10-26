@@ -16,7 +16,7 @@ import type { PageItem } from "./PageBoard";
 import { AiModels, prepareAi } from "./AiModels";
 import { ErrorBox, useProblem, type Problem } from "./ErrorBox";
 import { peekHandoff, restoreHandoff } from "@/lib/handoff";
-import { forgetSession, resumeSession, setSessionSource, type EditorSnapshot } from "@/lib/session";
+import { forgetSession, hasUnsavedEdits, resumeSession, setSessionSource, type EditorSnapshot } from "@/lib/session";
 import { fileExt, humanSize, type Output, type Progress } from "@/lib/pdf/common";
 import type { FileState, Track } from "@/lib/pdf/run";
 import { overBudget } from "@/lib/budget";
@@ -638,6 +638,14 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         )}
         {heavyNote}
         <Editor key={items[0].id} toolId={tool.id} file={files[0]} others={files.slice(1)} options={options} actionLabel={t(`tool.${tool.id}.action`)} onRun={execute} resume={keptEdits}
+          onCancel={() => {
+            if (hasUnsavedEdits() && !confirm(t("ed.discardChanges"))) return;
+            // A file brought from another screen (the reader's Edit) goes back there; one added here, back to adding.
+            if (openedWithFiles.current) {
+              void forgetSession();
+              history.back();
+            } else reset();
+          }}
           onError={(e) => void drop(items[0].id, files[0], e)} />
       </div>
     );

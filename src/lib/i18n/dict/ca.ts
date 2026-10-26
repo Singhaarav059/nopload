@@ -987,6 +987,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "Desfés",
   "ed.redo": "Refés",
   "ed.deleteItem": "Elimina l’element",
+  "ed.discardChanges": "Voleu descartar els canvis en aquest PDF?",
   "ed.prevPage": "Pàgina anterior",
   "ed.nextPage": "Pàgina següent",
   "ed.zoomIn": "Amplia",

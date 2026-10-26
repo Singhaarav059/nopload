@@ -987,6 +987,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "Hoàn tác",
   "ed.redo": "Làm lại",
   "ed.deleteItem": "Xóa mục",
+  "ed.discardChanges": "Bỏ các thay đổi của bạn trong PDF này?",
   "ed.prevPage": "Trang trước",
   "ed.nextPage": "Trang sau",
   "ed.zoomIn": "Phóng to",

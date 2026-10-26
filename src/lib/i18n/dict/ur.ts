@@ -1622,6 +1622,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "واپس کریں",
   "ed.redo": "دوبارہ کریں",
   "ed.deleteItem": "آئٹم حذف کریں",
+  "ed.discardChanges": "اس PDF میں اپنی تبدیلیاں ترک کریں؟",
   "ed.prevPage": "پچھلا صفحہ",
   "ed.nextPage": "اگلا صفحہ",
   "ed.zoomIn": "زوم ان",
