@@ -213,5 +213,47 @@ await suite(async ({ name, browser, test }) => {
       throw new Error(`${step}: ${e.message} (screens in ${downloads})`);
     }
   });
+
+  // Reading the page can fail for a moment (a part of the engine still
+  // downloading) or for good (this tab's build gone after a deploy). Neither
+  // is a page with nothing on it: a moment's failure is tried again by
+  // itself, and a lasting one says what happened and offers Try again.
+  await test("a page that can't be read says so, and can be tried again", async () => {
+    const engine = "**/pdfium.wasm";
+    try {
+      // Fails once, then works.
+      step = "one failure";
+      const c1 = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 1100 }, serviceWorkers: "block" });
+      const p1 = await c1.newPage();
+      let failures = 0;
+      await p1.route(engine, (r) => (failures++ ? r.continue() : r.fulfill({ status: 404, body: "gone" })));
+      await open(p1, "/en/edit-pdf");
+      await p1.locator("input[type=file]").first().setInputFiles(brochure);
+      await p1.locator("aside").getByText(t["ed.editContentHint"]).waitFor({ timeout: 60000 });
+      await c1.close();
+      if (!failures) throw new Error("the engine was never fetched");
+
+      // Fails until the file is back.
+      step = "lasting failure";
+      const c2 = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 1100 }, serviceWorkers: "block" });
+      const p2 = await c2.newPage();
+      await p2.route(engine, (r) => r.fulfill({ status: 404, body: "gone" }));
+      await open(p2, "/en/edit-pdf");
+      await p2.locator("input[type=file]").first().setInputFiles(brochure);
+      const failed = p2.locator("aside [data-content-failed]");
+      await failed.waitFor({ timeout: 60000 });
+      if (await p2.locator("aside").getByText(t["ed.noContent"]).count()) throw new Error("said nothing can be changed");
+      const said = await failed.innerText();
+      if (/\{\w+\}/.test(said)) throw new Error(`placeholder left in: ${said}`);
+      step = "try again";
+      await p2.unroute(engine);
+      await failed.getByRole("button", { name: t["res.retry"] }).click();
+      await p2.locator("aside").getByText(t["ed.editContentHint"]).waitFor({ timeout: 60000 });
+      await c2.close();
+      return `once (${failures} fetches): tried again by itself; lasting: "${said.split("\n")[0].slice(0, 60)}…", then Try again worked`;
+    } catch (e) {
+      throw new Error(`${step}: ${e.message}`);
+    }
+  });
   await ctx.close();
 });

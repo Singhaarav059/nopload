@@ -10,7 +10,13 @@ type Pdfium = Awaited<ReturnType<typeof import("@embedpdf/pdfium").init>>;
 
 // Tests read the file from disk instead.
 export const pdfiumWasm = {
-  load: async (): Promise<ArrayBuffer> => (await fetch(`${VENDOR}pdfium.wasm`)).arrayBuffer(),
+  // A missing file (this tab's build gone after a deploy) is a download that
+  // failed, not a broken engine.
+  load: async (): Promise<ArrayBuffer> => {
+    const res = await fetch(`${VENDOR}pdfium.wasm`);
+    if (!res.ok) throw new Error(`Couldn't download pdfium.wasm (${res.status})`);
+    return res.arrayBuffer();
+  },
 };
 
 let loading: Promise<Pdfium> | null = null;

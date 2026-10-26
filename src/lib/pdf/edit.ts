@@ -1041,7 +1041,10 @@ function contentBytes(file: File): Promise<Uint8Array> {
   let p = editable.get(file);
   if (!p) {
     p = (async () => {
-      const [{ openForEdit }, { pdfiumOpens }] = await Promise.all([import("./open"), import("./objects")]);
+      const [{ openForEdit }, { pdfiumOpens }, { pdfium }] = await Promise.all([import("./open"), import("./objects"), import("./pdfium")]);
+      // The engine first: if it can't be had (offline, or this tab's build
+      // gone after a deploy), that's the failure, not a damaged file.
+      await pdfium();
       const { bytes, doc } = await openForEdit(await fileBytes(file), file.name);
       if (await pdfiumOpens(bytes)) return bytes;
       // pdf-lib read it: written out again, with one flat page tree.

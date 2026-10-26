@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, BringToFront, FlipHorizontal2, FlipVertical2, ImageUp, Loader2,
-  Replace, RotateCcw, RotateCcwSquare, RotateCwSquare, SendToBack, Trash2, Undo2,
+  RefreshCw, Replace, RotateCcw, RotateCcwSquare, RotateCwSquare, SendToBack, Trash2, Undo2,
 } from "lucide-react";
 import type { Align, EditorItem } from "@/lib/pdf/edit";
 import { colorKey } from "@/lib/colors";
 import { useI18n } from "../I18n";
+import { BRAND } from "@/lib/brand";
 import { isFor, isScan, keyOf, targetLabel, targetsOf, type ContentTarget, type PageContent } from "./ContentLayer";
 import { LangPicker } from "./LangPicker";
 import { OCR_LANGS } from "@/lib/tools";
@@ -35,9 +36,13 @@ const wrapAngle = (d: number) => ((((d % 360) + 540) % 360) - 180);
 // or object can have changed, and a list of everything on the page (for
 // things hidden under others, or too small to click).
 export function ContentPanel({
-  content, item, items, status, pageAspect, scan, ocrLang, onOcrLang, onReadScan, onReplaceAll, onPick, update, restore,
+  content, failed, onRetry, item, items, status, pageAspect, scan, ocrLang, onOcrLang, onReadScan, onReplaceAll, onPick, update, restore,
 }: {
   content: PageContent | "busy" | null;
+  // The page couldn't be read: why, and whether a part of the app didn't
+  // download (after an update while it was open, or offline).
+  failed?: { text: string; download: boolean } | null;
+  onRetry?: () => void;
   item: EditorItem | null; // the selected paraEdit or objEdit
   items: EditorItem[]; // this page's
   // The preview of the changes: being made, failed (with why), or a note on fonts.
@@ -77,7 +82,16 @@ export function ContentPanel({
 
   return (
     <div className="space-y-4" aria-live="polite">
-      {!item && (
+      {!item && failed && (
+        <div role="alert" className="space-y-3" data-content-failed>
+          <p className="text-[14px] text-ink-2">{failed.download ? t("ws.staleBuild", { brand: BRAND.name }) : failed.text}</p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-quiet btn-sm" onClick={onRetry}><RefreshCw size={15} /> {t("res.retry")}</button>
+            {failed.download && <button className="btn btn-primary btn-sm" onClick={() => location.reload()}>{t("ws.reloadPage")}</button>}
+          </div>
+        </div>
+      )}
+      {!item && !failed && (
         <p className="text-[14px] text-muted">
           {content === "busy" ? <><Loader2 size={14} className="me-1.5 inline animate-spin" />{t("ed.reading")}</>
             : scanPage && scan === "done" ? t("ed.scanHint")
