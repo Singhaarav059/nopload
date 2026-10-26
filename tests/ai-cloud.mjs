@@ -1,12 +1,13 @@
-// The cloud AI endpoint (functions/api/ai.ts): Claude answers first, Workers
-// AI when Claude can't, a fixed prompt per task, capped inputs, and the
-// origin check, and the usage limits. Anthropic is a local stand-in server;
-// Workers AI, KV and D1 are fake bindings (D1 over node:sqlite).
+// The cloud AI endpoint (functions/api/ai.ts): the providers set up, tried in
+// order (Groq's free tier, Claude, the training free tiers only when allowed,
+// Workers AI), a fixed prompt per task, capped inputs, and the origin check,
+// and the usage limits. Anthropic and the OpenAI-style free tiers are local
+// stand-in servers; Workers AI, KV and D1 are fake bindings (D1 over node:sqlite).
 //
 //   node tests/ai-cloud.mjs
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
-import { onRequestGet, onRequestPost, jobOf, parseTexts } from "../functions/api/ai.ts";
+import { onRequestGet, onRequestPost, jobOf, parseTexts, CHAT_SYSTEM } from "../functions/api/ai.ts";
 
 let failed = 0;
 async function test(name, fn) {
@@ -64,6 +65,27 @@ const workersAi = (reply) => ({
   },
 });
 
+// A stand-in for the OpenAI-style free tiers (Groq, Gemini, OpenRouter):
+// server-sent events of chat completion deltas, or `status`.
+let free = { reply: "From Groq (p. 2).", status: 200 };
+const freeSeen = [];
+const freeServer = createServer(async (req, res) => {
+  let body = "";
+  for await (const c of req) body += c;
+  freeSeen.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(body) });
+  if (free.status !== 200) {
+    res.writeHead(free.status, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "Rate limit reached" } }));
+    return;
+  }
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const piece of free.reply.match(/.{1,3}/gs)) res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: piece } }] })}\n\n`);
+  res.end("data: [DONE]\n\n");
+});
+await new Promise((r) => freeServer.listen(0, "127.0.0.1", r));
+const freeBase = `http://127.0.0.1:${freeServer.address().port}`;
+const groq = { GROQ_API_KEY: "gsk_test", GROQ_BASE_URL: `${freeBase}/groq` };
+
 let ip = 0;
 const post = (body, env, headers = {}) =>
   onRequestPost({
@@ -78,8 +100,45 @@ const chat = { task: "chat", sources: "[1] (page 2) The lease ends in May.", que
 const claude = { ANTHROPIC_API_KEY: "test", ANTHROPIC_BASE_URL: base };
 
 await test("GET says which providers are set up", async () => {
-  eq(await (await onRequestGet({ env: { ...claude, AI: workersAi("") } })).json(), { anthropic: true, cloudflare: true }, "both");
-  eq(await (await onRequestGet({ env: {} })).json(), { anthropic: false, cloudflare: false }, "none");
+  const none = { groq: false, anthropic: false, gemini: false, openrouter: false, cloudflare: false };
+  eq(await (await onRequestGet({ env: { ...claude, AI: workersAi("") } })).json(), { ...none, anthropic: true, cloudflare: true }, "Claude and Workers AI");
+  eq(await (await onRequestGet({ env: {} })).json(), none, "none");
+  eq(await (await onRequestGet({ env: { ...groq, GEMINI_API_KEY: "g", OPENROUTER_API_KEY: "o" } })).json(), { ...none, groq: true }, "free tiers that may train stay off");
+  eq(await (await onRequestGet({ env: { GEMINI_API_KEY: "g", AI_FREE_TIERS_MAY_TRAIN: "1" } })).json(), { ...none, gemini: true }, "unless allowed");
+});
+
+await test("Groq's free tier answers first, streamed, with the chat prompt", async () => {
+  free = { reply: "The lease ends in May (p. 2).", status: 200 };
+  const before = seen.length;
+  const res = await post(chat, { ...groq, ...claude, AI: workersAi("unused") });
+  eq(res.headers.get("x-ai-provider"), "groq", "provider");
+  eq(await res.text(), "The lease ends in May (p. 2).", "text");
+  eq(seen.length, before, "Claude wasn't called");
+  const sent = freeSeen.at(-1);
+  eq([sent.url, sent.auth, sent.body.model, sent.body.stream], ["/groq/chat/completions", "Bearer gsk_test", "llama-3.3-70b-versatile", true], "request");
+  eq(sent.body.messages[0], { role: "system", content: CHAT_SYSTEM }, "system prompt");
+  if (!sent.body.messages.at(-1).content.includes("The lease ends in May")) throw new Error("excerpts missing");
+});
+
+await test("Claude answers when Groq is over its free limit", async () => {
+  free = { reply: "", status: 429 };
+  mode = { reply: "It ends in May (p. 2).", status: 200 };
+  const res = await post(chat, { ...groq, ...claude });
+  eq([res.headers.get("x-ai-provider"), await res.text()], ["anthropic", "It ends in May (p. 2)."], "reply");
+});
+
+await test("Gemini and OpenRouter free tiers only when allowed to train, in AI_ORDER", async () => {
+  free = { reply: "From the free tier (p. 2).", status: 200 };
+  const keys = { GEMINI_API_KEY: "g", GEMINI_BASE_URL: `${freeBase}/gemini`, OPENROUTER_API_KEY: "o", OPENROUTER_BASE_URL: `${freeBase}/openrouter` };
+  eq((await post(chat, keys)).status, 503, "not allowed: none set up");
+  const res = await post(chat, { ...keys, AI_FREE_TIERS_MAY_TRAIN: "1", AI_ORDER: "openrouter,gemini" });
+  eq([res.headers.get("x-ai-provider"), await res.text()], ["openrouter", "From the free tier (p. 2)."], "reply");
+  eq([freeSeen.at(-1).url, freeSeen.at(-1).body.model], ["/openrouter/chat/completions", "meta-llama/llama-3.3-70b-instruct:free"], "OpenRouter's free Llama");
+});
+
+await test("the chat prompt asks for page citations, plain answers, money in and out, and says what's missing", async () => {
+  for (const rule of ["(p. 5)", "never paste the document's lines", "every amount", "money going out", "money coming in", "I couldn't find any mention of X in the document."])
+    if (!CHAT_SYSTEM.includes(rule)) throw new Error(`missing: ${rule}`);
 });
 
 await test("chat streams Claude's answer", async () => {
@@ -90,7 +149,7 @@ await test("chat streams Claude's answer", async () => {
   const sent = seen.at(-1);
   eq(sent.model, "claude-haiku-5-5", "model");
   eq(sent.output_config.effort, "low", "effort");
-  if (!sent.system.includes("numbered sources")) throw new Error("the chat prompt wasn't used");
+  if (sent.system !== CHAT_SYSTEM) throw new Error("the chat prompt wasn't used");
   if (!sent.messages.at(-1).content.includes("The lease ends in May")) throw new Error("sources missing");
 });
 
@@ -114,7 +173,7 @@ await test("provider: cloudflare uses only Workers AI, even when Claude is set u
   const res = await post({ ...chat, provider: "cloudflare" }, { ...claude, AI: ai });
   eq([res.headers.get("x-ai-provider"), await res.text()], ["cloudflare", "It ends on 31 May 2027, at $1,234.50 [1]."], "reply, numbers included");
   eq(seen.length, before, "Claude wasn't called");
-  if (!ai.input.messages[0].content.includes("numbered sources")) throw new Error("the chat prompt wasn't used");
+  if (!ai.input.messages[0].content.startsWith(CHAT_SYSTEM)) throw new Error("the chat prompt wasn't used");
   // No Workers AI: no answer, rather than sending the text to Anthropic.
   eq((await post({ ...chat, provider: "cloudflare" }, claude)).status, 503, "no fallback to Claude");
   eq(seen.length, before, "still not called");
@@ -165,7 +224,7 @@ await test("other sites' pages can't call it", async () => {
 
 await test("a visitor's hourly budget runs out", async () => {
   mode = { reply: "ok", status: 200 };
-  const big = { task: "chat", sources: "s".repeat(24_000), question: "q" };
+  const big = { task: "chat", sources: "s".repeat(23_000), question: "q" };
   let last;
   for (let i = 0; i < 30; i++) last = await post(big, claude, { "cf-connecting-ip": "10.9.9.9" });
   eq(last.status, 429, "status");
@@ -252,7 +311,7 @@ await test("AI_DAILY_CHARS caps all visitors together", async () => {
   mode = { reply: "ok", status: 200 };
   const kv = kvStore();
   const env = { ...claude, AI_LIMITS: kv, AI_DAILY_CHARS: "100000" };
-  const big = { task: "chat", sources: "s".repeat(24_000), question: "q" };
+  const big = { task: "chat", sources: "s".repeat(23_000), question: "q" };
   const statuses = [];
   // Different visitors, alternating instances: four fit in 100,000 characters.
   for (let i = 0; i < 6; i++) statuses.push((await postTo(i % 2 ? other : { onRequestPost }, big, env, { "cf-connecting-ip": `10.5.5.${i}` })).status);
@@ -383,5 +442,6 @@ await test("parseTexts reads JSON in or out of a code fence", async () => {
 });
 
 server.close();
+freeServer.close();
 console.log(failed ? `\n${failed} failed` : "\nall passed");
 process.exit(failed ? 1 : 0);

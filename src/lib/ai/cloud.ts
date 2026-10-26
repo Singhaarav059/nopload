@@ -1,13 +1,16 @@
-// The cloud AI (functions/api/ai.ts), from the page's side: Claude by
-// Anthropic, with Cloudflare Workers AI as its backup. Only the text a task
-// needs is sent (a question and the passages that answer it, a document's
-// text to summarise, blocks to translate), never the file. Any failure is a
-// CloudUnavailable, and the tools then use on-device AI instead.
+// The cloud AI (functions/api/ai.ts), from the page's side: a large model
+// (Llama 3.3 70B on Groq's free tier, Claude by Anthropic, or Cloudflare
+// Workers AI, the first of them that answers). Only the text a task needs is
+// sent (a question and the passages that answer it, a document's text to
+// summarise, blocks to translate), never the file. Any failure is a
+// CloudUnavailable, which the tools tell the visitor about.
 
 import { AI_CLOUD } from "../mode";
 
 export const CLOUD = "cloud";
-export type Provider = "anthropic" | "cloudflare";
+// Who answered, as the endpoint's X-AI-Provider header names it.
+export type Provider = "groq" | "anthropic" | "gemini" | "openrouter" | "cloudflare";
+const PROVIDERS: Provider[] = ["groq", "anthropic", "gemini", "openrouter", "cloudflare"];
 
 export class CloudUnavailable extends Error {}
 
@@ -20,12 +23,15 @@ export function cloudAvailable(): Promise<boolean> {
   if (!AI_CLOUD) return Promise.resolve(false);
   available ??= fetch(ENDPOINT, { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : null))
-    .then((s: { anthropic?: boolean; cloudflare?: boolean } | null) => !!(s?.anthropic || s?.cloudflare))
+    .then((s: Partial<Record<Provider, boolean>> | null) => PROVIDERS.some((p) => s?.[p]))
     .catch(() => false);
   return available;
 }
 
-const providerOf = (r: Response): Provider => (r.headers.get("X-AI-Provider") === "cloudflare" ? "cloudflare" : "anthropic");
+const providerOf = (r: Response): Provider => {
+  const name = r.headers.get("X-AI-Provider") as Provider | null;
+  return name && PROVIDERS.includes(name) ? name : "anthropic";
+};
 
 async function send(body: object, signal?: AbortSignal): Promise<Response> {
   let r: Response;

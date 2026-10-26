@@ -1,20 +1,22 @@
 // Chat with a PDF. The document is read page by page (its text layer, after
-// auto-OCR of pages that are pictures of text), cut into chunks (./chunk.ts) and
-// indexed (./retrieve.ts). A question finds its chunks; then either
-//  - light: the sentences that answer it best are shown, each with its page, or
-//  - a language model on this device writes the answer from those chunks,
-//    citing them, and the citations become pages (./cite.ts).
-//  - the cloud AI writes it (./cloud.ts): only the question, the passages
-//    found for it and the earlier turns are sent, never the file.
-// Otherwise nothing leaves the device: the models run here (./engine.ts).
+// auto-OCR of pages that are pictures of text), tidied and cut into chunks
+// that keep each row whole (./chunk.ts), and indexed (./retrieve.ts). A
+// question finds its chunks (many more, across the whole document, when it
+// asks for the biggest, a total or a list); then a language model writes
+// the answer from them, citing pages (./cite.ts):
+//  - on this device (./engine.ts): nothing leaves it, or
+//  - in the cloud (./cloud.ts): only the question, the passages found for
+//    it and the earlier turns are sent, never the file.
+// The passages themselves are never the answer: without a model, the chat
+// asks the visitor to turn one on (src/components/workspace/ChatView.tsx).
 
 import { closePdf, openPdf, type Progress } from "../pdf/common";
 import { documentLayout, type PageLayout } from "../pdf/layout";
 import { blocks, bodySizeOf, type Line } from "../pdf/text";
-import { chunkPages, type Chunk, type PageText } from "./chunk";
-import { answerSentences, attribute, citations, extractiveAnswer, numberSources, type Answer } from "./cite";
+import { chunkPages, cleanText, type Chunk, type PageText } from "./chunk";
+import { attribute, citations, numberSources, type Answer } from "./cite";
 import { cloudText, type Provider } from "./cloud";
-import { cosine, search, type Hit } from "./retrieve";
+import { isAggregate, missingTerms, search, type Hit } from "./retrieve";
 
 export type { Answer, Part } from "./cite";
 export type { PageText } from "./chunk";
@@ -45,7 +47,7 @@ export async function readPages(file: File, progress?: Progress): Promise<PageTe
             }
           }
       out.push(...layout.footer.map((l) => l.text.trim()));
-      return { page: i + 1, text: out.filter(Boolean).join("\n") };
+      return { page: i + 1, text: cleanText(out.filter(Boolean).join("\n")) };
     });
   } finally {
     await closePdf(doc);
@@ -86,25 +88,39 @@ export async function buildIndex(pages: PageText[], embed?: Embed): Promise<DocI
   return { pages, chunks, vectors: embed && chunks.length ? await embed(chunks.map((c) => c.text)) : undefined };
 }
 
-async function find(index: DocIndex, question: string, k: number, embed?: Embed): Promise<Hit[]> {
-  const vectors = index.vectors && embed ? { query: (await embed([question]))[0], chunks: index.vectors } : undefined;
-  return search(index.chunks, question, { k, vectors });
-}
+// Has an amount or a number worth comparing in it.
+const NUMBERED = /\d/;
 
-// Light: the document's own sentences that answer the question, each citing its page.
-export async function askLight(input: PageText[] | DocIndex, question: string, embed?: Embed): Promise<Answer> {
-  const index = Array.isArray(input) ? await buildIndex(input, embed) : input;
-  const hits = await find(index, question, 4, embed);
-  let similar: number[] | undefined;
-  if (embed && index.vectors) {
-    const list = answerSentences(hits);
-    if (list.length) {
-      const [q, ...vs] = await embed([question, ...list]);
-      similar = vs.map((v) => cosine(q, v));
+// The chunks to answer from, in document order. A question looking across
+// the whole document ("the biggest payment", "the total", "list all") gets
+// at least `wide` of the best chunks, then, while `budget` characters allow,
+// the rest of the chunks with numbers in them, so a maximum or a sum is
+// taken over all of them and not just the few that sound most like the question.
+async function find(index: DocIndex, question: string, o: { k: number; wide: number; budget: number; embed?: Embed }): Promise<Hit[]> {
+  const vectors = index.vectors && o.embed ? { query: (await o.embed([question]))[0], chunks: index.vectors } : undefined;
+  const wide = isAggregate(question);
+  const hits = search(index.chunks, question, { k: wide ? Math.max(o.k, o.wide) : o.k, vectors });
+  if (wide) {
+    let used = hits.reduce((n, h) => n + h.chunk.text.length, 0);
+    const taken = new Set(hits.map((h) => h.chunk.id));
+    for (const chunk of index.chunks) {
+      if (taken.has(chunk.id) || !NUMBERED.test(chunk.text) || used + chunk.text.length > o.budget) continue;
+      hits.push({ chunk, score: 0 });
+      taken.add(chunk.id);
+      used += chunk.text.length;
     }
   }
-  const sentences = extractiveAnswer(question, hits, { similar });
-  return { parts: sentences.map((s) => ({ text: s.text, pages: [s.page] })), pages: [...new Set(sentences.map((s) => s.page))] };
+  return hits.sort((a, b) => a.chunk.id - b.chunk.id);
+}
+
+// The excerpts for the prompt, with a note naming any of the question's
+// distinctive words that appear nowhere in the document, so the model says
+// it couldn't find them rather than answering from whatever came closest.
+function excerpts(index: DocIndex, question: string, hits: Hit[]) {
+  const { sources, context } = numberSources(hits);
+  const missing = missingTerms(index.chunks, question);
+  const note = missing.length ? `Note: ${missing.map((m) => `"${m}"`).join(", ")} ${missing.length > 1 ? "appear" : "appears"} nowhere in the document.\n\n` : "";
+  return { sources, context: note + context };
 }
 
 export type Message = { role: "system" | "user" | "assistant"; content: string };
@@ -113,11 +129,14 @@ export type Generate = (messages: Message[], o: { maxNewTokens: number; onText?:
 
 // The instructions. English: the small models follow English instructions
 // best, and are told to answer in the question's language.
-export const SYSTEM =
-  "You answer questions about a document using only the numbered sources from it. " +
-  "Cite every fact with its source number in square brackets, like [1] or [2][3]. " +
-  "If the sources don't contain the answer, say you couldn't find it in the document. " +
-  "Answer briefly, in the language of the question.";
+export const SYSTEM = [
+  "You answer questions about a document using only the excerpts from it below. Each excerpt starts with its page, like (p. 5).",
+  "Answer in one to three plain sentences. Never copy the document's lines; give only the names and amounts that answer the question.",
+  "End each sentence with its page, like (p. 5).",
+  "For the biggest, smallest, a total or a list, check every amount in the excerpts. In bank statements, money going out (debits, payments) is not money coming in (credits); say which you mean.",
+  "If the answer or a name asked about isn't in the excerpts, say \"I couldn't find any mention of X in the document.\"",
+  "Answer in the language of the question.",
+].join("\n");
 
 // With a model: the answer written from the best chunks, with its citations
 // as pages. Earlier turns (questions and answers, without their sources)
@@ -127,12 +146,13 @@ export async function askModel(
   question: string,
   o: { generate: Generate; embed?: Embed; history?: Message[]; onPartial?: (a: Answer) => void; signal?: AbortSignal; k?: number },
 ): Promise<Answer> {
-  const hits = await find(index, question, o.k ?? 4, o.embed);
-  const { sources, context } = numberSources(hits);
+  // A small model reads 4 chunks, or 12 for a question across the document.
+  const hits = await find(index, question, { k: o.k ?? 4, wide: 12, budget: 7_000, embed: o.embed });
+  const { sources, context } = excerpts(index, question, hits);
   const messages: Message[] = [
     { role: "system", content: SYSTEM },
     ...(o.history ?? []).slice(-4),
-    { role: "user", content: `Sources:\n${context}\n\nQuestion: ${question}` },
+    { role: "user", content: `Excerpts from the document:\n${context}\n\nQuestion: ${question}` },
   ];
   const text = await o.generate(messages, {
     maxNewTokens: 320,
@@ -152,15 +172,18 @@ function cited(text: string, sources: ReturnType<typeof numberSources>["sources"
   return answer;
 }
 
-// With the cloud AI: the same, written by Claude (or its backup) from more
-// passages than a small model can read. Throws CloudUnavailable when it can't.
+// With the cloud AI: the same, written by a large model (functions/api/ai.ts
+// says which) from more passages than a small model can read. Throws
+// CloudUnavailable when it can't.
 export async function askCloud(
   index: DocIndex,
   question: string,
   o: { embed?: Embed; history?: Message[]; onPartial?: (a: Answer) => void; signal?: AbortSignal },
 ): Promise<Answer & { provider: Provider }> {
-  const hits = await find(index, question, 10, o.embed);
-  const { sources, context } = numberSources(hits);
+  // 10 chunks, or for a question across the document 15 and then every
+  // chunk with numbers that fits (the endpoint takes 24,000 characters).
+  const hits = await find(index, question, { k: 10, wide: 15, budget: 21_000, embed: o.embed });
+  const { sources, context } = excerpts(index, question, hits);
   const { text, provider } = await cloudText(
     { task: "chat", sources: context, question, history: (o.history ?? []).slice(-4) },
     { signal: o.signal, onText: o.onPartial && ((t) => o.onPartial!(citations(t, sources))) },

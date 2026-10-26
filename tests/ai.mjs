@@ -1,7 +1,8 @@
-// On-device AI without a model: how documents are cut into page-sized
-// chunks, how the chunks for a question are found, and how an answer's
-// citations become page numbers. Then the light chat end to end on a real
-// 20-page PDF, with a stand-in for the embedding model.
+// Chat's retrieval: how documents are tidied and cut into page-sized chunks
+// that keep statement rows whole, how the chunks for a question are found
+// (keywords, exact names, meaning; many more for "the biggest" or "the
+// total"), what the model is sent, and how an answer's citations become page
+// numbers. Then chat end to end on a real 20-page PDF, with a stand-in model.
 //
 //   node tests/ai.mjs
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -11,8 +12,10 @@ import { load, openPdf, check, eq, root, vendorDir } from "./lib/load.mjs";
 
 const { chunkPages } = await load("../ai/chunk");
 const { search, fuse, tokens } = await load("../ai/retrieve");
-const { numberSources, citations, attribute, extractiveAnswer } = await load("../ai/cite");
-const { readPages, askLight } = await load("../ai/chat");
+const { exactTerms, missingTerms, isAggregate } = await load("../ai/retrieve");
+const { cleanText, unitsOf } = await load("../ai/chunk");
+const { numberSources, citations, attribute } = await load("../ai/cite");
+const { readPages, buildIndex, askModel } = await load("../ai/chat");
 const { translatePdf } = await load("../ai/translate");
 const results = { failed: 0 };
 const test = check(results);
@@ -92,12 +95,20 @@ await test("search: embeddings fused with keywords (reciprocal rank fusion)", ()
   eq(fused.map((x) => x.item.id).join(","), "2,1,3", "fused order");
 });
 
-await test("sources: numbered, with their pages, for the prompt", () => {
+await test("sources: each page once, in document order, starting with its page", () => {
   const hits = search(chunkPages(invoice), "invoice total", { k: 2 });
   const { sources, context } = numberSources(hits);
-  eq(sources[0].n, 1, "numbered from 1");
-  eq(sources[0].page, 3, "page");
-  eq(context.split("\n")[0].startsWith("[1] (page 3) Invoice INV-2041"), true, `context: ${context.split("\n")[0]}`);
+  eq(sources.map((x) => x.page).join(","), [...hits.map((h) => h.chunk.page)].sort((a, b) => a - b).join(","), "pages in order");
+  eq(context.startsWith(`(p. ${sources[0].page})\n`), true, `context: ${context.split("\n")[0]}`);
+  eq(context.includes("(p. 3)\nInvoice INV-2041"), true, "page 3's excerpt");
+});
+
+await test("sources: where chunks of a page overlap, each row is sent once", () => {
+  const rows = Array.from({ length: 30 }, (_, i) => `0${(i % 9) + 1}/10/2026 UPI/DR/${4000 + i}/Merchant ${i} ₹${(i + 1) * 10}.00`);
+  const chunks = chunkPages([{ page: 4, text: rows.join("\n") }], { maxWords: 20 });
+  eq(chunks.length > 3, true, `several chunks (${chunks.length})`);
+  const { context } = numberSources(chunks.map((chunk) => ({ chunk, score: 1 })));
+  for (const r of rows) eq(context.split(r).length - 1, 1, `once: ${r}`);
 });
 
 await test("citations: [n], [n, m], [n][m], (page n) and [p. n] become pages; unknown ones are dropped", () => {
@@ -119,16 +130,73 @@ await test("attribution: an answer without citations gets the sources it borrows
   eq(attribute("I don't know.", sources).length, 0, "nothing borrowed");
 });
 
-await test("extractive answer: the sentences that answer, each with its page", () => {
-  const hits = search(chunkPages(invoice), "what is the invoice total", { k: 3 });
-  const answer = extractiveAnswer("what is the invoice total", hits);
-  eq(answer[0].page, 3, "page");
-  eq(answer[0].text, "The invoice total is $1,234.50, due on 30 November.", "sentence");
-  eq(answer.length <= 3, true, "short");
-  // By meaning: sentences far behind the best are left out.
-  const two = [{ chunk: { id: 0, page: 1, text: "Alpha is first. Beta is second. Gamma is third." }, score: 1 }];
-  const kept = extractiveAnswer("which is first", two, { similar: [0.62, 0.15, 0.55] });
-  eq(kept.map((k) => k.text).join("|"), "Alpha is first.|Gamma is third.", "close ones only");
+await test("citations: (p. 5), (p. 2, p. 7) and a bare p. 5 at a sentence's end become pages", () => {
+  const sources = [{ n: 1, page: 2, text: "a" }, { n: 2, page: 5, text: "b" }, { n: 3, page: 7, text: "c" }];
+  const r = citations("You paid ₹500 to Hazelnut Cafe (p. 5). Two refunds came in (p. 2, p. 7). The rent went out on 1 October p. 2.", sources);
+  eq(JSON.stringify(r.parts.map((p) => p.pages ?? [])), JSON.stringify([[5], [2, 7], [2], []]), "pages per sentence");
+  eq(r.parts.map((p) => p.text).join("|"), "You paid ₹500 to Hazelnut Cafe|. Two refunds came in|. The rent went out on 1 October|.", "text without markers");
+});
+
+await test("clean text: spaces and invisible characters tidied, hyphenated words joined, rows on their own lines", () => {
+  eq(cleanText("Paid\u00a0to   Hazel\u200bnut\tCafe\r\nrecon-\nciled\n\n\n\nnext"), "Paid to Hazelnut Cafe\nreconciled\n\nnext", "tidied");
+  const page = "Statement for October\nThis account is in good\nstanding and was opened in 2019.\n01/10/2026 UPI/DR/4471/HAZELNUTCAFE@okaxis ₹450.00\n02/10/2026 NEFT/CR/Salary Acme Ltd 85,000.00 Cr\nDate | Narration | Amount";
+  eq(JSON.stringify(unitsOf(page)), JSON.stringify([
+    "Statement for October This account is in good standing and was opened in 2019.",
+    "01/10/2026 UPI/DR/4471/HAZELNUTCAFE@okaxis ₹450.00",
+    "02/10/2026 NEFT/CR/Salary Acme Ltd 85,000.00 Cr",
+    "Date | Narration | Amount",
+  ]), "rows whole, prose joined");
+});
+
+await test("chunks: a statement's rows are never cut, however many there are", () => {
+  const rows = Array.from({ length: 80 }, (_, i) => `${String((i % 28) + 1).padStart(2, "0")}/10/2026 UPI/DR/${5000 + i}/PAYEE${i}@okhdfc Groceries and household items ₹${(i * 37) % 900}.50`);
+  const chunks = chunkPages([{ page: 1, text: rows.join("\n") }]);
+  for (const c of chunks) for (const u of c.units) eq(rows.includes(u), true, `a whole row: ${u}`);
+  for (const r of rows) eq(chunks.some((c) => c.units.includes(r)), true, `kept: ${r}`);
+});
+
+const statement = [
+  { page: 1, text: "Account statement, October 2026\nOpening balance ₹12,000.00" },
+  { page: 2, text: "03/10/2026 UPI/DR/4471/HAZELNUTCAFE@okaxis Coffee ₹450.00\n05/10/2026 UPI/DR/4502/rent.landlord@oksbi ₹18,500.00\n06/10/2026 NEFT/CR/Salary Acme Ltd ₹85,000.00" },
+  { page: 3, text: "09/10/2026 UPI/DR/4633/bigbasket@ybl Groceries ₹2,310.75\n12/10/2026 IMPS/CR/Refund Flipkart ₹999.00" },
+];
+
+await test("exact terms: a name inside a UPI ID is found; question words aren't looked for", () => {
+  eq(exactTerms("How much did I pay Hazelnut?").join(","), "hazelnut", "distinctive words only");
+  eq(exactTerms("What is the biggest payment in total?").join(","), "", "nothing distinctive");
+  const hits = search(chunkPages(statement), "How much did I pay hazelnut", { k: 2 });
+  eq(hits[0].chunk.page, 2, "page with HAZELNUTCAFE@okaxis first");
+  eq(missingTerms(chunkPages(statement), "Did I pay Starbucks?").join(","), "starbucks", "missing");
+  eq(missingTerms(chunkPages(statement), "How much went to Hazelnut?").length, 0, "present");
+});
+
+await test("aggregate questions are told apart", () => {
+  for (const q of ["What is the biggest payment?", "total spent on groceries", "List all refunds", "how much did I spend", "lowest balance"]) eq(isAggregate(q), true, q);
+  for (const q of ["When was the rent paid?", "Who is the landlord?"]) eq(isAggregate(q), false, q);
+});
+
+// A stand-in model: what it was sent, and an answer citing the page given.
+const stand = (answer) => {
+  const sent = [];
+  return { sent, generate: async (messages) => (sent.push(messages), answer) };
+};
+
+await test("chat: 'the biggest payment' sends every page with amounts, each row once, and the strict prompt", async () => {
+  const index = await buildIndex(statement);
+  const m = stand("The biggest payment was ₹18,500.00 to rent.landlord@oksbi on 5 October (p. 2).");
+  const a = await askModel(index, "What is the biggest payment?", { generate: m.generate });
+  const [system, user] = [m.sent[0][0].content, m.sent[0].at(-1).content];
+  for (const p of [1, 2, 3]) eq(user.includes(`(p. ${p})`), true, `page ${p} sent`);
+  eq(user.split("rent.landlord@oksbi").length - 1, 1, "each row once");
+  eq(/money going out/.test(system) && /couldn't find any mention/.test(system), true, "the strict prompt");
+  eq(a.pages.join(","), "2", "cites page 2");
+});
+
+await test("chat: a name that isn't in the document is named as missing", async () => {
+  const index = await buildIndex(statement);
+  const m = stand("I couldn't find any mention of Starbucks in the document.");
+  await askModel(index, "How much did I pay Starbucks?", { generate: m.generate });
+  eq(m.sent[0].at(-1).content.includes('Note: "starbucks" appears nowhere in the document.'), true, "note");
 });
 
 // A 20-page PDF: report filler, with the invoice on page 14.
@@ -145,7 +213,7 @@ async function twenty() {
   return new File([await doc.save()], "twenty.pdf", { type: "application/pdf" });
 }
 
-await test("twenty pages: read page by page, then the light chat cites page 14 for the invoice total", async () => {
+await test("twenty pages: read page by page, then chat finds page 14 for the invoice total and cites it", async () => {
   const file = await twenty();
   // pdf.js in Node runs its worker in the main thread once a document has been opened directly.
   await openPdf(new Uint8Array(await file.arrayBuffer()));
@@ -155,9 +223,10 @@ await test("twenty pages: read page by page, then the light chat cites page 14 f
   eq(pages[13].text.includes("$1,234.50"), true, "page 14 text");
   // Lines repeated on every page count as headers and footers in the layout; they're still text.
   eq(pages[0].text.includes("project milestone 1 "), true, `page 1 text: ${pages[0].text}`);
-  const answer = await askLight(pages, "What is the invoice total?");
+  const m = stand("The invoice total is $1,234.50 (p. 14).");
+  const answer = await askModel(await buildIndex(pages), "What is the invoice total?", { generate: m.generate });
+  eq(m.sent[0].at(-1).content.includes("(p. 14)\nInvoice INV-2041"), true, "page 14 sent");
   eq(answer.pages[0], 14, `cites page 14 (got ${answer.pages})`);
-  eq(answer.parts.map((p) => p.text).join(" ").includes("$1,234.50"), true, "the amount");
   eq(requests, 0, "requests");
 });
 

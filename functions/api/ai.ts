@@ -1,26 +1,37 @@
 // /api/ai: the cloud AI behind Chat, Summarize and Translate PDF, as a
 // Cloudflare Pages Function (Vercel forwards /api/ai here, see
-// scripts/vercel-output.mjs). Claude Haiku (Anthropic) answers first;
-// when it can't (no key, out of credit, overloaded, down), Cloudflare
-// Workers AI does. The page only ever sends the text a task needs, never
-// the file, and it falls back to on-device AI when this endpoint fails.
+// scripts/vercel-output.mjs). The providers set up are tried in order
+// (AI_ORDER), the first that answers wins: by default Groq's free tier
+// (Llama 3.3 70B), then Claude Haiku (Anthropic), then Cloudflare Workers
+// AI. The page only ever sends the text a task needs, never the file, and
+// it tells the visitor when no provider answers.
 //
 // The prompts live here, one per task, so the endpoint can't be used as a
 // general-purpose chatbot, and every input is capped in size.
 //
-//   GET  /api/ai → { anthropic, cloudflare }: which providers are set up.
+//   GET  /api/ai → { groq, anthropic, cloudflare, gemini, openrouter }: which providers are set up.
 //   POST /api/ai { task: "chat", sources, question, history? }      → text, streamed
 //   POST /api/ai { task: "summarize", text, points, language }      → text, streamed
 //   POST /api/ai { task: "translate", texts, language }             → { texts }
 // Any of them may add provider: "cloudflare" to use only Workers AI (the
-// visitor chose it; their text then never goes to Anthropic). Otherwise
-// Claude answers and Workers AI is its backup.
+// visitor chose it; their text then goes nowhere else).
 // The X-AI-Provider response header names who answered.
 //
 // Settings (Cloudflare dashboard → the Pages project → Settings):
-//   ANTHROPIC_API_KEY   secret; without it Workers AI answers every request.
-//   AI                  Workers AI binding; without it there's no fallback.
+//   GROQ_API_KEY        secret (free at console.groq.com); Llama 3.3 70B,
+//                       fast, and Groq doesn't train on what it's sent.
+//   ANTHROPIC_API_KEY   secret; Claude, paid per use.
+//   AI                  Workers AI binding (free daily allowance).
 //                       (Its replies aren't streamed: see cloudflare() below.)
+//   GEMINI_API_KEY, OPENROUTER_API_KEY
+//                       secrets for Google Gemini's and OpenRouter's free
+//                       tiers. Their free tiers may use what they're sent to
+//                       improve their models, which the privacy policy
+//                       promises we don't allow: they're used only when
+//                       AI_FREE_TIERS_MAY_TRAIN is "1", and the privacy
+//                       policy (src/lib/legal.ts) must then say so.
+//   AI_ORDER            optional: which providers to try, in order,
+//                       comma-separated (default: groq,anthropic,gemini,openrouter,cloudflare).
 //   ALLOWED_ORIGINS     other sites whose pages may call this, comma-separated
 //                       (default: https://nopload.vercel.app).
 //   AI_QUOTA            D1 database binding; with it the limits below are
@@ -30,7 +41,8 @@
 //                       the limits then hold roughly across instances.
 //   AI_DAILY_CHARS      optional cap on the characters all visitors send in
 //                       a day (UTC); 2,000,000 is about 600,000 tokens.
-//   ANTHROPIC_MODEL, FALLBACK_MODEL, ANTHROPIC_BASE_URL   optional overrides.
+//   ANTHROPIC_MODEL, FALLBACK_MODEL, GROQ_MODEL, GEMINI_MODEL, OPENROUTER_MODEL,
+//   and *_BASE_URL for each                 optional overrides.
 
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -50,6 +62,17 @@ export type Env = {
   FALLBACK_MODEL?: string;
   ALLOWED_ORIGINS?: string;
   AI?: WorkersAi;
+  AI_ORDER?: string;
+  AI_FREE_TIERS_MAY_TRAIN?: string;
+  GROQ_API_KEY?: string;
+  GROQ_MODEL?: string;
+  GROQ_BASE_URL?: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
+  GEMINI_BASE_URL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  OPENROUTER_BASE_URL?: string;
 };
 type Context = { request: Request; env: Env };
 
@@ -258,6 +281,20 @@ const languageName = (tag: string) => {
   }
 };
 
+// Chat's instructions. The excerpts each start with their page ("p. 5"), and
+// the page may add a note that words of the question appear nowhere in the
+// document (src/lib/ai/chat.ts).
+export const CHAT_SYSTEM = [
+  "You answer questions about one document, using only the excerpts from it that follow. Each excerpt starts with its page number, like \"p. 5\".",
+  "Rules:",
+  "- Answer concisely, in plain natural sentences. No headings, tables or lists of raw lines; never paste the document's lines back. Quote a name, ID, merchant, UPI ID or amount only when it is part of the answer.",
+  "- End each sentence that states a fact with the page it comes from, like (p. 5), or (p. 2, p. 7) for several.",
+  "- For the biggest, largest, highest, smallest, lowest, a total, a count or a list, go through every excerpt and every amount in it before answering. Give the amount, who or what it was for, and its date when shown.",
+  "- In bank, card or UPI statements, keep money going out (debits, payments, withdrawals, transfers sent) apart from money coming in (credits, deposits, refunds, transfers received), and say which you mean. \"Payment\" means money going out unless the question says otherwise.",
+  "- If the excerpts don't answer the question, or a name or word it asks about isn't in them, say \"I couldn't find any mention of X in the document.\" with X being what was asked about. Never guess or use outside knowledge.",
+  "- Answer in the language of the question.",
+].join("\n");
+
 // The request as a job for a model, or an error message.
 export function jobOf(body: Record<string, unknown>): Job | string {
   if (body.task === "chat") {
@@ -271,13 +308,9 @@ export function jobOf(body: Record<string, unknown>): Job | string {
     // The API wants turns to alternate, starting with the user.
     while (history.length && history[0].role !== "user") history.shift();
     return {
-      system:
-        "You answer questions about a document using only the numbered sources from it. " +
-        "Cite every fact with its source number in square brackets, like [1] or [2][3]. " +
-        "If the sources don't contain the answer, say you couldn't find it in the document. " +
-        "Answer briefly and plainly, in the language of the question, without Markdown headings.",
-      messages: [...history, { role: "user", content: `Sources:\n${sources}\n\nQuestion: ${question}` }],
-      maxTokens: 700,
+      system: CHAT_SYSTEM,
+      messages: [...history, { role: "user", content: `Excerpts from the document:\n${sources}\n\nQuestion: ${question}` }],
+      maxTokens: 900,
     };
   }
   if (body.task === "summarize") {
@@ -398,13 +431,79 @@ async function* withoutThinking(pieces: Pieces): Pieces {
   if (!thinking && pending) yield pending;
 }
 
+// The free-tier providers that speak OpenAI's chat completions API.
+// trains: its free tier may use what it's sent to improve its models.
+type OpenAiLike = { name: string; url: string; key?: string; model: string; trains: boolean };
+const openAiLike = (env: Env): Record<string, OpenAiLike> => ({
+  groq: { name: "groq", url: `${env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"}/chat/completions`, key: env.GROQ_API_KEY, model: env.GROQ_MODEL || "llama-3.3-70b-versatile", trains: false },
+  gemini: { name: "gemini", url: `${env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai"}/chat/completions`, key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-2.5-flash", trains: true },
+  openrouter: { name: "openrouter", url: `${env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1"}/chat/completions`, key: env.OPENROUTER_API_KEY, model: env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free", trains: true },
+});
+
+// A streamed chat completion: server-sent events of {"choices":[{"delta":{"content"}}]}.
+async function* openAi(p: OpenAiLike, job: Job, signal: AbortSignal): Pieces {
+  const r = await fetch(p.url, {
+    method: "POST",
+    signal,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${p.key}`,
+      ...(p.name === "openrouter" ? { "HTTP-Referer": "https://nopload.pages.dev", "X-Title": "Nopload" } : {}),
+    },
+    body: JSON.stringify({
+      model: p.model,
+      stream: true,
+      max_tokens: job.maxTokens,
+      temperature: 0.2,
+      messages: [{ role: "system", content: job.system + (job.json ? " Reply with JSON only." : "") }, ...job.messages],
+      ...(job.json ? { response_format: { type: "json_object" } } : {}),
+    }),
+  });
+  if (!r.ok || !r.body) throw new Error(`${p.name} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
+  const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const data = line.startsWith("data:") ? line.slice(5).trim() : "";
+      if (!data || data === "[DONE]") continue;
+      let event: { choices?: { delta?: { content?: string } }[]; error?: { message?: string } };
+      try {
+        event = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      if (event.error) throw new Error(`${p.name}: ${event.error.message ?? "error"}`);
+      const piece = event.choices?.[0]?.delta?.content;
+      if (piece) yield piece;
+    }
+  }
+}
+
+const ORDER = ["groq", "anthropic", "gemini", "openrouter", "cloudflare"];
+
+// The providers this deployment can use, in the order to try them.
+export function providers(env: Env): [string, (job: Job, signal: AbortSignal) => Pieces][] {
+  const free = openAiLike(env);
+  const mayTrain = env.AI_FREE_TIERS_MAY_TRAIN === "1";
+  const order = env.AI_ORDER ? env.AI_ORDER.split(",").map((s) => s.trim()).filter((s) => ORDER.includes(s)) : ORDER;
+  return order.flatMap((name): [string, (job: Job, signal: AbortSignal) => Pieces][] => {
+    if (name === "anthropic") return env.ANTHROPIC_API_KEY ? [[name, (job, signal) => anthropic(env, job, signal)]] : [];
+    if (name === "cloudflare") return env.AI ? [[name, (job) => withoutThinking(cloudflare(env, job))]] : [];
+    const p = free[name];
+    return p?.key && (!p.trains || mayTrain) ? [[name, (job, signal) => withoutThinking(openAi(p, job, signal))]] : [];
+  });
+}
+
 // Starts the first provider that answers: its name, its first piece and the rest.
 async function start(env: Env, job: Job, signal: AbortSignal, only?: "cloudflare") {
-  const tries: [string, () => Pieces][] = [];
-  if (env.ANTHROPIC_API_KEY && !only) tries.push(["anthropic", () => anthropic(env, job, signal)]);
-  if (env.AI) tries.push(["cloudflare", () => withoutThinking(cloudflare(env, job))]);
+  const tries = providers(env).filter(([name]) => !only || name === only);
   for (const [provider, run] of tries) {
-    const it = run()[Symbol.asyncIterator]();
+    const it = run(job, signal)[Symbol.asyncIterator]();
     try {
       let first = await it.next();
       while (!first.done && !first.value) first = await it.next();
@@ -434,12 +533,13 @@ function originAllowed(request: Request, env: Env) {
 }
 
 export async function onRequestGet({ env }: Context) {
-  return json({ anthropic: !!env.ANTHROPIC_API_KEY, cloudflare: !!env.AI });
+  const set = new Set(providers(env).map(([name]) => name));
+  return json(Object.fromEntries(ORDER.map((name) => [name, set.has(name)])));
 }
 
 export async function onRequestPost({ request, env }: Context) {
   if (!originAllowed(request, env)) return json({ error: "origin not allowed" }, 403);
-  if (!env.ANTHROPIC_API_KEY && !env.AI) return json({ error: "no AI provider is set up" }, 503);
+  if (!providers(env).length) return json({ error: "no AI provider is set up" }, 503);
   const raw = await readBody(request);
   if (raw === null) return json({ error: "request too large" }, 413);
   let body: Record<string, unknown>;
