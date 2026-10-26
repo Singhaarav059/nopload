@@ -23,12 +23,20 @@
 //                       (Its replies aren't streamed: see cloudflare() below.)
 //   ALLOWED_ORIGINS     other sites whose pages may call this, comma-separated
 //                       (default: https://nopload.vercel.app).
+//   AI_LIMITS           KV namespace binding; with it the per-visitor limits
+//                       below hold across Worker instances and restarts.
+//   AI_DAILY_CHARS      optional cap on the characters all visitors send in
+//                       a day (UTC); 2,000,000 is about 600,000 tokens.
 //   ANTHROPIC_MODEL, FALLBACK_MODEL, ANTHROPIC_BASE_URL   optional overrides.
 
 import Anthropic from "@anthropic-ai/sdk";
 
 type WorkersAi = { run(model: string, input: object): Promise<unknown> };
+// The part of a Workers KV namespace binding the limiter uses.
+type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string, o?: { expirationTtl?: number }): Promise<void> };
 export type Env = {
+  AI_LIMITS?: Kv;
+  AI_DAILY_CHARS?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
   ANTHROPIC_BASE_URL?: string;
@@ -45,26 +53,74 @@ const DEFAULT_ORIGINS = ["https://nopload.vercel.app"];
 // Input caps, in characters.
 const MAX = { sources: 24_000, question: 2_000, history: 4, turn: 2_000, text: 60_000, texts: 12_000, items: 200 };
 
-// Best effort, per visitor (the address Cloudflare saw, which the sender
-// can't choose) and per Worker instance (instances don't share memory):
+// Per visitor (the address Cloudflare saw, which the sender can't choose):
 // characters and requests in the last hour, and requests in the last
 // minute, so neither big requests nor floods of small ones run up the bill.
-// A 100-page translation is about 35 requests and 300,000 characters. The
-// hard cap on spending is the Anthropic account's own limit.
+// A 100-page translation is about 35 requests and 300,000 characters.
+// AI_DAILY_CHARS, when set, also caps the characters all visitors together
+// send in a day (UTC).
+// With the AI_LIMITS binding (a KV namespace) the counts are shared by every
+// Worker instance; without it, or when KV fails, each instance counts on
+// its own, in memory, and a restart forgets. KV is eventually consistent,
+// so requests in the same second from different places can each slip
+// through: these are budgets, not a ceiling. The hard cap on spending is
+// the Anthropic account's own limit.
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
+const DAY = 86_400_000;
 const LIMIT = { chars: 600_000, hour: 200, minute: 40 };
 type Use = { at: number; chars: number; requests: number; minuteAt: number; minute: number };
-const spent = new Map<string, Use>();
-function allow(ip: string, chars: number) {
-  const now = Date.now();
-  if (spent.size > 10_000) for (const [k, v] of spent) if (now - v.at > HOUR) spent.delete(k);
-  const prev = spent.get(ip);
+type Day = { day: number; chars: number };
+
+// The visitor's counts with this request added, or null when it's over a limit.
+function charge(prev: Use | null, chars: number, now: number): Use | null {
   const use: Use = prev && now - prev.at < HOUR ? { ...prev } : { at: now, chars: 0, requests: 0, minuteAt: now, minute: 0 };
   if (now - use.minuteAt >= MINUTE) [use.minuteAt, use.minute] = [now, 0];
-  if (use.chars + chars > LIMIT.chars || use.requests >= LIMIT.hour || use.minute >= LIMIT.minute) return false;
-  spent.set(ip, { ...use, chars: use.chars + chars, requests: use.requests + 1, minute: use.minute + 1 });
+  if (use.chars + chars > LIMIT.chars || use.requests >= LIMIT.hour || use.minute >= LIMIT.minute) return null;
+  return { ...use, chars: use.chars + chars, requests: use.requests + 1, minute: use.minute + 1 };
+}
+
+// The site's counts for today with this request added, or null when over AI_DAILY_CHARS.
+function chargeDay(prev: Day | null, chars: number, now: number, cap: number): Day | null {
+  const day = Math.floor(now / DAY);
+  const used = prev?.day === day ? prev.chars : 0;
+  return cap && used + chars > cap ? null : { day, chars: used + chars };
+}
+
+const spent = new Map<string, Use>();
+let today: Day | null = null;
+function allowHere(ip: string, chars: number, cap: number, now: number) {
+  if (spent.size > 10_000) for (const [k, v] of spent) if (now - v.at > HOUR) spent.delete(k);
+  const use = charge(spent.get(ip) ?? null, chars, now);
+  const day = chargeDay(today, chars, now, cap);
+  if (!use || !day) return false;
+  spent.set(ip, use);
+  today = day;
   return true;
+}
+
+async function allowShared(kv: Kv, ip: string, chars: number, cap: number, now: number) {
+  const dayKey = `day:${Math.floor(now / DAY)}`;
+  const [prev, prevDay] = await Promise.all([kv.get(`ip:${ip}`, "json") as Promise<Use | null>, cap ? (kv.get(dayKey, "json") as Promise<Day | null>) : null]);
+  const use = charge(prev, chars, now);
+  const day = chargeDay(prevDay, chars, now, cap);
+  if (!use || !day) return false;
+  // Kept a little past the hour (KV's shortest expiry is a minute); the day for two.
+  await Promise.all([kv.put(`ip:${ip}`, JSON.stringify(use), { expirationTtl: HOUR / 1000 + 60 }), cap ? kv.put(dayKey, JSON.stringify(day), { expirationTtl: (2 * DAY) / 1000 }) : null]);
+  return true;
+}
+
+async function allow(env: Env, ip: string, chars: number) {
+  const now = Date.now();
+  const cap = Math.max(0, Number(env.AI_DAILY_CHARS) || 0);
+  if (env.AI_LIMITS) {
+    try {
+      return await allowShared(env.AI_LIMITS, ip, chars, cap, now);
+    } catch (e) {
+      console.warn("AI_LIMITS failed, counting in memory:", e instanceof Error ? e.message : e);
+    }
+  }
+  return allowHere(ip, chars, cap, now);
 }
 
 // The largest request a page sends is a summary: 60,000 characters, up to
@@ -273,9 +329,12 @@ const SAFE = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...SAFE, "Content-Type": "application/json", ...headers } });
 
+// Browsers send Origin with every POST, same-origin ones included, so a
+// request without one isn't from a page. This only keeps other sites' pages
+// out: a script can send any Origin, which is what the limits are for.
 function originAllowed(request: Request, env: Env) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
+  if (!origin) return false;
   const allowed = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean) : DEFAULT_ORIGINS;
   return origin === new URL(request.url).origin || allowed.includes(origin);
 }
@@ -300,7 +359,7 @@ export async function onRequestPost({ request, env }: Context) {
   if (typeof job === "string") return json({ error: job }, 400);
   // Only the address Cloudflare saw: headers like X-Forwarded-For are the sender's to write.
   const ip = request.headers.get("CF-Connecting-IP") || "?";
-  if (!allow(ip, charsOf(job))) return json({ error: "hourly limit reached" }, 429, { "Retry-After": "3600" });
+  if (!(await allow(env, ip, charsOf(job)))) return json({ error: "hourly limit reached" }, 429, { "Retry-After": "3600" });
 
   const signal = request.signal ?? new AbortController().signal;
   const started = await start(env, job, signal, body.provider === "cloudflare" ? "cloudflare" : undefined);

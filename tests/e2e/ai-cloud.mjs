@@ -11,7 +11,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dict, open, pick, suite } from "./kit.mjs";
+import { base, dict, open, pick, suite } from "./kit.mjs";
 
 const t = dict("en");
 const dir = mkdtempSync(join(tmpdir(), "e2e-ai-cloud-"));
@@ -56,7 +56,7 @@ await suite(async ({ browser, test }) => {
     const req = route.request();
     if (req.method() === "GET") return route.fulfill({ json: { anthropic: true, cloudflare: true } });
     const body = req.postDataJSON();
-    posts.push({ body, bytes: req.postDataBuffer()?.length ?? 0 });
+    posts.push({ body, bytes: req.postDataBuffer()?.length ?? 0, origin: (await req.allHeaders()).origin });
     if (mode.status !== 200) return route.fulfill({ status: mode.status, json: { error: "no AI provider answered" } });
     const headers = { "X-AI-Provider": mode.provider };
     if (body.task === "chat") {
@@ -85,10 +85,12 @@ await suite(async ({ browser, test }) => {
     const a = await ask(page, "What is the invoice total?");
     if (a.pages[0] !== 14 || !a.text.includes("$1,234.50")) throw new Error(`cited ${a.pages}: ${a.text}`);
     if (!a.text.includes(t["chat.by.server"])) throw new Error(`no attribution: ${a.text}`);
-    const { body, bytes } = posts.at(-1);
+    const { body, bytes, origin } = posts.at(-1);
     if (body.task !== "chat" || body.question !== "What is the invoice total?") throw new Error(JSON.stringify(body).slice(0, 200));
     if (bytes > 20000 || JSON.stringify(body).includes("%PDF")) throw new Error(`sent ${bytes} bytes`);
-    return `cites p. ${a.pages.join(", ")}, sent ${bytes} bytes`;
+    // functions/api/ai.ts refuses a POST without one.
+    if (origin !== new URL(base).origin) throw new Error(`Origin: ${origin}`);
+    return `cites p. ${a.pages.join(", ")}, sent ${bytes} bytes, Origin sent`;
   });
 
   await test("chat: the backup's answers are labelled server AI too", async () => {
