@@ -393,6 +393,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "실행 취소",
   "ed.redo": "다시 실행",
   "ed.deleteItem": "항목 삭제",
+  "ed.discardChanges": "이 PDF의 변경 사항을 버릴까요?",
   "ed.prevPage": "이전 페이지",
   "ed.nextPage": "다음 페이지",
   "ed.zoomIn": "확대",

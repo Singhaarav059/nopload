@@ -33,8 +33,14 @@ await suite(async ({ browser, test }) => {
 
   await test("opens full screen, every page drawn and its text there to select", async () => {
     await open(page, "/en/pdf-viewer");
+    // Straight to the document: the tool page's file list never shows, not even for a moment.
+    await page.evaluate(() => {
+      window.__fileList = false;
+      new MutationObserver(() => (window.__fileList ||= !!document.querySelector("[data-files-heading]"))).observe(document.body, { subtree: true, childList: true });
+    });
     await pick(page, ["report.pdf"]);
     await viewer().waitFor();
+    if (await page.evaluate(() => window.__fileList)) throw new Error("the file list showed before the viewer");
     await viewer().getByText(fill(t["viewer.page"], { n: 1, total: 3 })).waitFor();
     if ((await viewer().locator("[data-page]").count()) !== 3) throw new Error("not 3 pages");
     await page.waitForFunction(() => document.querySelector('[data-page="1"] canvas')?.width > 0);
@@ -281,7 +287,14 @@ await suite(async ({ browser, test }) => {
       step = "back reopens";
       await page.goBack();
       await viewer().waitFor();
-      return "closed by Back, reopened from Edit";
+      step = "cancel in the editor goes back";
+      await wake();
+      await bar(t["viewer.more"]).click();
+      await viewer().getByRole("menuitem", { name: t["tool.edit.name"] }).click();
+      await page.waitForURL(/\/en\/edit-pdf/);
+      await page.getByRole("button", { name: t["ws.cancel"], exact: true }).locator("visible=true").click();
+      await viewer().waitFor();
+      return "closed by Back, reopened from Edit, and again by the editor's Cancel";
     } catch (e) {
       throw new Error(`${step}: ${e.message.split("\n")[0]} at ${page.url()}`);
     }

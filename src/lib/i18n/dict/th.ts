@@ -393,6 +393,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "เลิกทำ",
   "ed.redo": "ทำซ้ำ",
   "ed.deleteItem": "ลบรายการ",
+  "ed.discardChanges": "ละทิ้งการเปลี่ยนแปลงใน PDF นี้หรือไม่",
   "ed.prevPage": "หน้าก่อนหน้า",
   "ed.nextPage": "หน้าถัดไป",
   "ed.zoomIn": "ซูมเข้า",

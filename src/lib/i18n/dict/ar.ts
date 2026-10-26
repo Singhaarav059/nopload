@@ -393,6 +393,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "تراجع",
   "ed.redo": "إعادة",
   "ed.deleteItem": "حذف العنصر",
+  "ed.discardChanges": "هل تريد تجاهل تغييراتك على ملف PDF هذا؟",
   "ed.prevPage": "الصفحة السابقة",
   "ed.nextPage": "الصفحة التالية",
   "ed.zoomIn": "تكبير",

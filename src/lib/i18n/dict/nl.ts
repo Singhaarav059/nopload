@@ -987,6 +987,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "Ongedaan maken",
   "ed.redo": "Opnieuw",
   "ed.deleteItem": "Item verwijderen",
+  "ed.discardChanges": "Je wijzigingen in deze pdf weggooien?",
   "ed.prevPage": "Vorige pagina",
   "ed.nextPage": "Volgende pagina",
   "ed.zoomIn": "Inzoomen",

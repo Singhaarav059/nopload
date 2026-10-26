@@ -112,9 +112,11 @@ export const prepareEditor = (toolId: ToolId) =>
 // `others`: more files for a batch (crop, redact), which get the same crop box
 // or the same searches as `file`, the one on the canvas.
 export function Editor({
-  toolId, file, others = [], options, actionLabel, onRun, onError, resume,
+  toolId, file, others = [], options, actionLabel, onRun, onError, resume, onCancel,
 }: {
   toolId: ToolId; file: File; others?: File[]; options: Record<string, unknown>; actionLabel: string;
+  // Leaves the editor without saving: back to where the file came from.
+  onCancel?: () => void;
   // Changes kept from before a change of language (src/lib/session.ts).
   resume?: EditorSnapshot | null;
   onRun: (job: (p: Progress) => Promise<Output[]>) => void;
@@ -1099,6 +1101,7 @@ export function Editor({
 
   const placeLabel = t("ed.placeCentre");
   const runButton = <button className="btn btn-primary btn-lg w-full" disabled={!canRun} onClick={run}>{actionLabel}</button>;
+  const cancelButton = onCancel && <button className="btn btn-quiet btn-lg" onClick={onCancel}>{t("ws.cancel")}</button>;
 
   return (
     <div>
@@ -1639,7 +1642,7 @@ export function Editor({
           </div>
         )}
 
-        <div className="hidden lg:block">{runButton}</div>
+        <div className="hidden flex-col gap-2 lg:flex">{runButton}{cancelButton}</div>
       </aside>
 
       {pad && (
@@ -1648,7 +1651,7 @@ export function Editor({
     </div>
       {/* Below lg the panel sits under the page, so the action stays in reach at the bottom of the screen. */}
       <div data-sticky-action className="sticky bottom-0 z-30 mt-4 rounded-t-xl border border-b-0 border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] p-3 shadow-card backdrop-blur-md lg:hidden">
-        {runButton}
+        <div className="flex gap-2">{cancelButton}{runButton}</div>
       </div>
     </div>
   );

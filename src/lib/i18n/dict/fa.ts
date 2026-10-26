@@ -1622,6 +1622,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "واگرد",
   "ed.redo": "ازنو",
   "ed.deleteItem": "حذف مورد",
+  "ed.discardChanges": "تغییرات شما در این PDF کنار گذاشته شود؟",
   "ed.prevPage": "صفحهٔ قبل",
   "ed.nextPage": "صفحهٔ بعد",
   "ed.zoomIn": "بزرگ‌نمایی",

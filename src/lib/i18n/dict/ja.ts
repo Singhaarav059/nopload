@@ -393,6 +393,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "元に戻す",
   "ed.redo": "やり直す",
   "ed.deleteItem": "項目を削除",
+  "ed.discardChanges": "このPDFへの変更を破棄しますか？",
   "ed.prevPage": "前のページ",
   "ed.nextPage": "次のページ",
   "ed.zoomIn": "拡大",

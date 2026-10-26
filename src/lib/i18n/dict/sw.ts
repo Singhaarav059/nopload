@@ -987,6 +987,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "Tendua",
   "ed.redo": "Rudia",
   "ed.deleteItem": "Futa kipengee",
+  "ed.discardChanges": "Ungependa kutupa mabadiliko yako kwenye PDF hii?",
   "ed.prevPage": "Ukurasa uliotangulia",
   "ed.nextPage": "Ukurasa unaofuata",
   "ed.zoomIn": "Kuza",

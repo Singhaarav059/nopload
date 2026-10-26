@@ -393,6 +393,7 @@ const d: { [K in DictKey]?: string } = {
   "ed.undo": "撤销",
   "ed.redo": "重做",
   "ed.deleteItem": "删除对象",
+  "ed.discardChanges": "放弃对此 PDF 的更改？",
   "ed.prevPage": "上一页",
   "ed.nextPage": "下一页",
   "ed.zoomIn": "放大",
