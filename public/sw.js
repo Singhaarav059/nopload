@@ -196,17 +196,25 @@ async function receiveShare(req) {
   return Response.redirect(new URL(`/${await shareLocale()}/open`, location.origin).href, 303);
 }
 
-// The privacy chip (src/lib/egress.ts): tells the site's open tabs about
-// every request, the page's or one of its workers', that goes to another
-// site or carries a body, with the body's size. Reading a copy of the body
-// leaves the request itself as it was.
+// The privacy chip (src/lib/egress.ts): tells a tab about every request it
+// made that goes to another site or carries a body, with the body's size.
+// Only the tab that made it hears of it, so another tab's uploads never show
+// on this one. A request from a worker (whose page the worker can't name)
+// goes to the one tab open, or, with several, to all of them marked
+// `shared`: counted rather than missed. Reading a copy of the body leaves
+// the request itself as it was.
 function report(event, req, url) {
   const offsite = url.origin !== location.origin && /^(?:https?|wss?):$/.test(url.protocol);
   const body = req.method !== "GET" && req.method !== "HEAD";
   if (!offsite && !body) return;
   event.waitUntil((async () => {
     const bytes = body ? await req.clone().arrayBuffer().then((b) => b.byteLength, () => 0) : 0;
-    for (const client of await self.clients.matchAll({ type: "window" })) client.postMessage({ type: "nopload:egress", url: req.url, bytes });
+    const message = { type: "nopload:egress", url: req.url, bytes };
+    const from = event.clientId ? await self.clients.get(event.clientId) : undefined;
+    if (from?.type === "window") return from.postMessage(message);
+    const tabs = await self.clients.matchAll({ type: "window" });
+    if (tabs.length === 1) return tabs[0].postMessage(message);
+    for (const tab of tabs) tab.postMessage({ ...message, shared: true });
   })());
 }
 
