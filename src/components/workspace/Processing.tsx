@@ -4,12 +4,14 @@ import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { useI18n } from "../I18n";
 import { PaperStage } from "../paper/PaperStage";
+import { VacuumSealer } from "../machines/VacuumSealer";
 import { paperAction, paperMotion, reducedMotion } from "@/lib/paper";
 import type { ToolId } from "@/lib/tools";
 
-// While a tool works: its sheet performs the tool's action, and the bar and
+// While a tool works: its sheet performs the tool's action (or, for
+// Compress, its own machine squeezes the first file), and the bar and
 // percentage glide to each new value instead of jumping.
-export function Processing({ tool, value, label }: { tool: ToolId; value: number; label?: string }) {
+export function Processing({ tool, value, label, file }: { tool: ToolId; value: number; label?: string; file?: File }) {
   const { t } = useI18n();
   const bar = useRef<HTMLDivElement>(null);
   const pct = useRef<HTMLParagraphElement>(null);
@@ -34,7 +36,11 @@ export function Processing({ tool, value, label }: { tool: ToolId; value: number
 
   return (
     <>
-      <PaperStage mode={paperAction(tool)} motion={paperMotion(tool)} className="h-[200px] w-full max-w-[320px] sm:h-[240px]" />
+      {tool === "compress" ? (
+        <VacuumSealer file={file} value={value} />
+      ) : (
+        <PaperStage mode={paperAction(tool)} motion={paperMotion(tool)} className="h-[200px] w-full max-w-[320px] sm:h-[240px]" />
+      )}
       <p className="mt-4 text-[17px] font-medium tracking-[-0.01em]">{t("ws.processing")}</p>
       {label && <p className="mt-1 text-[14px] text-muted">{label}</p>}
       <div className="relative mt-6 h-1.5 w-full overflow-hidden rounded-full bg-line">
