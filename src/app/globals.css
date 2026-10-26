@@ -1044,3 +1044,72 @@ select.field {
     animation: none !important;
   }
 }
+
+/* ── The signature: one burst of colour (src/app/[lang]/page.tsx, the home
+   board, the install banner). Magenta, violet, blue and a warm orange,
+   layered as still gradients: drawn once, nothing animated, nothing blurred
+   live, so it costs nothing while scrolling. */
+.aurora, .board-card.aurora {
+  color: #fff;
+  border-color: transparent;
+  background:
+    radial-gradient(120% 95% at 0% 0%, #ff4fc4 0%, transparent 58%),
+    radial-gradient(110% 100% at 100% 0%, #6b5cff 0%, transparent 62%),
+    radial-gradient(120% 120% at 100% 100%, #2d7bff 0%, transparent 60%),
+    radial-gradient(100% 100% at 0% 100%, #ff8b47 0%, transparent 56%),
+    #1d1534;
+}
+.aurora-wash {
+  position: absolute; inset: 0 0 auto; height: 760px; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(42% 46% at 12% 18%, #ff4fc4 0%, transparent 70%),
+    radial-gradient(40% 48% at 58% 6%, #6b5cff 0%, transparent 72%),
+    radial-gradient(38% 44% at 96% 30%, #2d7bff 0%, transparent 70%),
+    radial-gradient(30% 34% at 30% 62%, #ff8b47 0%, transparent 70%);
+  opacity: 0.2;
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 95%);
+  mask-image: linear-gradient(to bottom, #000 30%, transparent 95%);
+}
+:root[data-theme="dark"] .aurora-wash { opacity: 0.32; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .aurora-wash { opacity: 0.32; } }
+:root[data-app] .aurora-wash { height: 520px; }
+[data-app-hero] { z-index: 1; }
+.hero-title { letter-spacing: calc(var(--display-track) - 0.01em); }
+
+/* Numbers in dots (src/components/DotNumber.tsx). */
+.dot-number { display: block; flex: none; align-self: flex-start; width: auto; max-width: 100%; }
+.dot-number .dot-on { fill: currentColor; }
+.dot-number .dot-off { fill: currentColor; opacity: 0.12; }
+
+/* The home board (src/components/HomeBoard.tsx): a desk of cards. */
+.board { position: relative; z-index: 1; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 8px 0 28px; }
+.board-card {
+  display: flex; flex-direction: column; min-width: 0; padding: 20px; border-radius: 28px; text-align: start;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+  transition: translate 400ms var(--ease-spring), box-shadow 300ms;
+}
+.board-read { grid-column: span 2; min-height: 236px; border: 0; cursor: pointer; }
+.board-read:hover { translate: 0 -3px; box-shadow: var(--shadow-lift); }
+.board-read:active { scale: 0.99; }
+.board-figure { min-height: 150px; color: var(--ink); }
+.board-quick { grid-column: span 2; }
+.board-quick ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 12px; }
+@media (min-width: 560px) and (max-width: 899px) { .board-quick ul { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (min-width: 900px) {
+  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .board-read { grid-row: span 2; min-height: 330px; padding: 26px; }
+}
+.board-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; opacity: 0.9; }
+.board-title { display: block; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 650; letter-spacing: -0.035em; line-height: 1.05; }
+.board-bar { display: block; height: 4px; margin-top: 14px; border-radius: 4px; background: rgb(255 255 255 / 0.25); overflow: hidden; }
+.board-bar > span { display: block; height: 100%; border-radius: 4px; background: #fff; }
+.board-go { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: #fff; color: #1d1534; }
+.board-tool { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px; border-radius: 18px; color: var(--ink); transition: background 200ms, scale 200ms; }
+.board-tool:hover { background: var(--surface-2); }
+.board-tool:active { scale: 0.96; }
+
+/* The install banner wears the signature colour. */
+.install-banner.aurora { border: 0; }
+.install-banner.aurora .text-ink-2 { color: rgb(255 255 255 / 0.85); }
+.install-banner.aurora .btn-primary { background: #fff; color: #1d1534; }
+.install-banner.aurora .icon-btn { color: #fff; }

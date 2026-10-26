@@ -92,7 +92,7 @@ export function InstallBanner() {
     }
   };
   return (
-    <section data-web-only aria-labelledby="install-banner" className="install-banner">
+    <section data-web-only aria-labelledby="install-banner" className="install-banner aurora">
       <div aria-hidden className="install-art install-art-sm"><span className="install-phone"><span /><span /><span /><span /></span></div>
       <div className="min-w-0 grow basis-[15rem]">
         <h2 id="install-banner" className="text-[1.15rem] font-semibold tracking-[-0.01em]">{t("install.bannerTitle", { brand: BRAND.name })}</h2>
