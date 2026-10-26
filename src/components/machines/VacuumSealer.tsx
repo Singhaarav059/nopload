@@ -10,6 +10,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { thumbUrl } from "@/lib/pdf/thumbs";
 import { reducedMotion } from "@/lib/paper";
+import { SHOW_S } from "./kit";
 
 const W = 200; // the bag, in px; the page sits inside it
 const H = 230;
@@ -76,12 +77,15 @@ export function VacuumSealer({ file, value }: { file?: File; value: number }) {
     const still = reducedMotion();
     let raf = 0;
     let shown = 0;
+    let last = 0;
     const start = performance.now();
     const draw = (now: number) => {
+      const dt = last ? (now - last) / 1000 : 0;
+      last = now;
       const t = (now - start) / 1000;
       // Its own pace: out of the slot in a second, then slowly drawing air until the job catches up.
       const goal = still ? 1 : Math.max(target.current, Math.min(OUT, t / 1.1), Math.min(0.75, OUT + (t - 1.4) / 9));
-      shown = still ? goal : shown + (goal - shown) * 0.07;
+      shown = still ? goal : shown + Math.min((goal - shown) * 0.07, dt / SHOW_S);
       const out = 1 - (1 - Math.min(1, shown / OUT)) ** 3;
       const s = Math.max(0, Math.min(1, (shown - OUT) / (1 - OUT)));
       const d = bagPath(s, still ? 0 : t);
