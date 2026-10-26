@@ -23,6 +23,7 @@ import { overBudget } from "@/lib/budget";
 import { fileError } from "@/lib/pdf/errors";
 import { markUnrestricted, PERMISSIONS, protectProblem } from "@/lib/pdf/password";
 import { pageCount } from "@/lib/pdf/thumbs";
+import { reducedMotion } from "@/lib/paper";
 import { defaultOptions, LIGHT_OFFICE, LIMITS, toolById, type ToolId } from "@/lib/tools";
 
 type Stage = "select" | "work" | "busy" | "done";
@@ -30,6 +31,8 @@ type Caps = { chrome: boolean; libreoffice: boolean };
 type Job = { files: File[]; options: Record<string, unknown>; reloaded: boolean; agreed?: boolean };
 
 const uid = () => crypto.randomUUID();
+// The least time the busy view stays up, so a quick job's machine can be seen at work.
+const SHOW_MS = 2200;
 
 // Each mode's view is loaded when a tool uses it (P3-03), so a tool that only
 // lists files doesn't carry the editor, the page board or the scanner.
@@ -313,11 +316,19 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
     setFileStates(files.map(() => "wait"));
     const track: Track = (i, state) => ticket === run.current && setFileStates((list) => list.map((s, k) => (k === i ? state : s)));
     setStage("busy");
+    const began = performance.now();
     try {
       const made = await job((done, total) => ticket === run.current && setProgress((p) => ({ ...p, value: total ? Math.min(1, done / total) : 0 })), controller.signal, track);
       const out = tool.id === "protect" || tool.id === "unlock" ? made : await markUnrestricted(files, made);
       if (ticket !== run.current) return;
       if (!out.length) throw new Error(t("res.error"));
+      // A quick job still lets its machine finish its show (src/components/machines).
+      const left = SHOW_MS - (performance.now() - began);
+      if (left > 0 && !reducedMotion()) {
+        setProgress((p) => ({ ...p, value: 1 }));
+        await new Promise((ok) => setTimeout(ok, left));
+        if (ticket !== run.current) return;
+      }
       setOutputs(out);
       setStage("done");
     } catch (e) {
@@ -492,7 +503,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   if (view === "busy") {
     return (
       <div className="mx-auto flex max-w-[520px] flex-col items-center py-8 text-center" aria-live="polite">
-        <Processing tool={tool.id} value={progress.value} label={progress.label} file={files[0]} />
+        <Processing tool={tool.id} value={progress.value} label={progress.label} files={files} />
         {fileStates.length > 1 && fileStates.some((st) => st !== "wait") && (
           <ul aria-label={t("ws.fileQueue")} className="mt-6 max-h-[40vh] w-full overflow-y-auto rounded-xl border border-line bg-surface text-start text-[14px]">
             {files.map((f, i) => (

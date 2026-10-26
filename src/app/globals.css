@@ -733,104 +733,6 @@ select.field {
   color: var(--line-strong);
 }
 
-/* ───────────── Paper in 2D ─────────────
-   The CSS version of each tool's action (src/components/paper/PaperStage.tsx):
-   phones, reduced motion, no WebGL, and the moment before the 3D scene loads. */
-.p2d {
-  position: relative;
-  width: min(40%, 150px);
-  aspect-ratio: 3 / 4;
-}
-.p2d-sheet {
-  position: absolute;
-  inset: 0;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: var(--shadow-lift);
-  animation-duration: 2.6s;
-  animation-iteration-count: infinite;
-  animation-timing-function: var(--ease-in-out);
-}
-.p2d-a {
-  padding: 16% 12%;
-  display: flex;
-  flex-direction: column;
-  gap: 7%;
-}
-.p2d-a::after {
-  content: "";
-  position: absolute;
-  top: -1px;
-  inset-inline-end: -1px;
-  width: 22%;
-  aspect-ratio: 1;
-  background: linear-gradient(225deg, var(--bg) 0 50%, var(--accent) 50%);
-  border-end-start-radius: 3px;
-}
-.p2d-a > i {
-  display: block;
-  height: 5%;
-  border-radius: 2px;
-  background: var(--line-strong);
-  opacity: 0.7;
-}
-.p2d-a > i:first-child { width: 55%; background: var(--ink); opacity: 0.85; }
-.p2d-a > i:nth-child(2) { width: 92%; }
-.p2d-a > i:nth-child(3) { width: 80%; }
-.p2d-a > i:nth-child(4) { width: 64%; }
-.p2d-b { opacity: 0; }
-.p2d-mark {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* merge: a second sheet slides in and the two snap into one */
-.p2d-merge .p2d-a { animation-name: p2d-merge-a; }
-.p2d-merge .p2d-b { animation-name: p2d-merge-b; }
-@keyframes p2d-merge-a { 0%, 15% { translate: 34% 0; rotate: 6deg; } 50%, 100% { translate: 0 0; rotate: 0deg; } 55% { scale: 1.05; } 65% { scale: 1; } }
-@keyframes p2d-merge-b { 0%, 15% { opacity: 1; translate: -34% 0; rotate: -6deg; } 48% { opacity: 1; translate: 0 0; rotate: 0deg; } 52%, 100% { opacity: 0; } }
-
-/* split: a cut runs across and the sheet comes apart */
-.p2d-split .p2d-mark { inset-inline: -8%; top: 50%; height: 2px; background: var(--accent); transform-origin: left; animation: p2d-cut 2.6s var(--ease-in-out) infinite; }
-.p2d-split .p2d-a { animation-name: p2d-split-a; }
-.p2d-split .p2d-b { animation-name: p2d-split-b; }
-@keyframes p2d-cut { 0%, 10% { opacity: 1; scale: 0 1; } 35% { opacity: 1; scale: 1 1; } 42%, 100% { opacity: 0; } }
-@keyframes p2d-split-a { 0%, 38% { translate: 0 0; rotate: 0deg; } 62%, 80% { translate: 28% -4%; rotate: 7deg; } 100% { translate: 0 0; rotate: 0deg; } }
-@keyframes p2d-split-b { 0%, 37% { opacity: 0; } 38% { opacity: 1; translate: 0 0; rotate: 0deg; } 62%, 80% { opacity: 1; translate: -28% 4%; rotate: -7deg; } 99% { opacity: 1; translate: 0 0; } 100% { opacity: 0; } }
-
-/* compress: folds in half, shrinks, opens back up */
-.p2d-compress .p2d-a { transform-origin: 50% 100%; animation-name: p2d-compress; }
-@keyframes p2d-compress { 0%, 10% { scale: 1 1; } 35% { scale: 1 0.5; } 55% { scale: 0.62 0.32; } 75% { scale: 0.62 0.32; } 100% { scale: 1 1; } }
-
-/* seal: a round stamp comes down and leaves its mark */
-.p2d-seal .p2d-mark { width: 30%; aspect-ratio: 1; border-radius: 50%; background: var(--accent); inset-inline-end: 14%; bottom: 14%; animation: p2d-seal 2.6s var(--ease-out) infinite; }
-.p2d-seal .p2d-a { animation-name: p2d-seal-press; }
-@keyframes p2d-seal { 0%, 10% { opacity: 0; translate: 0 -160%; scale: 1.3; } 35% { opacity: 1; translate: 0 0; scale: 1.15; } 42%, 85% { opacity: 1; translate: 0 0; scale: 1; } 100% { opacity: 0; } }
-@keyframes p2d-seal-press { 0%, 33% { scale: 1; } 38% { scale: 0.97; } 46%, 100% { scale: 1; } }
-
-/* turn: a quarter turn at a time */
-.p2d-turn .p2d-a { animation-name: p2d-turn; animation-timing-function: var(--ease-spring); }
-@keyframes p2d-turn { 0%, 15% { rotate: 0deg; } 40%, 60% { rotate: -90deg; } 85%, 100% { rotate: -180deg; } }
-
-/* convert: flips over */
-.p2d-convert { perspective: 600px; }
-.p2d-convert .p2d-a { animation-name: p2d-flip; }
-@keyframes p2d-flip { 0%, 15% { transform: rotateY(0); } 45%, 65% { transform: rotateY(180deg); } 95%, 100% { transform: rotateY(360deg); } }
-
-/* write: the lines write themselves */
-.p2d-write .p2d-a > i { transform-origin: left; animation: p2d-write 2.6s steps(6) infinite; }
-.p2d-write .p2d-a > i:nth-child(2) { animation-delay: 0.25s; }
-.p2d-write .p2d-a > i:nth-child(3) { animation-delay: 0.5s; }
-.p2d-write .p2d-a > i:nth-child(4) { animation-delay: 0.75s; }
-[dir="rtl"] .p2d-write .p2d-a > i { transform-origin: right; }
-@keyframes p2d-write { 0% { scale: 0 1; } 40%, 100% { scale: 1 1; } }
-
-/* read: a scan line sweeps the page */
-.p2d-read .p2d-mark { inset-inline: -6%; height: 2px; top: 0; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: p2d-scan 2.6s var(--ease-in-out) infinite; }
-@keyframes p2d-scan { 0% { opacity: 1; top: 4%; } 50% { opacity: 1; top: 94%; } 100% { opacity: 1; top: 4%; } }
-
 /* A file lands on the board: drops in from above with a little spin. */
 @keyframes card-in {
   from { opacity: 0; transform: translateY(-36px) rotate(-5deg) scale(0.9); }
@@ -925,12 +827,6 @@ select.field {
   animation-delay: var(--d, 300ms);
 }
 
-/* The hero's paper stack floats. */
-@keyframes float {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)); }
-  50% { transform: translate3d(0, -10px, 0) rotate(calc(var(--r, 0deg) + 0.6deg)); }
-}
-
 /* An endless row of formats. */
 @keyframes marquee {
   to { transform: translateX(-50%); }
@@ -979,12 +875,6 @@ select.field {
       animation-timeline: scroll();
       animation-range: 0 80px;
     }
-    /* The stack fans out as the hero scrolls away. */
-    .fan {
-      animation: fan linear both;
-      animation-timeline: view();
-      animation-range: exit 0% exit 100%;
-    }
     /* The footer's wordmark rises into place. */
     .wordmark {
       animation: wordmark linear both;
@@ -1003,13 +893,13 @@ select.field {
    entrance keeps its fade and slide, without the blur, which is costly to
    draw on a phone. */
 @media (pointer: coarse) {
-  .reveal, .reveal-line, .header-scroll, .fan, .wordmark { animation: none !important; }
+  .reveal, .reveal-line, .header-scroll, .wordmark { animation: none !important; }
   @keyframes step-in {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: none; }
   }
 }
-:root[data-app] :is(.reveal, .reveal-line, .header-scroll, .fan, .wordmark) { animation: none !important; }
+:root[data-app] :is(.reveal, .reveal-line, .header-scroll, .wordmark) { animation: none !important; }
 @keyframes header-firm {
   from { box-shadow: none; background-color: color-mix(in oklab, var(--surface) 55%, transparent); }
   to {
@@ -1017,18 +907,9 @@ select.field {
     background-color: color-mix(in oklab, var(--surface) 86%, transparent);
   }
 }
-@keyframes fan {
-  to { --spread: 1; }
-}
 @keyframes wordmark {
   from { transform: translateY(35%); opacity: 0; letter-spacing: 0.02em; }
   to { transform: none; opacity: 1; }
-}
-
-@property --spread {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1123,16 +1004,33 @@ body { overflow-x: clip; }
   [data-handle]::after { content: ""; position: absolute; inset: -8px; }
 }
 
+/* The tool machines' colours (src/components/machines): a white and grey
+   body in light, graphite in dark; each machine adds its own accent. */
+.machine, .sealer {
+  --m-body-1: #ffffff; --m-body-2: #eef0f3; --m-body-3: #dadde2; --m-side-1: #e4e7eb; --m-side-2: #c8ccd2;
+  --m-edge: rgb(255 255 255 / 0.95); --m-slot: #2b2e33; --m-cavity: #2a2d32; --m-mat: #3a3e44; --m-pad: #f4f5f7;
+  --m-shadow: #1b2433; --m-shadow-o: 0.22; --m-engraved: #9aa0a8;
+}
+:root[data-theme="dark"] :is(.machine, .sealer) {
+  --m-body-1: #50545b; --m-body-2: #3c3f45; --m-body-3: #2b2d32; --m-side-1: #35383e; --m-side-2: #24262a;
+  --m-edge: rgb(255 255 255 / 0.14); --m-slot: #0e0f11; --m-cavity: #141517; --m-mat: #1c1e21; --m-pad: #2c2f34;
+  --m-shadow: #000; --m-shadow-o: 0.6; --m-engraved: #7c828a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) :is(.machine, .sealer) {
+    --m-body-1: #50545b; --m-body-2: #3c3f45; --m-body-3: #2b2d32; --m-side-1: #35383e; --m-side-2: #24262a;
+    --m-edge: rgb(255 255 255 / 0.14); --m-slot: #0e0f11; --m-cavity: #141517; --m-mat: #1c1e21; --m-pad: #2c2f34;
+    --m-shadow: #000; --m-shadow-o: 0.6; --m-engraved: #7c828a;
+  }
+}
+
 /* Compress's vacuum sealer (src/components/machines/VacuumSealer.tsx): a
-   beige machine with a brushed-metal panel, a dark display, a knurled knob
-   and a red button; the bag comes out of the slot beneath it. A physical
-   object, so the same colours in both themes, with a deeper shadow in dark. */
-.sealer { --sealer-shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 -2px 0 rgb(0 0 0 / 0.06) inset, 0 14px 28px -10px rgb(60 45 20 / 0.35), 0 2px 4px rgb(60 45 20 / 0.12);
-  position: relative; width: 300px; max-width: 100%; height: 330px; margin-inline: auto; display: flex; flex-direction: column; align-items: center; }
-:root[data-theme="dark"] .sealer { --sealer-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 -2px 0 rgb(0 0 0 / 0.1) inset, 0 16px 34px -10px rgb(0 0 0 / 0.8), 0 2px 6px rgb(0 0 0 / 0.5); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sealer { --sealer-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset, 0 -2px 0 rgb(0 0 0 / 0.1) inset, 0 16px 34px -10px rgb(0 0 0 / 0.8), 0 2px 6px rgb(0 0 0 / 0.5); } }
+   brushed-metal panel with a dark display, a knurled knob and a button on
+   the machine's body; the bag comes out of the slot beneath it. */
+.sealer { position: relative; width: 300px; max-width: 100%; height: 330px; margin-inline: auto; display: flex; flex-direction: column; align-items: center; }
 .sealer-body { position: relative; z-index: 1; width: 100%; height: 104px; flex: none; border-radius: 22px 22px 16px 16px; display: flex; align-items: center; gap: 14px; padding: 12px 16px 22px;
-  background: linear-gradient(180deg, #f1ebdd 0%, #e6dcc6 62%, #d8ccb2 100%); box-shadow: var(--sealer-shadow); }
+  background: linear-gradient(180deg, var(--m-body-1) 0%, var(--m-body-2) 60%, var(--m-body-3) 100%);
+  box-shadow: 0 1px 0 var(--m-edge) inset, 0 -2px 0 rgb(0 0 0 / 0.06) inset, 0 14px 28px -10px color-mix(in srgb, var(--m-shadow) calc(var(--m-shadow-o) * 140%), transparent), 0 2px 4px rgb(0 0 0 / 0.12); }
 .sealer-plate { position: relative; flex: 1; height: 100%; border-radius: 12px; padding: 9px; display: flex; align-items: center;
   background: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.18) 0 1px, transparent 1px 3px), linear-gradient(180deg, #d9dcdf, #b9bdc2);
   box-shadow: 0 1px 0 rgb(255 255 255 / 0.8) inset, 0 -1px 0 rgb(0 0 0 / 0.15) inset, 0 1px 2px rgb(0 0 0 / 0.18); }
@@ -1148,6 +1046,14 @@ body { overflow-x: clip; }
   box-shadow: 0 3px 6px rgb(30 50 110 / 0.45), 0 1px 0 rgb(255 255 255 / 0.4) inset; }
 .sealer-knob::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #8fb2ff, #3d6ee0 70%); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
 .sealer-knob i { position: absolute; left: 50%; top: 11px; width: 3px; height: 8px; margin-left: -1.5px; border-radius: 2px; background: #fff; opacity: 0.9; }
-.sealer-button { width: 26px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, #ff6b5e, #d7362b); box-shadow: 0 2px 3px rgb(140 20 10 / 0.45), 0 1px 0 rgb(255 255 255 / 0.45) inset; }
-.sealer-slot { position: absolute; left: 34px; right: 34px; bottom: 8px; height: 6px; border-radius: 3px; background: linear-gradient(180deg, #2a2620, #4b443a); box-shadow: 0 1px 0 rgb(255 255 255 / 0.6); }
+.sealer-button { width: 26px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, #93b4ff, #3d6ee0 55%, #2550b8); box-shadow: 0 2px 3px rgb(20 40 110 / 0.4), 0 1px 0 rgb(255 255 255 / 0.45) inset; }
+.sealer-slot { position: absolute; left: 34px; right: 34px; bottom: 8px; height: 6px; border-radius: 3px; background: var(--m-slot); box-shadow: 0 1px 0 var(--m-edge); }
 .sealer-bag { position: relative; z-index: 0; margin-top: -14px; flex: none; filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.14)); }
+
+/* The other tools' machines (src/components/machines/Machines.tsx), in SVG. */
+.machine-stage { display: grid; place-items: center; width: 100%; min-height: 300px; }
+.machine { width: 300px; max-width: 100%; height: auto; overflow: hidden; }
+.machine-lcd { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; fill: #9ff0b6; }
+.machine-badge { font-family: var(--font-sans); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; fill: #fff; }
+.machine-num { font-family: var(--font-sans); }
+.machine-engraved { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; fill: var(--m-engraved); }
