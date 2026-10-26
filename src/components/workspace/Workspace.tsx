@@ -492,7 +492,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   if (view === "busy") {
     return (
       <div className="mx-auto flex max-w-[520px] flex-col items-center py-8 text-center" aria-live="polite">
-        <Processing tool={tool.id} value={progress.value} label={progress.label} />
+        <Processing tool={tool.id} value={progress.value} label={progress.label} file={files[0]} />
         {fileStates.length > 1 && fileStates.some((st) => st !== "wait") && (
           <ul aria-label={t("ws.fileQueue")} className="mt-6 max-h-[40vh] w-full overflow-y-auto rounded-xl border border-line bg-surface text-start text-[14px]">
             {files.map((f, i) => (
