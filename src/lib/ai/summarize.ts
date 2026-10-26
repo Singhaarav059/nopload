@@ -36,9 +36,10 @@ export const languageTag = (locale: string) => TAGS[locale] ?? locale;
 
 const LENGTHS: Length[] = ["short", "medium", "long"];
 
-// Paragraphs and list items under their headings, in reading order; tables,
-// figures, headers and footers are left out.
-async function readDoc(file: File, progress?: Progress): Promise<Doc> {
+// Paragraphs and list items under their headings, in reading order, and
+// the tables as grids of cell text; figures, headers and footers are left out.
+type Read = Doc & { tables: string[][][] };
+async function readDoc(file: File, progress?: Progress): Promise<Read> {
   const doc = await openPdf(await file.arrayBuffer());
   try {
     const layouts = await documentLayout(doc, (i) => progress?.(i * 0.9, doc.numPages));
@@ -47,6 +48,16 @@ async function readDoc(file: File, progress?: Progress): Promise<Doc> {
     const body = bodySizeOf(layouts.map((l) => ({ lines: all(l).flat() })));
     const units: Unit[] = [];
     const headings: string[] = [];
+    const tables: string[][][] = [];
+    for (const l of layouts)
+      for (const sec of l.sections)
+        for (const c of sec.columns)
+          for (const it of c.items) {
+            if (it.kind !== "table") continue;
+            const grid = Array.from({ length: it.table.rows }, () => Array<string>(it.table.cols).fill(""));
+            for (const cell of it.table.cells) grid[cell.row][cell.col] = cell.text.replace(/\s+/g, " ").trim();
+            tables.push(grid);
+          }
     let heading: string | undefined;
     for (const layout of layouts)
       for (const lines of all(layout))
@@ -56,7 +67,7 @@ async function readDoc(file: File, progress?: Progress): Promise<Doc> {
             headings.push(heading);
           } else units.push({ text: b.text.replace(/^([•◦▪●○■\-–*]|\d{1,3}[.)])\s+/, ""), heading });
         }
-    return { units, headings };
+    return { units, headings, tables };
   } finally {
     await closePdf(doc);
   }
@@ -132,6 +143,36 @@ async function translate(md: string, from: string | undefined, to: string): Prom
   }
 }
 
+// The figures in the document's tables, which a summary of its sentences
+// would miss: each table once (a report may repeat a table page after page),
+// its header row as a heading and a line per row, "label: value · value".
+// Only the document's own words, so it reads in the document's language.
+const TABLE_ROWS: Record<Length, number> = { short: 4, medium: 8, long: 16 };
+const mdClean = (s: string) => s.replace(/([\\`*_[\]<>#|])/g, "\\$1");
+function tableFacts(tables: string[][][], length: Length): { md: string; text: string; trimmed: boolean } {
+  const seen = new Set<string>();
+  const md: string[] = [];
+  const text: string[] = [];
+  let rows = 0;
+  let trimmed = false;
+  for (const grid of tables) {
+    const filled = grid.filter((r) => r.some((c) => c));
+    if (filled.length < 2 || filled[0].length < 2) continue;
+    const key = JSON.stringify(filled);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const [head, ...body] = filled;
+    const room = TABLE_ROWS[length] - rows;
+    if (body.length > room) trimmed = true;
+    if (room <= 0) break;
+    const lines = body.slice(0, room).map((r) => `${r[0] || head[0]}: ${r.slice(1).filter((c) => c).join(" · ")}`);
+    rows += lines.length;
+    md.push(`### ${mdClean(head.filter((c) => c).join(" · "))}`, "", ...lines.map((l) => `- ${mdClean(l)}`), "");
+    text.push(head.join(" · "), ...lines);
+  }
+  return { md: md.join("\n").trim(), text: text.join("\n"), trimmed };
+}
+
 // How many key points a language model writes for each length.
 const POINTS: Record<Length, number> = { short: 3, medium: 5, long: 8 };
 
@@ -188,7 +229,10 @@ const same = (a: string | undefined, b: string) => !!a && a.split("-")[0].toLowe
 export async function summarizePdf(file: File, o: { summaryLength: string; summaryLang: string; aiModel?: string }, progress?: Progress): Promise<Output[]> {
   const length = (LENGTHS.includes(o.summaryLength as Length) ? o.summaryLength : "medium") as Length;
   const doc = await readDoc(file, progress);
-  const text = doc.units.map((u) => u.text).join("\n");
+  const facts = tableFacts(doc.tables, length);
+  const prose = doc.units.map((u) => u.text).join("\n");
+  // What an AI reads: the sentences, and the tables' figures.
+  const text = facts.text ? `${prose}\n\n${facts.text}` : prose;
   if (!text.trim()) throw new PdfError("no_text", file.name);
   const lang = await detectLanguage(text);
   const target = o.summaryLang && o.summaryLang !== "same" ? languageTag(o.summaryLang) : undefined;
@@ -197,7 +241,8 @@ export async function summarizePdf(file: File, o: { summaryLength: string; summa
   if (o.aiModel === "cloud") {
     const cloud = await cloudSummary(doc, text, length, lang, wanted);
     progress?.(1, 1);
-    if (cloud) return [{ name: `${baseName(file.name)}-summary.md`, blob: new Blob([cloud.md.trim() + "\n"], { type: "text/markdown" }), note: `summary:cloud:${cloud.provider}` }];
+    // Too long to send whole (cloudInput): the note says the summary rests on part of it.
+    if (cloud) return [{ name: `${baseName(file.name)}-summary.md`, blob: new Blob([cloud.md.trim() + "\n"], { type: "text/markdown" }), note: `summary:cloud:${cloud.provider}${text.length > CLOUD_CHARS ? ":truncated" : ""}` }];
   }
   const model = o.aiModel
     ? await modelSummary(doc, length, lang, wanted, o.aiModel).catch(async (e) => {
@@ -209,8 +254,13 @@ export async function summarizePdf(file: File, o: { summaryLength: string; summa
     : null;
   const builtin = model ?? (await builtinSummary(doc, text, length, lang, wanted));
   let md = builtin?.md ?? summarize(doc, length, lang);
-  if (!md.trim()) throw new PdfError("no_text", file.name);
+  if (!md.trim() && !facts.md) throw new PdfError("no_text", file.name);
   let note = `summary:${model ? "model" : builtin ? "builtin" : "extractive"}${o.aiModel === "cloud" ? ":cloudFailed" : ""}`;
+  // The tables' figures follow the key points, which come from the sentences.
+  if (facts.md) {
+    md = md.trim() ? `${md.trim()}\n\n${facts.md}` : facts.md;
+    note += facts.trimmed ? ":tablesTrimmed" : ":tables";
+  }
   if (wanted && !builtin?.inOut) {
     const t = await translate(md, lang, wanted);
     if (t) md = t;

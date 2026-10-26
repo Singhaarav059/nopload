@@ -206,6 +206,9 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
           {cloudFailed && <>{t("res.cloudFailed")} </>}
           {t(cloud ? "res.summaryServer" : outputs.every((o) => o.note?.startsWith("summary:model")) ? "res.summaryModel" : outputs.every((o) => o.note?.startsWith("summary:builtin")) ? "res.summaryBuiltin" : "res.summaryExtractive")}
           {outputs.some((o) => o.note?.endsWith(":noLang")) && <> {t("res.summaryNoLang")}</>}
+          {/* What the summary rests on: the tables' figures listed under it (some left out), or part of a long document. */}
+          {outputs.some((o) => o.note?.includes(":tablesTrimmed")) ? <> {t("res.summaryTablesTrimmed")}</> : outputs.some((o) => o.note?.includes(":tables")) && <> {t("res.summaryTables")}</>}
+          {outputs.some((o) => o.note?.includes(":truncated")) && <> {t("res.summaryTruncated")}</>}
         </p>
       )}
       <p className="mt-2 flex items-center justify-center gap-1.5 text-[13px] text-muted">

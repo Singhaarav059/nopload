@@ -124,8 +124,18 @@ await test("report.pdf: Markdown output, named after the file, marked as extract
   const out = await run(report, {});
   eq(out.name, "report-summary.md", "name");
   eq(out.blob.type.startsWith("text/markdown"), true, "type");
-  eq(out.note, "summary:extractive", "note");
+  eq(out.note, "summary:extractive:tables", "note");
   eq(/^- /m.test(out.text), true, "key points as a list");
+});
+
+await test("report.pdf: the table's figures are in, the contact line is out", async () => {
+  const { text } = await run(report, { summaryLength: "medium" });
+  eq(/jane\.doe@example\.com|555 0134|Contact/.test(text), false, "no contact details");
+  for (const row of ["North: 1,200 · 1,350 · 12%", "South: 980 · 1,105 · 13%", "West: 2,040 · 2,210 · 8%"]) eq(text.includes(row), true, row);
+  // The three pages repeat the table; it is listed once.
+  eq(text.split("North:").length - 1, 1, "table listed once");
+  eq(ex.boilerplate("Revenue grew 12 percent this quarter."), false, "a fact is no boilerplate");
+  eq(ex.boilerplate("Call +44 20 7946 0958 or visit www.example.com."), true, "phone and link");
 });
 
 const art = await article();
@@ -188,8 +198,9 @@ await test("built-in Summarizer is used when it is available", async () => {
   globalThis.Summarizer = Summarizer;
   calls.length = 0;
   const out = await run(report, { summaryLength: "short" });
-  eq(out.note, "summary:builtin", "note");
-  eq(out.text.trim(), "- Built-in summary.", "text");
+  eq(out.note, "summary:builtin:tables", "note");
+  // Its key points, then the table's figures.
+  eq(out.text.trim().split("\n\n")[0], "- Built-in summary.", "text");
   const created = calls.find((c) => c[0] === "create")?.[1];
   eq(created?.length, "short", "length passed");
   eq(created?.type, "key-points", "type");
@@ -200,7 +211,7 @@ await test("built-in Summarizer that would need a download is left alone", async
     Summarizer.state = state;
     calls.length = 0;
     const out = await run(report, {});
-    eq(out.note, "summary:extractive", `note when ${state}`);
+    eq(out.note, "summary:extractive:tables", `note when ${state}`);
     eq(calls.some((c) => c[0] === "create"), false, `create called when ${state}`);
   }
   Summarizer.state = "available";
@@ -213,7 +224,7 @@ await test("a broken built-in Summarizer falls back to the extractive summary", 
   };
   const out = await run(report, {});
   Summarizer.create = create;
-  eq(out.note, "summary:extractive", "note");
+  eq(out.note, "summary:extractive:tables", "note");
   eq(out.text.includes("Revenue grew"), true, "text");
 });
 
@@ -222,7 +233,7 @@ await test("another language: translated line by line by the built-in Translator
   globalThis.Translator = Translator;
   calls.length = 0;
   const out = await run(report, { summaryLang: "es" });
-  eq(out.note, "summary:extractive", "note");
+  eq(out.note, "summary:extractive:tables", "note");
   const first = out.text.split("\n").find((l) => l.startsWith("- "));
   eq(first?.startsWith("- [es] "), true, "list marker kept, text translated");
   const created = calls.find((c) => c[0] === "tcreate")?.[1];
@@ -247,7 +258,7 @@ await test("another language without a Translator on the device: original langua
     } else delete globalThis.Translator;
     calls.length = 0;
     const out = await run(report, { summaryLang: "fr" });
-    eq(out.note, "summary:extractive:noLang", `note (${state ?? "no API"})`);
+    eq(out.note, "summary:extractive:tables:noLang", `note (${state ?? "no API"})`);
     eq(out.text.includes("Revenue grew"), true, "original text");
     eq(calls.some((c) => c[0] === "tcreate"), false, "create called");
   }
@@ -259,7 +270,7 @@ await test("the document's own language needs no translation", async () => {
   Translator.state = "available";
   calls.length = 0;
   const out = await run(report, { summaryLang: "en" });
-  eq(out.note, "summary:extractive", "note");
+  eq(out.note, "summary:extractive:tables", "note");
   eq(calls.some((c) => c[0] === "tcreate"), false, "translator created");
   delete globalThis.Translator;
   eq(requests, 0, "requests");

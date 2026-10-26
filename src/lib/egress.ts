@@ -5,8 +5,9 @@
 //   One to another origin counts as "offsite".
 // - The service worker (public/sw.js) sees requests from the page's workers
 //   too, which Resource Timing doesn't, and measures the body of any request
-//   that carries one: the bytes actually uploaded. It reports to every open
-//   tab of the site, so with several tabs open a tab may count another's.
+//   that carries one: the bytes actually uploaded. It reports each request
+//   to the tab that made it; only a worker's request with several tabs open
+//   (it can't tell whose worker it is) reaches every tab, marked `shared`.
 // - The Content-Security-Policy: a request it stopped fires a
 //   securitypolicyviolation event in the page, counted as "blocked".
 // blob: and data: addresses never leave the device and aren't counted.
@@ -22,7 +23,7 @@ export type Egress = {
   worker: boolean;
 };
 
-export type EgressMessage = { type: "nopload:egress"; url: string; bytes: number };
+export type EgressMessage = { type: "nopload:egress"; url: string; bytes: number; shared?: boolean };
 
 const EMPTY: Egress = { sent: 0, offsite: 0, blocked: 0, worker: false };
 let state = EMPTY;

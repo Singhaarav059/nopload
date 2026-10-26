@@ -30,6 +30,7 @@ import { parseRanges, type Output, type Progress } from "@/lib/pdf/common";
 import { forFile } from "@/lib/pdf/errors";
 import { isFieldKind, type FieldKind } from "@/lib/pdf/formsmeta";
 import type { ToolId } from "@/lib/tools";
+import { setEditorSource, type EditorSnapshot } from "@/lib/session";
 
 type EdTool = "select" | "editText" | "text" | "image" | "rect" | "ellipse" | "line" | "path" | "highlight" | "whiteout" | "redact" | "crop" | FieldKind | "place"
   | "erase" | "arrow" | "underline" | "strike" | "note" | "link" | "stamp" | "check" | "cross";
@@ -111,16 +112,18 @@ export const prepareEditor = (toolId: ToolId) =>
 // `others`: more files for a batch (crop, redact), which get the same crop box
 // or the same searches as `file`, the one on the canvas.
 export function Editor({
-  toolId, file, others = [], options, actionLabel, onRun, onError,
+  toolId, file, others = [], options, actionLabel, onRun, onError, resume,
 }: {
   toolId: ToolId; file: File; others?: File[]; options: Record<string, unknown>; actionLabel: string;
+  // Changes kept from before a change of language (src/lib/session.ts).
+  resume?: EditorSnapshot | null;
   onRun: (job: (p: Progress) => Promise<Output[]>) => void;
   // The file can't be opened (not a PDF, damaged, password-protected).
   onError: (e: unknown) => void;
 }) {
   const { t, locale } = useI18n();
   const [sizes, setSizes] = useState<Size[]>([]);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(resume?.page ?? 0);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(zoom);
   useEffect(() => {
@@ -128,8 +131,13 @@ export function Editor({
   }, [zoom]);
   const [fit, setFit] = useState(640);
   const [rendered, setRendered] = useState<{ key: string; url: string } | null>(null);
-  const items = useHistory<EditorItem[]>([]);
-  const marks = useHistory<Mark[]>([]);
+  const items = useHistory<EditorItem[]>((resume?.items as EditorItem[]) ?? []);
+  const marks = useHistory<Mark[]>((resume?.marks as Mark[]) ?? []);
+  // What has changed, for a change of language to keep, and for leaving to warn about.
+  useEffect(() => {
+    setEditorSource(() => ({ items: items.value, marks: marks.value, page }));
+    return () => setEditorSource(null);
+  }, [items.value, marks.value, page]);
   const [crops, setCrops] = useState<Map<number, FracRect>>(new Map());
   // Edit PDF starts on Edit content: anything on the page, ready to click.
   const [tool, setTool] = useState<EdTool>(toolId === "redact" ? "redact" : toolId === "crop" ? "crop" : toolId === "sign" ? "place" : toolId === "edit" ? "editText" : "select");

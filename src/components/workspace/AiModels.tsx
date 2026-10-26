@@ -129,8 +129,14 @@ export function AiModels({ models, value, onChange, task }: { models: string[]; 
 
   const drop = async (id: ModelId) => {
     const e = await import("@/lib/ai/engine");
-    await e.removeModel(id);
-    setStatus(await e.status());
+    try {
+      await e.removeModel(id);
+      setStatus(await e.status());
+    } catch (err) {
+      // The engine failed (src/lib/ai/engine.ts EngineFailed): the model stays listed, and the next try starts the engine afresh.
+      console.warn("The model couldn't be removed.", err);
+      return;
+    }
     if (value === id) void choose("device");
   };
 

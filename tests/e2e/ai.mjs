@@ -86,6 +86,35 @@ await suite(async ({ browser, test }) => {
     return `cites p. ${a.pages.join(", ")}`;
   });
 
+  // The AI worker breaks: its script fails, or it never answers. The page
+  // must not wait on it forever: it answers by keywords instead.
+  for (const mode of ["crashes", "never answers"]) {
+    await test(`the AI worker ${mode}: chat still answers`, async () => {
+      const broken = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
+      try {
+        await broken.addInitScript((crash) => {
+          const Real = window.Worker;
+          // The AI worker is the page's own (bundled) worker; pdf.js's comes from /vendor.
+          window.Worker = class extends Real {
+            constructor(url, o) {
+              const ai = String(url).includes("turbopack-worker");
+              super(ai ? URL.createObjectURL(new Blob([crash ? "throw new Error('broken on purpose')" : "/* never answers */"], { type: "text/javascript" })) : url, ai ? {} : o);
+            }
+          };
+        }, mode === "crashes");
+        const p = await broken.newPage();
+        await open(p, "/en/chat-with-pdf");
+        await pick(p, [twenty]);
+        await p.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 30000 });
+        const a = await ask(p, "What is the invoice total?", 50000);
+        if (a.pages[0] !== 14 || !a.text.includes("$1,234.50")) throw new Error(`cited ${a.pages}: ${a.text}`);
+        return `answered by keywords, cites p. ${a.pages[0]}`;
+      } finally {
+        await broken.close();
+      }
+    });
+  }
+
   await test("a citation shows its page", async () => {
     await page.getByRole("button", { name: t["chat.nextPage"] }).click();
     await page.locator("[data-citation='14']").first().click();

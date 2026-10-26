@@ -16,6 +16,7 @@ import type { PageItem } from "./PageBoard";
 import { AiModels, prepareAi } from "./AiModels";
 import { ErrorBox, useProblem, type Problem } from "./ErrorBox";
 import { peekHandoff, restoreHandoff } from "@/lib/handoff";
+import { forgetSession, resumeSession, setSessionSource, type EditorSnapshot } from "@/lib/session";
 import { fileExt, humanSize, type Output, type Progress } from "@/lib/pdf/common";
 import type { FileState, Track } from "@/lib/pdf/run";
 import { overBudget } from "@/lib/budget";
@@ -161,6 +162,22 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
   // come from storage once the page is up.
   const restored = useEffectEvent((handed: File[]) => void (handed.length && addFiles(handed, [])));
   useEffect(() => void restoreHandoff(toolId).then(restored), [toolId]);
+  // Work kept from this tool before a change of language (src/lib/session.ts).
+  const [keptEdits, setResumedEdits] = useState<EditorSnapshot | null>(null);
+  useEffect(() => {
+    if (openedWithFiles.current) return;
+    void resumeSession(toolId).then((kept) => {
+      if (!kept) return;
+      setOptions((o) => ({ ...o, ...kept.options }));
+      if (kept.editor) setResumedEdits(kept.editor);
+      restored(kept.files);
+    });
+  }, [toolId]);
+  // What this page holds, for a change of language to take along.
+  useEffect(() => {
+    setSessionSource(() => (items.length ? { tool: toolId, files: items.map((i) => i.file), options } : null));
+    return () => setSessionSource(null);
+  }, [items, options, toolId]);
   // The reader opened at a document (?doc=, from Back after handing it to a
   // tool, or a reload): it comes from Recent, where it was kept.
   useEffect(() => {
@@ -255,6 +272,8 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
 
   const reset = () => {
     stop();
+    void forgetSession();
+    setResumedEdits(null);
     setItems([]);
     setPages([]);
     setSelected(new Set());
@@ -618,7 +637,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
           </ul>
         )}
         {heavyNote}
-        <Editor key={items[0].id} toolId={tool.id} file={files[0]} others={files.slice(1)} options={options} actionLabel={t(`tool.${tool.id}.action`)} onRun={execute}
+        <Editor key={items[0].id} toolId={tool.id} file={files[0]} others={files.slice(1)} options={options} actionLabel={t(`tool.${tool.id}.action`)} onRun={execute} resume={keptEdits}
           onError={(e) => void drop(items[0].id, files[0], e)} />
       </div>
     );

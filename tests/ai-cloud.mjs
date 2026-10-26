@@ -192,6 +192,77 @@ await test("a flood of small requests is stopped, whatever X-Forwarded-For says"
   eq(statuses.slice(40), [429, 429, 429, 429, 429], "then 429");
 });
 
+// A Workers KV namespace in memory; `broken` makes every call fail.
+const kvStore = () => {
+  const data = new Map();
+  return {
+    data,
+    broken: false,
+    async get(key, type) {
+      if (this.broken) throw new Error("KV is down");
+      const v = data.get(key);
+      return v === undefined ? null : type === "json" ? JSON.parse(v) : v;
+    },
+    async put(key, value, o) {
+      if (this.broken) throw new Error("KV is down");
+      if (o?.expirationTtl < 60) throw new Error("expirationTtl under 60");
+      data.set(key, value);
+    },
+  };
+};
+// A second copy of the module is a second Worker instance: its own memory.
+const other = await import("../functions/api/ai.ts?instance=2");
+const postTo = (instance, body, env, headers) =>
+  instance.onRequestPost({
+    env,
+    request: new Request("https://nopload.pages.dev/api/ai", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://nopload.pages.dev", ...headers },
+      body: JSON.stringify(body),
+    }),
+  });
+
+await test("with AI_LIMITS, two instances share one visitor's budget", async () => {
+  mode = { reply: "ok", status: 200 };
+  const flood = async (env, addr) => {
+    const statuses = [];
+    for (let i = 0; i < 30; i++) statuses.push((await postTo({ onRequestPost }, chat, env, { "cf-connecting-ip": addr })).status);
+    for (let i = 0; i < 30; i++) statuses.push((await postTo(other, chat, env, { "cf-connecting-ip": addr })).status);
+    return statuses.filter((s) => s === 200).length;
+  };
+  // In memory, each instance counts on its own: 60 get through, not 40.
+  eq(await flood(claude, "10.6.6.1"), 60, "without the binding");
+  const kv = kvStore();
+  eq(await flood({ ...claude, AI_LIMITS: kv }, "10.6.6.2"), 40, "with it");
+  eq(JSON.parse(kv.data.get("ip:10.6.6.2")).requests, 40, "the shared count");
+});
+
+await test("when AI_LIMITS fails, the in-memory limit still holds", async () => {
+  mode = { reply: "ok", status: 200 };
+  const kv = kvStore();
+  kv.broken = true;
+  const statuses = [];
+  for (let i = 0; i < 42; i++) statuses.push((await post(chat, { ...claude, AI_LIMITS: kv }, { "cf-connecting-ip": "10.6.6.3" })).status);
+  eq(statuses.filter((s) => s === 200).length, 40, "40 then 429");
+});
+
+await test("AI_DAILY_CHARS caps all visitors together", async () => {
+  mode = { reply: "ok", status: 200 };
+  const kv = kvStore();
+  const env = { ...claude, AI_LIMITS: kv, AI_DAILY_CHARS: "100000" };
+  const big = { task: "chat", sources: "s".repeat(24_000), question: "q" };
+  const statuses = [];
+  // Different visitors, alternating instances: four fit in 100,000 characters.
+  for (let i = 0; i < 6; i++) statuses.push((await postTo(i % 2 ? other : { onRequestPost }, big, env, { "cf-connecting-ip": `10.5.5.${i}` })).status);
+  eq(statuses, [200, 200, 200, 200, 429, 429], "statuses");
+});
+
+await test("a POST without an Origin is refused", async () => {
+  const before = seen.length;
+  eq((await post(chat, claude, { origin: "" })).status, 403, "no Origin");
+  eq(seen.length, before, "no model ran");
+});
+
 await test("oversized, empty and mistyped requests are refused before any model runs", async () => {
   const before = seen.length;
   const big = JSON.stringify({ task: "chat", question: "q", sources: "s".repeat(500_000) });

@@ -218,4 +218,25 @@ await suite(async ({ browser, test }) => {
       await ctx.close();
     }
   });
+
+  // Two tabs of the site: bytes one sends show on its own chip only.
+  await test("another tab's uploads don't show on this tab's chip", async () => {
+    const ctx = await browser.newContext();
+    try {
+      const sender = await ctx.newPage();
+      await open(sender, "/en/compress-pdf");
+      await sender.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 20000 });
+      const quiet = await ctx.newPage();
+      await open(quiet, "/en/merge-pdf");
+      await quiet.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 20000 });
+      await sender.evaluate(() => fetch("/nopload-chip-probe", { method: "POST", body: new Uint8Array(2048) }).catch(() => {}));
+      await chipUntil(sender, (c) => c.sent === 2048, "2048 bytes sent");
+      await quiet.waitForTimeout(1500);
+      const c = await chip(quiet);
+      if (c.sent !== 0) throw new Error(`the other tab counts ${c.sent} bytes`);
+      return "sender 2048 bytes, other tab 0";
+    } finally {
+      await ctx.close();
+    }
+  });
 });

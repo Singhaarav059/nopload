@@ -5,6 +5,7 @@ import { Download, Share, PlusSquare, MoreVertical, MonitorDown, X, Zap, WifiOff
 import { useI18n } from "./I18n";
 import { BRAND } from "@/lib/brand";
 import { deviceOs, inAndroidApp, subscribeDevice, type Os } from "@/lib/device";
+import { useDialog } from "@/lib/useDialog";
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -59,7 +60,7 @@ export function InstallButton() {
   const { ready, installed, prompt } = useInstall();
   if (installed) return null;
   return (
-    <button type="button" data-install-button className="install-pill" onClick={() => void (ready ? prompt() : openInstall())}>
+    <button type="button" data-install-button className="install-pill" aria-label={t("install.cta")} onClick={() => void (ready ? prompt() : openInstall())}>
       <Download size={15} strokeWidth={2} aria-hidden /> <span>{t("install.cta")}</span>
     </button>
   );
@@ -92,7 +93,7 @@ export function InstallBanner() {
     }
   };
   return (
-    <section data-web-only aria-labelledby="install-banner" className="install-banner">
+    <section data-web-only aria-labelledby="install-banner" className="install-banner aurora">
       <div aria-hidden className="install-art install-art-sm"><span className="install-phone"><span /><span /><span /><span /></span></div>
       <div className="min-w-0 grow basis-[15rem]">
         <h2 id="install-banner" className="text-[1.15rem] font-semibold tracking-[-0.01em]">{t("install.bannerTitle", { brand: BRAND.name })}</h2>
@@ -116,19 +117,14 @@ export function InstallSheet() {
     window.addEventListener(OPEN, on);
     return () => window.removeEventListener(OPEN, on);
   }, []);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  const dialog = useDialog<HTMLDivElement>(open, () => setOpen(false));
   if (!open) return null;
   const steps = STEPS[os ?? "linux"];
   const why: [typeof Zap, string][] = [[Zap, "install.why1"], [WifiOff, "install.why2"], [FileInput, "install.why3"], [Feather, "install.why4"]];
   return (
     <div className="install-wrap">
       <button type="button" aria-label={t("nav.close")} tabIndex={-1} className="cmd-scrim" onClick={() => setOpen(false)} />
-      <div role="dialog" aria-modal aria-labelledby="install-title" className="install-sheet">
+      <div ref={dialog} role="dialog" aria-modal aria-labelledby="install-title" className="install-sheet">
         <button type="button" className="icon-btn absolute end-3 top-3" aria-label={t("nav.close")} onClick={() => setOpen(false)}><X size={18} /></button>
         <div aria-hidden className="install-art"><span className="install-phone"><span /><span /><span /><span /></span></div>
         <h2 id="install-title" className="text-[1.45rem] font-semibold tracking-[-0.02em]">{t("install.sheetTitle", { brand: BRAND.name })}</h2>

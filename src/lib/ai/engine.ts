@@ -21,30 +21,81 @@ export { MODEL_IDS, sizeOf, type ModelId };
 // Models this build of the site serves (NOPLOAD_AI_MODELS, scripts/vendor.mjs).
 export const servedModels = () => MODEL_IDS.filter((m) => AI_MODELS.includes(m));
 
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; onEvent?: (e: never) => void };
+type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; onEvent?: (e: never) => void; settle: () => void; alive: () => void };
 let worker: Worker | null = null;
 let seq = 0;
 const pending = new Map<number, Pending>();
 
 export class Aborted extends Error {}
+// The worker failed (its script didn't load, it crashed, or a call went
+// quiet for too long): every call waiting on it is rejected with this, the
+// worker is dropped, and the next call starts a fresh one.
+export class EngineFailed extends Error {}
+
+// How long a call may go without an answer or a sign of progress before the
+// worker is taken to be stuck. A download or an answer reports progress as
+// it goes, so only real silence counts.
+// Loading a model or embedding a long document can take minutes on a slow
+// device without saying anything; a status check never should.
+const QUIET: Record<string, number> = { status: 20_000, remove: 30_000, load: 300_000, prepare: 300_000, embed: 300_000 };
+const QUIET_DEFAULT = 180_000;
+
+function fail(err: Error) {
+  const w = worker;
+  worker = null;
+  w?.terminate();
+  const waiting = [...pending.values()];
+  pending.clear();
+  for (const p of waiting) {
+    p.settle();
+    p.reject(err);
+  }
+}
+
+function start(): Worker {
+  const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  w.addEventListener("message", (e: MessageEvent<{ id: number; result?: unknown; error?: string; aborted?: boolean; event?: never }>) => {
+    const p = pending.get(e.data.id);
+    if (!p) return;
+    p.alive();
+    if (e.data.event !== undefined) return p.onEvent?.(e.data.event);
+    pending.delete(e.data.id);
+    p.settle();
+    if (e.data.error !== undefined) p.reject(e.data.aborted ? new Aborted(e.data.error) : new Error(e.data.error));
+    else p.resolve(e.data.result);
+  });
+  w.addEventListener("error", (e) => {
+    e.preventDefault();
+    if (worker === w) fail(new EngineFailed(e.message || "The AI engine stopped."));
+  });
+  w.addEventListener("messageerror", () => {
+    if (worker === w) fail(new EngineFailed("The AI engine sent something unreadable."));
+  });
+  return w;
+}
 
 function call<T>(type: string, payload: object = {}, onEvent?: (e: never) => void, signal?: AbortSignal): Promise<T> {
-  if (!worker) {
-    worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-    worker.addEventListener("message", (e: MessageEvent<{ id: number; result?: unknown; error?: string; aborted?: boolean; event?: never }>) => {
-      const p = pending.get(e.data.id);
-      if (!p) return;
-      if (e.data.event !== undefined) return p.onEvent?.(e.data.event);
-      pending.delete(e.data.id);
-      if (e.data.error !== undefined) p.reject(e.data.aborted ? new Aborted(e.data.error) : new Error(e.data.error));
-      else p.resolve(e.data.result);
-    });
-  }
+  if (signal?.aborted) return Promise.reject(new Aborted("Stopped."));
+  worker ??= start();
+  const w = worker;
   const id = ++seq;
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onEvent });
-    signal?.addEventListener("abort", () => worker?.postMessage({ id: ++seq, type: "abort", target: id }));
-    worker!.postMessage({ id, type, ...payload });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const alive = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (pending.has(id) && worker === w) fail(new EngineFailed(`The AI engine didn't answer (${type}).`));
+      }, QUIET[type] ?? QUIET_DEFAULT);
+    };
+    const onAbort = () => worker === w && w.postMessage({ id: ++seq, type: "abort", target: id });
+    const settle = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onEvent, settle, alive });
+    signal?.addEventListener("abort", onAbort, { once: true });
+    alive();
+    w.postMessage({ id, type, ...payload });
   });
 }
 

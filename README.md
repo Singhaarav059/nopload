@@ -4,25 +4,25 @@ Nopload is a free, open-source (MIT) PDF toolkit that runs in your web browser. 
 
 ## At a glance
 
-- **31 tools**: merge, split, compress, OCR, convert to and from Word, Excel, PowerPoint and images, PDF/A, edit, sign, redact, compare, protect and more (full list below).
+- **53 tools**: merge, split, compress, OCR, convert to and from Word, Excel, PowerPoint and images, PDF/A, edit, sign, redact, compare, protect and more (full list below).
 - **Free, with no daily or hourly limits and no account.** Each task takes files up to 200 MB, up to 100 at a time.
 - **Private by construction.** Processing happens in the browser tab with WebAssembly builds of PDF.js, qpdf, PDFium, Tesseract and LibreOffice. A Content-Security-Policy stops the page from contacting any other site, and each tool page shows a live count of bytes uploaded (0).
 - **Works offline** after the first visit, and installs as an app.
-- **26 interface languages**, including right-to-left Arabic.
+- **32 interface languages**, including right-to-left Arabic, Persian and Urdu.
 - **No analytics, ads or tracking cookies.**
 
 ## Tools
 
 | | |
 |---|---|
-| **Organise** | Merge, split, extract pages, remove pages, organise (reorder, rotate, insert), scan to PDF with the camera |
-| **Optimise** | Compress, repair, OCR (makes scans searchable, 26 languages) |
+| **Organise** | Merge, split, extract pages, remove pages, organise (reorder, rotate, insert), several pages per sheet, booklet, remove blank pages, alternate and mix, scan to PDF with the camera |
+| **Optimise** | Compress (also to a target size), exam photo resizer, optimise for the web, accessible PDF, grayscale, repair, OCR (makes scans searchable, 123 languages), clean up scans |
 | **Convert to PDF** | Images, Word, PowerPoint, Excel/CSV, web pages or HTML files |
-| **Convert from PDF** | Images (JPG/PNG), Word, PowerPoint, Excel, PDF/A, Markdown |
-| **Edit** | Rotate, page numbers, watermark, crop, edit (text, images, shapes, drawing), fill and create forms |
-| **Security** | Unlock, protect with a password, sign, redact (removes the text, not just covers it), compare two versions |
+| **Convert from PDF** | Images (JPG/PNG), Word, PowerPoint, Excel, PDF/A, Markdown; AI summary, chat with a PDF, translate; read aloud |
+| **Edit** | Viewer, rotate, page numbers, watermark, header and footer, crop, resize pages, edit (text, images, shapes, drawing), fill and create forms, metadata, bookmarks, attachments, flatten |
+| **Security** | Unlock, protect with a password, sign, verify signatures, redact (removes the text, not just covers it), sanitise, compare two versions |
 
-Also: saved workflows that run several tools in a row, "continue with" another tool without downloading, an installable offline app, and 26 interface languages including right-to-left Arabic.
+Also: saved workflows that run several tools in a row, "continue with" another tool without downloading, and an installable offline app.
 
 ## Two ways to run it
 
@@ -42,8 +42,8 @@ Honest ones, so you can decide whether it fits:
 
 - **Your device does the work.** Large files take as long as your computer or phone needs, and memory is the real limit: very large or many-page files can fail on phones.
 - **Word, Excel and PowerPoint to PDF** at full fidelity uses LibreOffice in the browser: a 79 MB download the first time and about 1 GB of memory. On phones and small devices the file is laid out in the browser and saved through the print dialog instead, which is less faithful for complex documents. In Safari LibreOffice can stop partway; Automatic then prints instead too.
-- **OCR** reads 26 languages. Accuracy depends on the scan; the high-accuracy engine (PaddleOCR) is a further 36 MB download.
-- **Redaction** rebuilds pages that have redactions as images, so nothing hidden survives; the text outside the redacted areas stays searchable.
+- **OCR** reads 123 languages, up to 3 at once. Accuracy depends on the scan; the high-accuracy engine (PaddleOCR) is a further 36 MB download.
+- **Redaction** removes the marked text, images and drawings from the page itself, so the rest stays sharp and searchable. Pages it can't clean that way, scanned pages, and any page where removed text still shows up afterwards are rebuilt as images, so nothing hidden survives.
 - **Web pages by address** and the contact form need the server build. The static build converts HTML files, not URLs.
 - **Hosting**: the site must be served from the root of a domain, not a sub-path.
 - **The AI tools** (Chat with PDF, Summarize, Translate) run on the device when it can run an AI model (a computer with WebGPU and enough memory): a one-time download of 270 to 570 MB, then nothing is sent. Phones and older devices get server AI by default instead: the PDF stays on the device, but the text the tool needs goes to Anthropic's Claude, or to Cloudflare Workers AI when Anthropic can't answer. Each tool says which it uses, and those devices can choose on-device AI, which gives simpler answers (see [Cloud AI](#cloud-ai)).
@@ -64,8 +64,11 @@ Cloudflare Pages reads the `_headers` file the build writes: the Content-Securit
 
 Server AI, which phones and older devices use (devices that can run the models use on-device AI only; see `deviceCanRunModels` in `src/lib/ai/engine.ts`), is a Cloudflare Pages Function, `functions/api/ai.ts`, deployed with the site from the same repository. It holds one fixed prompt per task and caps every input, so it can't be used as a general chatbot. Set it up in the Pages project's **Settings**:
 
-- **Variables and Secrets**: add `ANTHROPIC_API_KEY` (type Secret) with a key from the Anthropic Console. Set a monthly spend limit there too: it is the hard cap on cost.
+- **Variables and Secrets**: add `ANTHROPIC_API_KEY` (type Secret) with a key from the Anthropic Console.
 - **Bindings**: add a **Workers AI** binding named `AI`. It's the backup when Anthropic can't answer (no credit, an outage), covered by Cloudflare's free daily allowance of 10,000 neurons (roughly 400 questions). A request with `"provider": "cloudflare"` uses it alone, for testing.
+- **Bindings**: add a **KV namespace** binding named `AI_LIMITS` (create the namespace under **Storage & Databases → KV** first). Each visitor gets 40 requests a minute, 200 an hour and 600,000 characters an hour; with the binding those counts are shared by every instance of the function. Without it each instance counts on its own and forgets on restart, so the real limit is several times higher. Each AI request costs one KV write (two with `AI_DAILY_CHARS`). The free plan allows 1,000 writes a day; past that, KV refuses writes and the function goes back to counting per instance until the next day, so a busier site needs the Workers Paid plan.
+- Optional: `AI_DAILY_CHARS`, a cap on the characters all visitors together send in a day (UTC), for example `2000000` (about 600,000 input tokens). It holds best with `AI_LIMITS`; KV takes a few seconds to agree everywhere, so a burst can go a little over.
+- Spend limits at the providers: these limits keep one visitor from running up the bill, but only the providers can stop all spending. In the Anthropic Console (**Settings → Limits**) set a monthly spend limit and an alert below it; it's the hard cap. Workers AI is capped by Cloudflare's free allowance unless the account is on a paid plan; there, watch usage under **AI → Workers AI**.
 - Optional: `ALLOWED_ORIGINS`, other copies of the site whose pages may call it (comma-separated; the default is `https://nopload.vercel.app`), and `ANTHROPIC_MODEL` / `FALLBACK_MODEL` to change the models (`claude-haiku-5-5`, `@cf/qwen/qwen3-30b-a3b-fp8`).
 
 With neither set, `/api/ai` answers 503 and the tools quietly use on-device AI. To leave the cloud AI out entirely (a host that can't run Functions), build with `NOPLOAD_AI_CLOUD=0`. The Vercel build forwards `/api/ai` to the Cloudflare copy named by `AI_ORIGIN` (default `https://nopload.pages.dev`; empty turns it off).

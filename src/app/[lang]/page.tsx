@@ -7,7 +7,7 @@ import { ToolIcon } from "@/components/ToolIcon";
 import { Words } from "@/components/Motion";
 import { HeroDrop } from "@/components/HeroDrop";
 import { HowGuide } from "@/components/HowGuide";
-import { RecentFiles } from "@/components/RecentFiles";
+import { HomeBoard } from "@/components/HomeBoard";
 import { InstallBanner } from "@/components/InstallGuide";
 import { Friend, HeroScene, SleepyCloud, Sparkle } from "@/components/Studio";
 import { format, getDictionary } from "@/lib/i18n/dictionary";
@@ -15,7 +15,7 @@ import { hasLocale } from "@/lib/i18n/locales";
 import { TOOLS } from "@/lib/tools";
 import { STATIC } from "@/lib/mode";
 import { BRAND } from "@/lib/brand";
-import { pageMetadata, pageUrl } from "@/lib/seo";
+import { pageMetadata } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/[lang]">): Promise<Metadata> {
   const { lang } = await params;
@@ -28,24 +28,29 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
   const { lang } = await params;
   if (!hasLocale(lang)) notFound();
   const t = await getDictionary(lang);
-  const popular = ["merge", "compress", "pdfToWord", "jpgToPdf", "edit", "sign", "split"].map((id) => TOOLS.find((x) => x.id === id)!);
   const chain = ["merge", "compress", "pageNumbers", "protect"].map((id) => TOOLS.find((x) => x.id === id)!);
   const local = TOOLS.filter((x) => x.runtime === "browser").length;
 
 
   return (
-    <div className="mx-auto max-w-[1240px] px-4 sm:px-6">
+    <div className="relative mx-auto max-w-[1240px] px-4 sm:px-6">
       {/* Hero: what this is, a way in for people who don't know which tool
           they need, and the most used tools. The scene says the rest: the
           work happens in this window, and the cloud gets nothing. */}
+      {/* The one burst of colour: a soft glow behind the hero, drawn once. */}
+      <div aria-hidden className="aurora-wash" />
       <section data-app-hero className="relative grid items-center gap-10 pb-10 pt-10 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:gap-8 lg:pb-16 lg:pt-20">
         <div className="flex min-w-0 flex-col">
-          <p data-web-only data-cat="organize" className="fade-up pill self-start" style={{ "--d": "0ms" } as React.CSSProperties}>
-            <ShieldCheck size={14} strokeWidth={2} aria-hidden />
-            <span className="tabular">{local}/{TOOLS.length}</span>
-            {t["home.privateBadge"]}
-          </p>
-          <h1 data-app-title className="display mt-6 max-w-[15ch] text-[2.75rem] sm:text-[4rem] lg:text-[4.6rem]">
+          <div data-web-only className="fade-up flex flex-wrap items-center gap-2" style={{ "--d": "0ms" } as React.CSSProperties}>
+            <p data-cat="organize" className="pill">
+              <ShieldCheck size={14} strokeWidth={2} aria-hidden />
+              <span className="tabular">{local}/{TOOLS.length}</span>
+              {t["home.privateBadge"]}
+            </p>
+            {/* The exception, said where the claim is: AI can use the server. */}
+            <Link href={`/${lang}/privacy`} className="pill text-ink-2 hover:text-ink">{t["home.aiBadge"]}</Link>
+          </div>
+          <h1 data-app-title className="display hero-title mt-6 max-w-[14ch] text-[3rem] sm:text-[4.5rem] lg:text-[5.4rem]">
             <Words text={t["home.title"]} />
           </h1>
           <p data-web-only className="fade-up mt-6 max-w-[540px] text-pretty text-[17px] leading-[1.6] text-ink-2 sm:text-[18px]" style={{ "--d": "450ms" } as React.CSSProperties}>
@@ -54,32 +59,16 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
           <div className="fade-up mt-8 max-w-[600px]" style={{ "--d": "600ms" } as React.CSSProperties}>
             <HeroDrop />
           </div>
-          <nav aria-label={t["home.popular"]} className="fade-up mt-7" style={{ "--d": "750ms" } as React.CSSProperties}>
-            <p className="eyebrow mb-3">{t["home.popular"]}</p>
-            <ul className="flex flex-wrap gap-2">
-              {popular.map((tool) => (
-                <li key={tool.id}>
-                  <Link
-                    href={pageUrl(lang, `/${tool.slug}`)}
-                    className="group flex h-11 items-center gap-2 rounded-full border border-line bg-surface ps-1.5 pe-4 text-[14px] font-medium shadow-card transition-[border-color,box-shadow,translate] duration-300 ease-(--ease-out) hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift"
-                  >
-                    <ToolIcon tool={tool} size={32} />
-                    {t[`tool.${tool.id}.name` as keyof typeof t]}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <a data-web-only href="#tools" className="link-u mt-5 inline-flex items-center gap-1.5 text-[14px] font-medium text-ink-2 hover:text-ink">
-              {format(t["home.browseAll"], { n: TOOLS.length })} <ArrowDown size={14} aria-hidden />
-            </a>
-          </nav>
+          <a data-web-only href="#tools" className="fade-up link-u mt-6 inline-flex items-center gap-1.5 self-start text-[14px] font-medium text-ink-2 hover:text-ink" style={{ "--d": "750ms" } as React.CSSProperties}>
+            {format(t["home.browseAll"], { n: TOOLS.length })} <ArrowDown size={14} aria-hidden />
+          </a>
         </div>
         <div data-web-only className="fade-up hidden sm:block" style={{ "--d": "200ms" } as React.CSSProperties}>
           <HeroScene badge={t["home.privateBadge"]} />
         </div>
       </section>
 
-      <RecentFiles className="mb-10 mt-8" />
+      <HomeBoard />
       <InstallBanner />
 
       <div data-web-only className="mt-20 sm:mt-28">

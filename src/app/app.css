@@ -610,6 +610,19 @@ html[data-viewer] body { overflow: hidden; }
   animation: vw-toast 3.5s var(--ease-spring) both;
 }
 @keyframes vw-toast { 0% { opacity: 0; translate: -50% 10px; } 8%, 85% { opacity: 1; translate: -50% 0; } 100% { opacity: 0; } }
+/* Once, the first time a file is kept on this device: says so, with a way out. */
+.vw-notice {
+  position: absolute; z-index: 4; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 72px); translate: -50% 0;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px;
+  width: min(520px, calc(100% - 24px)); padding: 12px 12px 12px 16px; border-radius: 20px;
+  background: var(--ink); color: var(--bg); box-shadow: 0 18px 40px rgb(0 0 0 / 0.25);
+  animation: vw-drop 360ms var(--ease-spring) both;
+}
+.vw-notice p { flex: 1 1 240px; font-size: 13.5px; line-height: 1.4; }
+.vw-notice div { display: flex; gap: 4px; }
+.vw-notice .vw-btn { height: 34px; padding: 0 12px; font-weight: 500; }
+.vw-notice .vw-btn-on { background: var(--bg); color: var(--ink); }
+.vw-notice .vw-btn-on:hover { background: color-mix(in oklab, var(--bg) 88%, var(--ink)); }
 
 .vw-search {
   position: absolute; z-index: 3; top: calc(env(safe-area-inset-top) + 62px); right: 8px; width: min(440px, calc(100% - 16px));
