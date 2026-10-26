@@ -2,14 +2,14 @@
 
 // Paper in motion, sized by its parent: the 2D version (CSS, in the HTML from
 // the start, so nothing shifts) with the 3D scene cross-fading over it where
-// the device allows (src/lib/paper.ts wants3d). Purely decorative.
+// the device allows (src/lib/paper.ts wants3d). Purely decorative: when its
+// code can't be had (offline, with it not cached), the 2D version stays.
 
-import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { PaperStack } from "../Motion";
 import { wants3d, type PaperAction, type PaperMode, type PaperMotion } from "@/lib/paper";
 
-const PaperScene = dynamic(() => import("./PaperScene"), { ssr: false });
+type Scene = ComponentType<{ mode: PaperMode; onReady: () => void }>;
 
 // The CSS version of an action: two sheets and a mark (cut line, seal, scan
 // bar) that globals.css animates per action (.p2d-*).
@@ -53,15 +53,26 @@ export function PaperStage({ mode, motion, className = "" }: { mode: PaperMode; 
     return () => clearTimeout(id);
   }, [motion]);
   const onReady = useCallback(() => setReady(true), []);
+  // three.js comes in its own chunk, loaded here rather than by next/dynamic,
+  // whose failed load would take the page down with it.
+  const [Scene, setScene] = useState<Scene | null>(null);
+  useEffect(() => {
+    if (!three) return;
+    let live = true;
+    import("./PaperScene").then((m) => live && setScene(() => m.default), () => live && setThree(false));
+    return () => {
+      live = false;
+    };
+  }, [three]);
 
   return (
     <div aria-hidden className={`relative ${className}`}>
       <div className={`absolute inset-0 grid place-items-center transition-opacity duration-700 ${ready ? "opacity-0" : "opacity-100"}`}>
         {mode === "hero" ? <PaperStack /> : <Paper2D action={mode} motion={motion} />}
       </div>
-      {three && (
+      {three && Scene && (
         <div className={`absolute inset-0 transition-opacity duration-700 ${ready ? "opacity-100" : "opacity-0"}`}>
-          <PaperScene mode={mode} onReady={onReady} />
+          <Scene mode={mode} onReady={onReady} />
         </div>
       )}
     </div>
