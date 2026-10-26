@@ -1,37 +1,58 @@
 // /api/ai: the cloud AI behind Chat, Summarize and Translate PDF, as a
 // Cloudflare Pages Function (Vercel forwards /api/ai here, see
-// scripts/vercel-output.mjs). The providers set up are tried in order
-// (AI_ORDER), the first that answers wins: by default Groq's free tier
-// (Llama 3.3 70B), then Claude Haiku (Anthropic), then Cloudflare Workers
-// AI. The page only ever sends the text a task needs, never the file, and
-// it tells the visitor when no provider answers.
+// scripts/vercel-output.mjs). The page only ever sends the text a task
+// needs, never the file.
+//
+// Built to keep answering at no cost when many people use it at once:
+//  - A pool of free tiers: each provider's keys (comma-separated in
+//    *_API_KEYS) times its models (each a separate rate limit on Groq and
+//    Cerebras), tried in order (AI_ORDER), the keys taking turns being first
+//    (round robin). By default: Groq (Llama 3.3 70B, then Llama 3.1 8B),
+//    Cerebras (the same two), then Claude (Anthropic, paid per use) and
+//    Cloudflare Workers AI (a free daily allowance).
+//  - A key and model that answers 429 rests for a minute (or as long as its
+//    Retry-After asks) and the request moves on to the next one at once.
+//  - When every one is busy at the same moment, the request waits 1.5 to
+//    2.5 seconds and tries them all again before giving up; then it answers
+//    503 { fallbackToLocal: true } and the page answers on the device, if it
+//    has a model there.
+//  - The last 500 replies are kept in memory for six hours, by a hash of the
+//    request, and the same request is answered from them without a model.
+//  - Fair use: at most 10 chat questions a minute and 60 a day per visitor,
+//    on top of the character budgets below.
 //
 // The prompts live here, one per task, so the endpoint can't be used as a
 // general-purpose chatbot, and every input is capped in size.
 //
-//   GET  /api/ai → { groq, anthropic, cloudflare, gemini, openrouter }: which providers are set up.
+//   GET  /api/ai → { groq, cerebras, anthropic, gemini, openrouter, cloudflare }: which are set up.
 //   POST /api/ai { task: "chat", sources, question, history? }      → text, streamed
 //   POST /api/ai { task: "summarize", text, points, language }      → text, streamed
 //   POST /api/ai { task: "translate", texts, language }             → { texts }
 // Any of them may add provider: "cloudflare" to use only Workers AI (the
 // visitor chose it; their text then goes nowhere else).
-// The X-AI-Provider response header names who answered.
+// The X-AI-Provider response header names who answered; X-AI-Cache: hit
+// says it was a kept reply.
 //
 // Settings (Cloudflare dashboard → the Pages project → Settings):
-//   GROQ_API_KEY        secret (free at console.groq.com); Llama 3.3 70B,
-//                       fast, and Groq doesn't train on what it's sent.
+//   GROQ_API_KEYS       secret: Groq keys, comma-separated (free at
+//                       console.groq.com, one per account); GROQ_API_KEY for
+//                       just one. Groq doesn't train on what it's sent.
+//   CEREBRAS_API_KEYS   secret: Cerebras keys (cloud.cerebras.ai), likewise;
+//                       Cerebras keeps none of what it's sent.
 //   ANTHROPIC_API_KEY   secret; Claude, paid per use.
 //   AI                  Workers AI binding (free daily allowance).
 //                       (Its replies aren't streamed: see cloudflare() below.)
-//   GEMINI_API_KEY, OPENROUTER_API_KEY
+//   GEMINI_API_KEYS, OPENROUTER_API_KEYS
 //                       secrets for Google Gemini's and OpenRouter's free
 //                       tiers. Their free tiers may use what they're sent to
 //                       improve their models, which the privacy policy
 //                       promises we don't allow: they're used only when
 //                       AI_FREE_TIERS_MAY_TRAIN is "1", and the privacy
 //                       policy (src/lib/legal.ts) must then say so.
+//   GROQ_MODELS, CEREBRAS_MODELS, GEMINI_MODELS, OPENROUTER_MODELS
+//                       optional: each pool's models, best first, comma-separated.
 //   AI_ORDER            optional: which providers to try, in order,
-//                       comma-separated (default: groq,anthropic,gemini,openrouter,cloudflare).
+//                       comma-separated (default: groq,cerebras,anthropic,gemini,openrouter,cloudflare).
 //   ALLOWED_ORIGINS     other sites whose pages may call this, comma-separated
 //                       (default: https://nopload.vercel.app).
 //   AI_QUOTA            D1 database binding; with it the limits below are
@@ -41,8 +62,9 @@
 //                       the limits then hold roughly across instances.
 //   AI_DAILY_CHARS      optional cap on the characters all visitors send in
 //                       a day (UTC); 2,000,000 is about 600,000 tokens.
-//   ANTHROPIC_MODEL, FALLBACK_MODEL, GROQ_MODEL, GEMINI_MODEL, OPENROUTER_MODEL,
-//   and *_BASE_URL for each                 optional overrides.
+//   AI_QUOTA also keeps the chat fair-use counts exact (table ai_chat).
+//   ANTHROPIC_MODEL, FALLBACK_MODEL, *_BASE_URL, AI_RETRY_JITTER_MS ("1500-2500")
+//                       optional overrides; AI_CACHE "off" keeps no replies.
 
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -64,14 +86,26 @@ export type Env = {
   AI?: WorkersAi;
   AI_ORDER?: string;
   AI_FREE_TIERS_MAY_TRAIN?: string;
+  AI_RETRY_JITTER_MS?: string;
+  AI_CACHE?: string;
   GROQ_API_KEY?: string;
+  GROQ_API_KEYS?: string;
   GROQ_MODEL?: string;
+  GROQ_MODELS?: string;
   GROQ_BASE_URL?: string;
+  CEREBRAS_API_KEY?: string;
+  CEREBRAS_API_KEYS?: string;
+  CEREBRAS_MODELS?: string;
+  CEREBRAS_BASE_URL?: string;
   GEMINI_API_KEY?: string;
+  GEMINI_API_KEYS?: string;
   GEMINI_MODEL?: string;
+  GEMINI_MODELS?: string;
   GEMINI_BASE_URL?: string;
   OPENROUTER_API_KEY?: string;
+  OPENROUTER_API_KEYS?: string;
   OPENROUTER_MODEL?: string;
+  OPENROUTER_MODELS?: string;
   OPENROUTER_BASE_URL?: string;
 };
 type Context = { request: Request; env: Env };
@@ -270,7 +304,8 @@ async function readBody(request: Request): Promise<string | null> {
 
 type Message = { role: "user" | "assistant"; content: string };
 // json: the reply is a JSON object with the keys "1" to `count`.
-type Job = { system: string; messages: Message[]; maxTokens: number; json?: boolean; count?: number };
+// chat: a Chat with PDF question, which the fair-use limit counts.
+type Job = { system: string; messages: Message[]; maxTokens: number; json?: boolean; count?: number; chat?: boolean };
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
 const languageName = (tag: string) => {
@@ -311,6 +346,7 @@ export function jobOf(body: Record<string, unknown>): Job | string {
       system: CHAT_SYSTEM,
       messages: [...history, { role: "user", content: `Excerpts from the document:\n${sources}\n\nQuestion: ${question}` }],
       maxTokens: 900,
+      chat: true,
     };
   }
   if (body.task === "summarize") {
@@ -431,27 +467,71 @@ async function* withoutThinking(pieces: Pieces): Pieces {
   if (!thinking && pending) yield pending;
 }
 
-// The free-tier providers that speak OpenAI's chat completions API.
+// The free tiers that speak OpenAI's chat completions API, each a pool:
+// every key in its *_API_KEYS (or the one *_API_KEY) with every model in its
+// *_MODELS. Groq and Cerebras give each model its own rate limit, so a key's
+// second model is a second bucket.
 // trains: its free tier may use what it's sent to improve its models.
-type OpenAiLike = { name: string; url: string; key?: string; model: string; trains: boolean };
-const openAiLike = (env: Env): Record<string, OpenAiLike> => ({
-  groq: { name: "groq", url: `${env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"}/chat/completions`, key: env.GROQ_API_KEY, model: env.GROQ_MODEL || "llama-3.3-70b-versatile", trains: false },
-  gemini: { name: "gemini", url: `${env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai"}/chat/completions`, key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-2.5-flash", trains: true },
-  openrouter: { name: "openrouter", url: `${env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1"}/chat/completions`, key: env.OPENROUTER_API_KEY, model: env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free", trains: true },
+type Pool = { name: string; url: string; keys: string[]; models: string[]; trains: boolean };
+const list = (...values: (string | undefined)[]) => [...new Set(values.flatMap((v) => (v ?? "").split(",")).map((s) => s.trim()).filter(Boolean))];
+const pools = (env: Env): Record<string, Pool> => ({
+  groq: {
+    name: "groq",
+    url: `${env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"}/chat/completions`,
+    keys: list(env.GROQ_API_KEYS, env.GROQ_API_KEY),
+    models: list(env.GROQ_MODELS || env.GROQ_MODEL || "llama-3.3-70b-versatile,llama-3.1-8b-instant"),
+    trains: false,
+  },
+  cerebras: {
+    name: "cerebras",
+    url: `${env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1"}/chat/completions`,
+    keys: list(env.CEREBRAS_API_KEYS, env.CEREBRAS_API_KEY),
+    models: list(env.CEREBRAS_MODELS || "llama-3.3-70b,llama3.1-8b"),
+    trains: false,
+  },
+  gemini: {
+    name: "gemini",
+    url: `${env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai"}/chat/completions`,
+    keys: list(env.GEMINI_API_KEYS, env.GEMINI_API_KEY),
+    models: list(env.GEMINI_MODELS || env.GEMINI_MODEL || "gemini-2.5-flash,gemini-2.5-flash-lite"),
+    trains: true,
+  },
+  openrouter: {
+    name: "openrouter",
+    url: `${env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1"}/chat/completions`,
+    keys: list(env.OPENROUTER_API_KEYS, env.OPENROUTER_API_KEY),
+    models: list(env.OPENROUTER_MODELS || env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free"),
+    trains: true,
+  },
 });
 
+// A provider's refusal, with what it says about when to come back.
+class ProviderError extends Error {
+  status: number;
+  retryAfter?: number;
+  constructor(message: string, status: number, retryAfter?: number) {
+    super(message);
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+const retryAfterOf = (r: Response) => {
+  const v = Number(r.headers.get("retry-after"));
+  return Number.isFinite(v) && v > 0 ? v : undefined;
+};
+
 // A streamed chat completion: server-sent events of {"choices":[{"delta":{"content"}}]}.
-async function* openAi(p: OpenAiLike, job: Job, signal: AbortSignal): Pieces {
+async function* openAi(p: Pool, key: string, model: string, job: Job, signal: AbortSignal): Pieces {
   const r = await fetch(p.url, {
     method: "POST",
     signal,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${p.key}`,
+      Authorization: `Bearer ${key}`,
       ...(p.name === "openrouter" ? { "HTTP-Referer": "https://nopload.pages.dev", "X-Title": "Nopload" } : {}),
     },
     body: JSON.stringify({
-      model: p.model,
+      model,
       stream: true,
       max_tokens: job.maxTokens,
       temperature: 0.2,
@@ -459,7 +539,7 @@ async function* openAi(p: OpenAiLike, job: Job, signal: AbortSignal): Pieces {
       ...(job.json ? { response_format: { type: "json_object" } } : {}),
     }),
   });
-  if (!r.ok || !r.body) throw new Error(`${p.name} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`);
+  if (!r.ok || !r.body) throw new ProviderError(`${p.name} ${model} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`, r.status, retryAfterOf(r));
   const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
   for (;;) {
@@ -471,50 +551,179 @@ async function* openAi(p: OpenAiLike, job: Job, signal: AbortSignal): Pieces {
     for (const line of lines) {
       const data = line.startsWith("data:") ? line.slice(5).trim() : "";
       if (!data || data === "[DONE]") continue;
-      let event: { choices?: { delta?: { content?: string } }[]; error?: { message?: string } };
+      let event: { choices?: { delta?: { content?: string } }[]; error?: { message?: string; code?: number } };
       try {
         event = JSON.parse(data);
       } catch {
         continue;
       }
-      if (event.error) throw new Error(`${p.name}: ${event.error.message ?? "error"}`);
+      if (event.error) throw new ProviderError(`${p.name} ${model}: ${event.error.message ?? "error"}`, Number(event.error.code) || 500);
       const piece = event.choices?.[0]?.delta?.content;
       if (piece) yield piece;
     }
   }
 }
 
-const ORDER = ["groq", "anthropic", "gemini", "openrouter", "cloudflare"];
+const ORDER = ["groq", "cerebras", "anthropic", "gemini", "openrouter", "cloudflare"];
 
-// The providers this deployment can use, in the order to try them.
-export function providers(env: Env): [string, (job: Job, signal: AbortSignal) => Pieces][] {
-  const free = openAiLike(env);
+// One way to answer: a provider, one of its keys and one of its models.
+// `id` names it for the cooldowns (the key by a short hash, never the key
+// itself, which would then sit in logs).
+type Slot = { provider: string; id: string; run: (job: Job, signal: AbortSignal) => Pieces };
+
+// A key's short name: FNV-1a, 32 bits, in hex.
+function fingerprint(key: string) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+// Cooling down: slot id → when it may be tried again. Each instance of the
+// function keeps its own; a slot another instance found busy is found busy
+// here on the next try, which costs one quick refusal.
+const cooling = new Map<string, number>();
+// Advances with each request, so each pool's keys take turns being first.
+let turn = 0;
+
+// The providers this deployment can use, in the order to try them: for a
+// pool, its models best first, each across its keys, the keys starting at a
+// different one each request (round robin).
+export function slots(env: Env, rotate = 0): Slot[] {
+  const free = pools(env);
   const mayTrain = env.AI_FREE_TIERS_MAY_TRAIN === "1";
   const order = env.AI_ORDER ? env.AI_ORDER.split(",").map((s) => s.trim()).filter((s) => ORDER.includes(s)) : ORDER;
-  return order.flatMap((name): [string, (job: Job, signal: AbortSignal) => Pieces][] => {
-    if (name === "anthropic") return env.ANTHROPIC_API_KEY ? [[name, (job, signal) => anthropic(env, job, signal)]] : [];
-    if (name === "cloudflare") return env.AI ? [[name, (job) => withoutThinking(cloudflare(env, job))]] : [];
+  return order.flatMap((name): Slot[] => {
+    if (name === "anthropic") return env.ANTHROPIC_API_KEY ? [{ provider: name, id: name, run: (job, signal) => anthropic(env, job, signal) }] : [];
+    if (name === "cloudflare") return env.AI ? [{ provider: name, id: name, run: (job) => withoutThinking(cloudflare(env, job)) }] : [];
     const p = free[name];
-    return p?.key && (!p.trains || mayTrain) ? [[name, (job, signal) => withoutThinking(openAi(p, job, signal))]] : [];
+    if (!p || !p.keys.length || (p.trains && !mayTrain)) return [];
+    const start = rotate % p.keys.length;
+    const ring = [...p.keys.slice(start), ...p.keys.slice(0, start)];
+    return p.models.flatMap((model) => ring.map((key) => ({ provider: name, id: `${name}#${fingerprint(key)}#${model}`, run: (job: Job, signal: AbortSignal) => withoutThinking(openAi(p, key, model, job, signal)) })));
   });
 }
 
-// Starts the first provider that answers: its name, its first piece and the rest.
+// The providers set up, once each.
+export const providers = (env: Env) => [...new Set(slots(env).map((s) => s.provider))];
+
+// How long a slot rests after a refusal: a rate limit for a minute (or as
+// long as it asks, up to ten), a refused key for ten minutes, an outage for
+// fifteen seconds. A request it can't take (too long, say) doesn't rest it.
+function rest(e: unknown): number {
+  const status = e instanceof ProviderError ? e.status : (e as { status?: number })?.status;
+  if (status === 429) return Math.min(600, Math.max(60, (e as ProviderError).retryAfter ?? 0)) * 1000;
+  if (status === 401 || status === 403) return 600_000;
+  if (status && status >= 400 && status < 500) return 0;
+  return 15_000;
+}
+
+const jitterOf = (env: Env) => {
+  const [lo, hi] = (env.AI_RETRY_JITTER_MS || "1500-2500").split("-").map(Number);
+  return lo + Math.random() * Math.max(0, (hi || lo) - lo);
+};
+
+// Starts the first slot that answers: its provider, its first piece and the
+// rest. Slots cooling down are passed over. When none answers (all busy at
+// once, as in a burst), it waits 1.5 to 2.5 seconds and tries again, this
+// time every slot, the ones that come off cooldown soonest first, since a
+// per-minute limit often clears within seconds.
 async function start(env: Env, job: Job, signal: AbortSignal, only?: "cloudflare") {
-  const tries = providers(env).filter(([name]) => !only || name === only);
-  for (const [provider, run] of tries) {
-    const it = run(job, signal)[Symbol.asyncIterator]();
-    try {
-      let first = await it.next();
-      while (!first.done && !first.value) first = await it.next();
-      if (first.done) throw new Error("empty reply");
-      return { provider, first: first.value, it };
-    } catch (e) {
-      if (signal.aborted) throw e;
-      console.warn(`${provider} failed:`, e instanceof Error ? e.message : e);
+  const all = slots(env, turn++).filter((s) => !only || s.provider === only);
+  const attempt = async (list: Slot[]) => {
+    for (const slot of list) {
+      const it = slot.run(job, signal)[Symbol.asyncIterator]();
+      try {
+        let first = await it.next();
+        while (!first.done && !first.value) first = await it.next();
+        if (first.done) throw new Error("empty reply");
+        cooling.delete(slot.id);
+        return { provider: slot.provider, first: first.value, it };
+      } catch (e) {
+        if (signal.aborted) throw e;
+        const ms = rest(e);
+        if (ms) cooling.set(slot.id, Date.now() + ms);
+        console.warn(`${slot.id} failed:`, e instanceof Error ? e.message : e);
+      }
     }
+    return null;
+  };
+  const now = Date.now();
+  const first = await attempt(all.filter((s) => (cooling.get(s.id) ?? 0) <= now));
+  if (first || !all.length) return first;
+  await new Promise((ok) => setTimeout(ok, jitterOf(env)));
+  if (signal.aborted) throw new DOMException("aborted", "AbortError");
+  return attempt([...all].sort((a, b) => (cooling.get(a.id) ?? 0) - (cooling.get(b.id) ?? 0)));
+}
+
+// The last 500 replies, by a hash of what was asked (task, prompt, text): the
+// same question about the same passages, or the same summary or
+// translation, is answered again without asking a model. In this instance's
+// memory only, for up to six hours.
+const CACHE_SIZE = 500;
+const CACHE_MS = 6 * 3_600_000;
+type Cached = { provider: string; text: string; at: number };
+const replies = new Map<string, Cached>();
+async function cacheKey(job: Job, only?: string) {
+  const bytes = new TextEncoder().encode(JSON.stringify([job.system, job.messages, job.maxTokens, job.json ?? false, only ?? ""]));
+  return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function cached(key: string): Cached | null {
+  const hit = replies.get(key);
+  if (!hit || Date.now() - hit.at > CACHE_MS) {
+    replies.delete(key);
+    return null;
   }
-  return null;
+  // Most recently used last, so the oldest goes first.
+  replies.delete(key);
+  replies.set(key, hit);
+  return hit;
+}
+function remember(key: string, provider: string, text: string) {
+  replies.delete(key);
+  replies.set(key, { provider, text, at: Date.now() });
+  while (replies.size > CACHE_SIZE) replies.delete(replies.keys().next().value!);
+}
+
+// Fair use for chat: questions per visitor (the address Cloudflare saw), at
+// most 10 a minute and 60 a day (UTC), so one visitor or bot can't use up
+// the free tiers for everyone. Exact with AI_QUOTA (one SQL statement each,
+// as for the characters); otherwise each instance counts in memory.
+const CHAT = { minute: 10, day: 60 };
+type ChatUse = { day: number; count: number; minuteAt: number; minute: number };
+const chatting = new Map<string, ChatUse>();
+const CHAT_SCHEMA = "CREATE TABLE IF NOT EXISTS ai_chat (ip TEXT PRIMARY KEY, day INTEGER NOT NULL, count INTEGER NOT NULL, minute_at INTEGER NOT NULL, minute INTEGER NOT NULL)";
+// ?1 ip, ?2 today, ?3 now, ?4 MINUTE, ?5 per minute, ?6 per day.
+const RESERVE_CHAT = `INSERT INTO ai_chat (ip, day, count, minute_at, minute) VALUES (?1, ?2, 1, ?3, 1)
+  ON CONFLICT (ip) DO UPDATE SET
+    count     = CASE WHEN day <> ?2 THEN 1 ELSE count + 1 END,
+    minute_at = CASE WHEN day <> ?2 OR ?3 - minute_at >= ?4 THEN ?3 ELSE minute_at END,
+    minute    = CASE WHEN day <> ?2 OR ?3 - minute_at >= ?4 THEN 1 ELSE minute + 1 END,
+    day       = ?2
+  WHERE day <> ?2 OR (count < ?6 AND (?3 - minute_at >= ?4 OR minute < ?5))
+  RETURNING count`;
+const chatSchemas = new WeakMap<D1, Promise<unknown>>();
+
+// "ok", or which limit the visitor reached.
+async function allowChat(env: Env, ip: string): Promise<"ok" | "minute" | "day"> {
+  const now = Date.now();
+  const day = Math.floor(now / DAY);
+  if (env.AI_QUOTA) {
+    const db = env.AI_QUOTA;
+    let made = chatSchemas.get(db);
+    if (!made) chatSchemas.set(db, (made = db.prepare(CHAT_SCHEMA).run().catch((e) => (chatSchemas.delete(db), Promise.reject(e)))));
+    await made;
+    if (await db.prepare(RESERVE_CHAT).bind(ip, day, now, MINUTE, CHAT.minute, CHAT.day).first()) return "ok";
+    const row = await db.prepare("SELECT day, count FROM ai_chat WHERE ip = ?1").bind(ip).first<{ day: number; count: number }>();
+    return row && row.day === day && row.count >= CHAT.day ? "day" : "minute";
+  }
+  if (chatting.size > 10_000) for (const [k, v] of chatting) if (v.day !== day) chatting.delete(k);
+  const prev = chatting.get(ip);
+  const use: ChatUse = prev && prev.day === day ? { ...prev } : { day, count: 0, minuteAt: now, minute: 0 };
+  if (now - use.minuteAt >= MINUTE) [use.minuteAt, use.minute] = [now, 0];
+  if (use.count >= CHAT.day) return "day";
+  if (use.minute >= CHAT.minute) return "minute";
+  chatting.set(ip, { ...use, count: use.count + 1, minute: use.minute + 1 });
+  return "ok";
 }
 
 // Replies are data, never a page: no sniffing, nothing a browser would run or frame.
@@ -533,7 +742,7 @@ function originAllowed(request: Request, env: Env) {
 }
 
 export async function onRequestGet({ env }: Context) {
-  const set = new Set(providers(env).map(([name]) => name));
+  const set = new Set(providers(env));
   return json(Object.fromEntries(ORDER.map((name) => [name, set.has(name)])));
 }
 
@@ -553,17 +762,42 @@ export async function onRequestPost({ request, env }: Context) {
   if (typeof job === "string") return json({ error: job }, 400);
   // Only the address Cloudflare saw: headers like X-Forwarded-For are the sender's to write.
   const ip = request.headers.get("CF-Connecting-IP") || "?";
+  const only = body.provider === "cloudflare" ? "cloudflare" : undefined;
+  const key = env.AI_CACHE === "off" ? null : await cacheKey(job, only);
+
+  if (job.chat) {
+    let fair: "ok" | "minute" | "day";
+    try {
+      fair = await allowChat(env, ip);
+    } catch (e) {
+      console.warn("AI_QUOTA failed, refusing:", e instanceof Error ? e.message : e);
+      return json({ error: "AI usage limits are unavailable" }, 503, { "Retry-After": "60" });
+    }
+    if (fair === "minute") return json({ error: "too many questions in a minute", limit: "minute" }, 429, { "Retry-After": "60" });
+    if (fair === "day") return json({ error: "today's questions are used up", limit: "day" }, 429, { "Retry-After": String(Math.ceil((DAY - (Date.now() % DAY)) / 1000)) });
+  }
+
   // Reserved before any model runs, so a request over the limit never costs anything.
   const chars = charsOf(job);
   const allowed = await allow(env, ip, chars);
   if (allowed === "down") return json({ error: "AI usage limits are unavailable" }, 503, { "Retry-After": "60" });
   if (allowed === "over") return json({ error: "hourly limit reached" }, 429, { "Retry-After": "3600" });
 
+  // Asked before: the same answer, with no model asked. (Counted all the
+  // same, so the limits can't be got round by asking the same thing.)
+  const hit = key && cached(key);
+  if (hit) {
+    const headers = { ...SAFE, "X-AI-Provider": hit.provider, "X-AI-Cache": "hit" };
+    return job.json ? json({ texts: JSON.parse(hit.text) }, 200, headers) : new Response(hit.text, { headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" } });
+  }
+
   const signal = request.signal ?? new AbortController().signal;
-  const started = await start(env, job, signal, body.provider === "cloudflare" ? "cloudflare" : undefined);
+  const started = await start(env, job, signal, only);
   if (!started) {
     await refund(env, ip, chars);
-    return json({ error: "no AI provider answered" }, 503);
+    // Every provider, key and model is busy or used up: the page answers on
+    // the device instead, if it has a model there.
+    return json({ error: "no AI provider answered", fallbackToLocal: true }, 503, { "Retry-After": "60" });
   }
   const headers = { ...SAFE, "X-AI-Provider": started.provider };
 
@@ -573,15 +807,22 @@ export async function onRequestPost({ request, env }: Context) {
     const texts = parseTexts(text, job.count);
     // The start of the reply comes back too (it's the visitor's own text), to see how a model got the format wrong.
     if (!texts || texts.length !== job.count) return json({ error: "the translation came back incomplete", got: texts?.length ?? null, reply: text.slice(0, 400) }, 502, headers);
+    if (key) remember(key, started.provider, JSON.stringify(texts));
     return json({ texts }, 200, headers);
   }
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(c) {
+      let text = started.first;
       c.enqueue(enc.encode(started.first));
       try {
-        for (let r = await started.it.next(); !r.done; r = await started.it.next()) c.enqueue(enc.encode(r.value));
+        for (let r = await started.it.next(); !r.done; r = await started.it.next()) {
+          text += r.value;
+          c.enqueue(enc.encode(r.value));
+        }
+        // Only a reply that came to its end is kept.
+        if (key) remember(key, started.provider, text);
       } catch (e) {
         console.warn(`${started.provider} stopped:`, e instanceof Error ? e.message : e);
       }

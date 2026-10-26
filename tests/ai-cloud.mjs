@@ -72,7 +72,14 @@ const freeSeen = [];
 const freeServer = createServer(async (req, res) => {
   let body = "";
   for await (const c of req) body += c;
-  freeSeen.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(body) });
+  const sent = JSON.parse(body);
+  freeSeen.push({ url: req.url, auth: req.headers.authorization, body: sent });
+  // Rate-limited: a key and model in `limited` ("Bearer key|model"), or the next `busy` requests.
+  if (free.limited?.has(`${req.headers.authorization}|${sent.model}`) || (free.busy > 0 && free.busy--)) {
+    res.writeHead(429, { "content-type": "application/json", "retry-after": "1" });
+    res.end(JSON.stringify({ error: { message: "Rate limit reached" } }));
+    return;
+  }
   if (free.status !== 200) {
     res.writeHead(free.status, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: { message: "Rate limit reached" } }));
@@ -84,23 +91,32 @@ const freeServer = createServer(async (req, res) => {
 });
 await new Promise((r) => freeServer.listen(0, "127.0.0.1", r));
 const freeBase = `http://127.0.0.1:${freeServer.address().port}`;
-const groq = { GROQ_API_KEY: "gsk_test", GROQ_BASE_URL: `${freeBase}/groq` };
+// The wait before trying everything again, short for the tests.
+const quick = { AI_RETRY_JITTER_MS: "5-10" };
+const groq = { GROQ_API_KEY: "gsk_test", GROQ_BASE_URL: `${freeBase}/groq`, ...quick };
 
 let ip = 0;
+// Each chat question is a new one (the endpoint answers a repeat from its
+// cache), unless the test asks for the same one again with `same`.
+let asked = 0;
+const fresh = (body) => (body.task === "chat" && !body.same ? { ...body, question: `${body.question} (${++asked})` } : body);
+// The reply cache is off unless a test turns it on.
 const post = (body, env, headers = {}) =>
   onRequestPost({
-    env,
+    env: { AI_CACHE: "off", ...env },
     request: new Request("https://nopload.pages.dev/api/ai", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://nopload.pages.dev", "cf-connecting-ip": `10.0.0.${++ip}`, ...headers },
-      body: JSON.stringify(body),
+      body: JSON.stringify(fresh(body)),
     }),
   });
 const chat = { task: "chat", sources: "[1] (page 2) The lease ends in May.", question: "When does the lease end?" };
-const claude = { ANTHROPIC_API_KEY: "test", ANTHROPIC_BASE_URL: base };
+// A small request the general limits count (chat questions have their own, stricter limit).
+const small = { task: "summarize", text: "The lease ends in May.", points: 1, language: "en" };
+const claude = { ANTHROPIC_API_KEY: "test", ANTHROPIC_BASE_URL: base, ...quick };
 
 await test("GET says which providers are set up", async () => {
-  const none = { groq: false, anthropic: false, gemini: false, openrouter: false, cloudflare: false };
+  const none = { groq: false, cerebras: false, anthropic: false, gemini: false, openrouter: false, cloudflare: false };
   eq(await (await onRequestGet({ env: { ...claude, AI: workersAi("") } })).json(), { ...none, anthropic: true, cloudflare: true }, "Claude and Workers AI");
   eq(await (await onRequestGet({ env: {} })).json(), none, "none");
   eq(await (await onRequestGet({ env: { ...groq, GEMINI_API_KEY: "g", OPENROUTER_API_KEY: "o" } })).json(), { ...none, groq: true }, "free tiers that may train stay off");
@@ -134,6 +150,114 @@ await test("Gemini and OpenRouter free tiers only when allowed to train, in AI_O
   const res = await post(chat, { ...keys, AI_FREE_TIERS_MAY_TRAIN: "1", AI_ORDER: "openrouter,gemini" });
   eq([res.headers.get("x-ai-provider"), await res.text()], ["openrouter", "From the free tier (p. 2)."], "reply");
   eq([freeSeen.at(-1).url, freeSeen.at(-1).body.model], ["/openrouter/chat/completions", "meta-llama/llama-3.3-70b-instruct:free"], "OpenRouter's free Llama");
+});
+
+// A pool of two Groq keys, each with both models, and the tries it made.
+const pool = (keys = "kA,kB", extra = {}) => ({ GROQ_API_KEYS: keys, GROQ_BASE_URL: `${freeBase}/groq`, ...quick, ...extra });
+const tried = (from) => freeSeen.slice(from).map((x) => `${x.auth.slice(7)}|${x.body.model}`);
+
+await test("pool: a rate-limited key moves on to the next key at once, and rests a minute", async () => {
+  free = { reply: "From the pool (p. 2).", status: 200, limited: new Set(["Bearer kA1|llama-3.3-70b-versatile"]) };
+  const keys = "kA1,kB1";
+  let from = freeSeen.length;
+  for (let i = 0; i < 2; i++) {
+    const res = await post(chat, pool(keys));
+    eq([res.status, res.headers.get("x-ai-provider"), await res.text()], [200, "groq", "From the pool (p. 2)."], `answer ${i + 1}`);
+  }
+  // Whichever key went first, the limited one was asked at most once: then it rested.
+  eq(tried(from).filter((x) => x === "kA1|llama-3.3-70b-versatile").length, 1, `tries: ${tried(from)}`);
+  eq(tried(from).filter((x) => x.endsWith("llama-3.3-70b-versatile")).length >= 2, true, "the 70B model answered, from the other key");
+  from = freeSeen.length;
+  await post(chat, pool(keys));
+  eq(tried(from).includes("kA1|llama-3.3-70b-versatile"), false, "still resting");
+});
+
+await test("pool: the keys take turns going first (round robin)", async () => {
+  free = { reply: "ok (p. 2).", status: 200 };
+  const from = freeSeen.length;
+  for (let i = 0; i < 4; i++) await (await post(chat, pool("kR1,kR2"))).text();
+  const firsts = tried(from).map((x) => x.split("|")[0]);
+  eq(new Set(firsts).size, 2, `both keys used first: ${firsts}`);
+});
+
+await test("pool: when every key's 70B is limited, the 8B model answers (its own bucket)", async () => {
+  free = { reply: "From 8B (p. 2).", status: 200, limited: new Set(["Bearer kC1|llama-3.3-70b-versatile", "Bearer kC2|llama-3.3-70b-versatile"]) };
+  const from = freeSeen.length;
+  const res = await post(chat, pool("kC1,kC2"));
+  eq(await res.text(), "From 8B (p. 2).", "answered");
+  eq(tried(from).at(-1).split("|")[1], "llama-3.1-8b-instant", `last try: ${tried(from)}`);
+});
+
+await test("pool: Cerebras takes over when every Groq key and model is limited", async () => {
+  free = { reply: "From Cerebras (p. 2).", status: 200, limited: new Set(["Bearer kD1|llama-3.3-70b-versatile", "Bearer kD1|llama-3.1-8b-instant"]) };
+  const env = pool("kD1", { CEREBRAS_API_KEYS: "cE1", CEREBRAS_BASE_URL: `${freeBase}/cerebras` });
+  const res = await post(chat, env);
+  eq([res.headers.get("x-ai-provider"), await res.text()], ["cerebras", "From Cerebras (p. 2)."], "reply");
+  eq([freeSeen.at(-1).url, freeSeen.at(-1).body.model], ["/cerebras/chat/completions", "llama-3.3-70b"], "Cerebras's 70B first");
+});
+
+await test("pool: a burst that finds everyone busy waits a moment and tries again", async () => {
+  free = { reply: "After the wait (p. 2).", status: 200, busy: 1 };
+  const res = await post(chat, pool("kE1", { GROQ_MODELS: "llama-3.3-70b-versatile" }));
+  eq([res.status, await res.text()], [200, "After the wait (p. 2)."], "answered on the second round");
+});
+
+await test("pool: all of it used up: 503 with fallbackToLocal, after one more round", async () => {
+  free = { reply: "", status: 200, limited: new Set(["Bearer kF1|llama-3.3-70b-versatile", "Bearer kF1|llama-3.1-8b-instant"]) };
+  const from = freeSeen.length;
+  const res = await post(chat, pool("kF1"));
+  eq([res.status, (await res.json()).fallbackToLocal], [503, true], "fall back to the device");
+  eq(tried(from).length, 4, `two models, tried twice: ${tried(from)}`);
+});
+
+await test("pool: one GROQ_API_KEY still works, and keys never reach the logs", async () => {
+  free = { reply: "Single key (p. 2).", status: 200 };
+  const logged = [];
+  const warn = console.warn;
+  console.warn = (...a) => logged.push(a.join(" "));
+  try {
+    free.limited = new Set(["Bearer gsk_secret_one|llama-3.3-70b-versatile"]);
+    const res = await post(chat, { GROQ_API_KEY: "gsk_secret_one", GROQ_BASE_URL: `${freeBase}/groq`, ...quick });
+    eq(await res.text(), "Single key (p. 2).", "answered by the 8B model");
+  } finally {
+    console.warn = warn;
+  }
+  eq(logged.some((l) => l.includes("gsk_secret_one")), false, `logged: ${logged}`);
+});
+
+await test("cache: the same request again is answered from memory, with no model asked", async () => {
+  free = { reply: "Kept (p. 2).", status: 200 };
+  const env = { ...pool("kG1"), AI_CACHE: "on" };
+  const ask = { ...chat, question: "What does the lease say about pets?", same: true };
+  const first = await post(ask, env);
+  eq([first.headers.get("x-ai-cache"), await first.text()], [null, "Kept (p. 2)."], "asked");
+  const from = freeSeen.length;
+  const again = await post(ask, env);
+  eq([again.headers.get("x-ai-cache"), again.headers.get("x-ai-provider"), await again.text()], ["hit", "groq", "Kept (p. 2)."], "kept");
+  eq(freeSeen.length, from, "no model asked");
+  // A different question is a different request.
+  await (await post({ ...ask, question: "And about smoking?" }, env)).text();
+  eq(freeSeen.length, from + 1, "asked again");
+});
+
+await test("cache: it keeps the last 500, the oldest going first", async () => {
+  free = { reply: "n (p. 2).", status: 200 };
+  const env = { ...pool("kH1"), AI_CACHE: "on" };
+  const q = (i) => ({ ...chat, question: `Question number ${i}?`, same: true });
+  for (let i = 0; i <= 500; i++) await (await post(q(i), env)).text();
+  eq((await post(q(500), env)).headers.get("x-ai-cache"), "hit", "the newest kept");
+  eq((await post(q(0), env)).headers.get("x-ai-cache"), null, "the oldest gone");
+});
+
+await test("fair use: 10 chat questions a minute per visitor, then 429 with the limit named", async () => {
+  free = { reply: "ok (p. 2).", status: 200 };
+  const statuses = [];
+  for (let i = 0; i < 12; i++) statuses.push((await post(chat, pool("kI1"), { "cf-connecting-ip": "10.8.8.8" })).status);
+  eq(statuses, [...Array(10).fill(200), 429, 429], "statuses");
+  const res = await post(chat, pool("kI1"), { "cf-connecting-ip": "10.8.8.8" });
+  eq([(await res.json()).limit, res.headers.get("retry-after")], ["minute", "60"], "the minute limit");
+  eq((await post(chat, pool("kI1"), { "cf-connecting-ip": "10.8.8.9" })).status, 200, "another visitor isn't affected");
+  eq((await post(small, pool("kI1"), { "cf-connecting-ip": "10.8.8.8" })).status, 200, "summaries aren't chat questions");
 });
 
 await test("the chat prompt asks for page citations, plain answers, money in and out, and says what's missing", async () => {
@@ -248,7 +372,7 @@ await test("translate sends numbered blocks and reads numbered ones back", async
 await test("a flood of small requests is stopped, whatever X-Forwarded-For says", async () => {
   mode = { reply: "ok", status: 200 };
   const statuses = [];
-  for (let i = 0; i < 45; i++) statuses.push((await post(chat, claude, { "cf-connecting-ip": "10.7.7.7", "x-forwarded-for": `1.2.3.${i}`, origin: "https://nopload.vercel.app" })).status);
+  for (let i = 0; i < 45; i++) statuses.push((await post(small, claude, { "cf-connecting-ip": "10.7.7.7", "x-forwarded-for": `1.2.3.${i}`, origin: "https://nopload.vercel.app" })).status);
   eq(statuses.slice(0, 40).every((x) => x === 200), true, "the first 40 a minute");
   eq(statuses.slice(40), [429, 429, 429, 429, 429], "then 429");
 });
@@ -275,11 +399,11 @@ const kvStore = () => {
 const other = await import("../functions/api/ai.ts?instance=2");
 const postTo = (instance, body, env, headers) =>
   instance.onRequestPost({
-    env,
+    env: { AI_CACHE: "off", ...env },
     request: new Request("https://nopload.pages.dev/api/ai", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://nopload.pages.dev", ...headers },
-      body: JSON.stringify(body),
+      body: JSON.stringify(fresh(body)),
     }),
   });
 
@@ -287,8 +411,8 @@ await test("with AI_LIMITS, two instances share one visitor's budget", async () 
   mode = { reply: "ok", status: 200 };
   const flood = async (env, addr) => {
     const statuses = [];
-    for (let i = 0; i < 30; i++) statuses.push((await postTo({ onRequestPost }, chat, env, { "cf-connecting-ip": addr })).status);
-    for (let i = 0; i < 30; i++) statuses.push((await postTo(other, chat, env, { "cf-connecting-ip": addr })).status);
+    for (let i = 0; i < 30; i++) statuses.push((await postTo({ onRequestPost }, small, env, { "cf-connecting-ip": addr })).status);
+    for (let i = 0; i < 30; i++) statuses.push((await postTo(other, small, env, { "cf-connecting-ip": addr })).status);
     return statuses.filter((s) => s === 200).length;
   };
   // In memory, each instance counts on its own: 60 get through, not 40.
@@ -303,7 +427,7 @@ await test("when AI_LIMITS fails, the in-memory limit still holds", async () => 
   const kv = kvStore();
   kv.broken = true;
   const statuses = [];
-  for (let i = 0; i < 42; i++) statuses.push((await post(chat, { ...claude, AI_LIMITS: kv }, { "cf-connecting-ip": "10.6.6.3" })).status);
+  for (let i = 0; i < 42; i++) statuses.push((await post(small, { ...claude, AI_LIMITS: kv }, { "cf-connecting-ip": "10.6.6.3" })).status);
   eq(statuses.filter((s) => s === 200).length, 40, "40 then 429");
 });
 
@@ -379,7 +503,7 @@ await test("with AI_QUOTA, two instances share one visitor's budget exactly", as
   mode = { reply: "ok", status: 200 };
   const quota = d1();
   const env = { ...claude, AI_QUOTA: quota, AI_LIMITS: kvStore() };
-  const statuses = await Promise.all(Array.from({ length: 60 }, (_, i) => postTo(i % 2 ? other : { onRequestPost }, chat, env, { "cf-connecting-ip": "10.4.6.1" }).then((r) => r.status)));
+  const statuses = await Promise.all(Array.from({ length: 60 }, (_, i) => postTo(i % 2 ? other : { onRequestPost }, small, env, { "cf-connecting-ip": "10.4.6.1" }).then((r) => r.status)));
   eq(statuses.filter((s) => s === 200).length, 40, "40 a minute, concurrently");
   eq(quota.db.prepare("SELECT requests FROM ai_visitor WHERE ip = '10.4.6.1'").get().requests, 40, "the shared count");
   eq(env.AI_LIMITS.data.size, 0, "KV isn't used when D1 is bound");
@@ -439,6 +563,22 @@ await test("parseTexts reads JSON in or out of a code fence", async () => {
   eq(parseTexts('{"1": "a"}', 2), null, "a number missing");
   eq(parseTexts('["a"]'), ["a"], "bare array");
   eq(parseTexts("not json"), null, "garbage");
+});
+
+await test("fair use with AI_QUOTA: exact across instances, and 60 a day", async () => {
+  free = { reply: "ok (p. 2).", status: 200 };
+  const quota = d1();
+  const env = { ...pool("kJ1"), AI_QUOTA: quota };
+  const statuses = await Promise.all(Array.from({ length: 14 }, (_, i) => postTo(i % 2 ? other : { onRequestPost }, chat, env, { "cf-connecting-ip": "10.3.3.3" }).then((r) => r.status)));
+  eq(statuses.filter((x) => x === 200).length, 10, `10 a minute, concurrently (${statuses})`);
+  // A visitor who has asked 60 today.
+  const today = Math.floor(Date.now() / 86_400_000);
+  quota.db.prepare("INSERT INTO ai_chat (ip, day, count, minute_at, minute) VALUES ('10.3.3.4', ?, 60, 0, 0)").run(today);
+  const res = await post(chat, env, { "cf-connecting-ip": "10.3.3.4" });
+  eq([res.status, (await res.json()).limit], [429, "day"], "the day's limit");
+  // Yesterday's count doesn't carry over.
+  quota.db.prepare("UPDATE ai_chat SET day = ? WHERE ip = '10.3.3.4'").run(today - 1);
+  eq((await post(chat, env, { "cf-connecting-ip": "10.3.3.4" })).status, 200, "a new day");
 });
 
 server.close();

@@ -10,8 +10,9 @@ import type { Answer, DocIndex, Message } from "@/lib/ai/chat";
 import type { OptionDef } from "@/lib/tools";
 
 // A question and how it went: an answer and who wrote it, or that no AI is
-// turned on (needsAi), the cloud AI didn't answer (cloudDown), or it failed.
-type Turn = { q: string; a?: Answer; by?: "model" | "cloud"; cloudFailed?: boolean; failed?: boolean; needsAi?: boolean; cloudDown?: boolean };
+// turned on (needsAi), the cloud AI didn't answer (cloudDown) or this visitor
+// reached its fair-use limit (limited), or it failed.
+type Turn = { q: string; a?: Answer; by?: "model" | "cloud"; cloudFailed?: boolean; failed?: boolean; needsAi?: boolean; cloudDown?: boolean; limited?: "minute" | "day" };
 
 // Loads the chat code and the AI worker ahead of use (src/lib/offline.ts).
 export const prepareChat = () => Promise.all([import("@/lib/ai/chat"), prepareAi()]);
@@ -123,10 +124,11 @@ export function ChatView({ file, models, options, defs, onOption, onError }: {
           a = await c.askCloud(ix, question, { embed, history, signal: ctl.signal, onPartial: (p) => update({ a: p }) });
           by = "cloud";
         } catch (err) {
-          const { CloudUnavailable } = await import("@/lib/ai/cloud");
+          const { CloudLimited, CloudUnavailable } = await import("@/lib/ai/cloud");
           if (!(err instanceof CloudUnavailable)) throw err;
           console.warn("The cloud AI didn't answer.", err);
-          if (!local) return update({ cloudDown: true });
+          // A model on the device answers instead, without a word; else the visitor is told why.
+          if (!local) return update(err instanceof CloudLimited ? { limited: err.limit } : { cloudDown: true });
           cloudFailed = true;
           update({ a: undefined });
         }
@@ -209,9 +211,18 @@ export function ChatView({ file, models, options, defs, onOption, onError }: {
           {turns.map((x, i) => (
             <div key={i} className="space-y-2">
               <p className="ms-auto w-fit max-w-[85%] rounded-xl bg-[color-mix(in_oklab,var(--brand)_10%,var(--surface))] px-3.5 py-2 text-[15px]">{x.q}</p>
-              <div className="max-w-[92%] text-[15px] leading-relaxed" data-answer={(x.a || x.needsAi || x.cloudDown || x.failed) && !(busy && i === turns.length - 1) ? "done" : "pending"}>
+              <div className="max-w-[92%] text-[15px] leading-relaxed" data-answer={(x.a || x.needsAi || x.cloudDown || x.limited || x.failed) && !(busy && i === turns.length - 1) ? "done" : "pending"}>
                 {x.needsAi ? (
                   turnOn({ q: x.q, at: i })
+                ) : x.limited ? (
+                  <div className="space-y-2" data-limited={x.limited}>
+                    <p className="text-ink-2">{t(x.limited === "minute" ? "chat.limitMinute" : "chat.limitDay")}</p>
+                    {x.limited === "minute" ? (
+                      <button className="btn btn-quiet btn-sm" onClick={() => void ask(x.q, i)} disabled={!!busy}><RotateCcw size={14} /> {t("chat.retry")}</button>
+                    ) : can?.device ? (
+                      <button className="btn btn-quiet btn-sm" onClick={showModels}><Download size={15} /> {t("chat.needsAi.device")}</button>
+                    ) : null}
+                  </div>
                 ) : x.cloudDown ? (
                   <div className="flex flex-wrap items-center gap-2" data-cloud-down>
                     <p className="text-ink-2">{t("chat.cloudDown")}</p>

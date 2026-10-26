@@ -2224,6 +2224,8 @@ const en = {
   "chat.needsAi.none": "This device can't run the AI models, and the cloud AI isn't available here right now.",
   "chat.cloudDown": "The cloud AI didn't answer just now. Try again in a moment.",
   "chat.retry": "Try again",
+  "chat.limitMinute": "You're asking faster than the free cloud AI allows. Wait a minute, then try again.",
+  "chat.limitDay": "You've used today's free cloud AI questions. They come back tomorrow, or download a model to keep asking on this device.",
   "res.downloadMd": "Download .md",
   "res.downloadTxt": "Download .txt",
   "res.saved": "{pct}% smaller ({from} → {to})",

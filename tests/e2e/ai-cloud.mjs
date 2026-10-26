@@ -59,7 +59,7 @@ await suite(async ({ browser, test }) => {
     if (req.method() === "GET") return route.fulfill({ json: { anthropic: true, cloudflare: true } });
     const body = req.postDataJSON();
     posts.push({ body, bytes: req.postDataBuffer()?.length ?? 0, origin: (await req.allHeaders()).origin });
-    if (mode.status !== 200) return route.fulfill({ status: mode.status, json: { error: "no AI provider answered" } });
+    if (mode.status !== 200) return route.fulfill({ status: mode.status, json: mode.limit ? { error: "limit", limit: mode.limit } : { error: "no AI provider answered", fallbackToLocal: true } });
     const headers = { "X-AI-Provider": mode.provider };
     if (body.task === "chat") {
       // The page whose excerpt has the amount: excerpts start with "(p. N)".
@@ -85,11 +85,11 @@ await suite(async ({ browser, test }) => {
 
   await test("chat: the server AI answer cites page 14; only text was sent", async () => {
     await page.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 30000 });
-    const a = await ask(page, "What is the invoice total?");
+    const a = await ask(page, "What is the invoice total in this PDF?");
     if (a.pages[0] !== 14 || !a.text.includes("$1,234.50")) throw new Error(`cited ${a.pages}: ${a.text}`);
     if (!a.text.includes(t["chat.by.server"])) throw new Error(`no attribution: ${a.text}`);
     const { body, bytes, origin } = posts.at(-1);
-    if (body.task !== "chat" || body.question !== "What is the invoice total?") throw new Error(JSON.stringify(body).slice(0, 200));
+    if (body.task !== "chat" || body.question !== "What is the invoice total in this PDF?") throw new Error(JSON.stringify(body).slice(0, 200));
     if (bytes > 20000 || JSON.stringify(body).includes("%PDF")) throw new Error(`sent ${bytes} bytes`);
     // functions/api/ai.ts refuses a POST without one.
     if (origin !== new URL(base).origin) throw new Error(`Origin: ${origin}`);
@@ -120,15 +120,34 @@ await suite(async ({ browser, test }) => {
     return "Cloudflare named";
   });
 
+  await test("chat: the same question again is answered from this device, with no request", async () => {
+    const before = posts.length;
+    const a = await ask(page, "  what is the INVOICE total in this pdf  ");
+    if (posts.length !== before) throw new Error("sent a request");
+    if (a.pages[0] !== 14 || !a.text.includes("$1,234.50")) throw new Error(a.text);
+    return "kept answer, 0 requests";
+  });
+
   await test("chat: when server AI fails, it says so and tries again, never showing passages", async () => {
     mode = { status: 503 };
-    const a = await ask(page, "What is the invoice total?");
+    const a = await ask(page, "How much is owed on the Northwind invoice in total?");
     if (!a.text.includes(t["chat.cloudDown"]) || a.text.includes("$1,234.50") || a.pages.length) throw new Error(a.text);
     mode = { status: 200, provider: "anthropic" };
     const turn = page.locator("[data-answer]").last();
     await turn.getByRole("button", { name: t["chat.retry"] }).click();
     await turn.locator("[data-citation='14']").waitFor({ timeout: 30000 });
     return "said so, then answered on retry";
+  });
+
+  await test("chat: over the fair-use limit, it says so; nothing else is shown", async () => {
+    mode = { status: 429, limit: "minute" };
+    const a = await ask(page, "Who is the invoice billed to, according to the PDF?");
+    if (!a.text.includes(t["chat.limitMinute"]) || a.pages.length) throw new Error(a.text);
+    mode = { status: 429, limit: "day" };
+    const b = await ask(page, "What is the invoice number on that page of the PDF?");
+    if (!b.text.includes(t["chat.limitDay"])) throw new Error(b.text);
+    mode = { status: 200, provider: "anthropic" };
+    return "minute and day limits named";
   });
 
   await test("chat: On this device states its limits, sends nothing, and is remembered", async () => {
