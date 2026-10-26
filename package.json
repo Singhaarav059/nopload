@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Singhaarav059/Foliant.git"
+    "url": "git+https://github.com/Singhaarav059/nopload.git"
   },
   "engines": {
     "node": ">=22.13"
@@ -69,6 +69,7 @@
     "test:static": "node tests/static-extras.mjs && node tests/serve-static.mjs",
     "test:extension": "node tests/extension.mjs",
     "test:seo": "node tests/seo.mjs",
+    "test:readme": "node tests/readme.mjs",
     "test:content": "node tests/tool-content.mjs",
     "test:legal": "node tests/legal.mjs",
     "test:errors": "node tests/errors.mjs",

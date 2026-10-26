@@ -4,25 +4,25 @@ Nopload is a free, open-source (MIT) PDF toolkit that runs in your web browser. 
 
 ## At a glance
 
-- **31 tools**: merge, split, compress, OCR, convert to and from Word, Excel, PowerPoint and images, PDF/A, edit, sign, redact, compare, protect and more (full list below).
+- **53 tools**: merge, split, compress, OCR, convert to and from Word, Excel, PowerPoint and images, PDF/A, edit, sign, redact, compare, protect and more (full list below).
 - **Free, with no daily or hourly limits and no account.** Each task takes files up to 200 MB, up to 100 at a time.
 - **Private by construction.** Processing happens in the browser tab with WebAssembly builds of PDF.js, qpdf, PDFium, Tesseract and LibreOffice. A Content-Security-Policy stops the page from contacting any other site, and each tool page shows a live count of bytes uploaded (0).
 - **Works offline** after the first visit, and installs as an app.
-- **26 interface languages**, including right-to-left Arabic.
+- **32 interface languages**, including right-to-left Arabic, Persian and Urdu.
 - **No analytics, ads or tracking cookies.**
 
 ## Tools
 
 | | |
 |---|---|
-| **Organise** | Merge, split, extract pages, remove pages, organise (reorder, rotate, insert), scan to PDF with the camera |
-| **Optimise** | Compress, repair, OCR (makes scans searchable, 26 languages) |
+| **Organise** | Merge, split, extract pages, remove pages, organise (reorder, rotate, insert), several pages per sheet, booklet, remove blank pages, alternate and mix, scan to PDF with the camera |
+| **Optimise** | Compress (also to a target size), exam photo resizer, optimise for the web, accessible PDF, grayscale, repair, OCR (makes scans searchable, 123 languages), clean up scans |
 | **Convert to PDF** | Images, Word, PowerPoint, Excel/CSV, web pages or HTML files |
-| **Convert from PDF** | Images (JPG/PNG), Word, PowerPoint, Excel, PDF/A, Markdown |
-| **Edit** | Rotate, page numbers, watermark, crop, edit (text, images, shapes, drawing), fill and create forms |
-| **Security** | Unlock, protect with a password, sign, redact (removes the text, not just covers it), compare two versions |
+| **Convert from PDF** | Images (JPG/PNG), Word, PowerPoint, Excel, PDF/A, Markdown; AI summary, chat with a PDF, translate; read aloud |
+| **Edit** | Viewer, rotate, page numbers, watermark, header and footer, crop, resize pages, edit (text, images, shapes, drawing), fill and create forms, metadata, bookmarks, attachments, flatten |
+| **Security** | Unlock, protect with a password, sign, verify signatures, redact (removes the text, not just covers it), sanitise, compare two versions |
 
-Also: saved workflows that run several tools in a row, "continue with" another tool without downloading, an installable offline app, and 26 interface languages including right-to-left Arabic.
+Also: saved workflows that run several tools in a row, "continue with" another tool without downloading, and an installable offline app.
 
 ## Two ways to run it
 
@@ -42,8 +42,8 @@ Honest ones, so you can decide whether it fits:
 
 - **Your device does the work.** Large files take as long as your computer or phone needs, and memory is the real limit: very large or many-page files can fail on phones.
 - **Word, Excel and PowerPoint to PDF** at full fidelity uses LibreOffice in the browser: a 79 MB download the first time and about 1 GB of memory. On phones and small devices the file is laid out in the browser and saved through the print dialog instead, which is less faithful for complex documents. In Safari LibreOffice can stop partway; Automatic then prints instead too.
-- **OCR** reads 26 languages. Accuracy depends on the scan; the high-accuracy engine (PaddleOCR) is a further 36 MB download.
-- **Redaction** rebuilds pages that have redactions as images, so nothing hidden survives; the text outside the redacted areas stays searchable.
+- **OCR** reads 123 languages, up to 3 at once. Accuracy depends on the scan; the high-accuracy engine (PaddleOCR) is a further 36 MB download.
+- **Redaction** removes the marked text, images and drawings from the page itself, so the rest stays sharp and searchable. Pages it can't clean that way, scanned pages, and any page where removed text still shows up afterwards are rebuilt as images, so nothing hidden survives.
 - **Web pages by address** and the contact form need the server build. The static build converts HTML files, not URLs.
 - **Hosting**: the site must be served from the root of a domain, not a sub-path.
 - **The AI tools** (Chat with PDF, Summarize, Translate) run on the device when it can run an AI model (a computer with WebGPU and enough memory): a one-time download of 270 to 570 MB, then nothing is sent. Phones and older devices get server AI by default instead: the PDF stays on the device, but the text the tool needs goes to Anthropic's Claude, or to Cloudflare Workers AI when Anthropic can't answer. Each tool says which it uses, and those devices can choose on-device AI, which gives simpler answers (see [Cloud AI](#cloud-ai)).

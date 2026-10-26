@@ -29,7 +29,7 @@ Private by design. The add-on downloads the PDF in your browser and passes it st
 
 Small permissions. The add-on asks for access to a website only when you first open a PDF from it, and only for that site.
 
-Free and open source under the MIT licence: https://github.com/Singhaarav059/Foliant
+Free and open source under the MIT licence: https://github.com/Singhaarav059/nopload
 
 ## Privacy statement
 
