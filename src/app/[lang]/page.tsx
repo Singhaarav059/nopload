@@ -41,11 +41,15 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       <div aria-hidden className="aurora-wash" />
       <section data-app-hero className="relative grid items-center gap-10 pb-10 pt-10 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:gap-8 lg:pb-16 lg:pt-20">
         <div className="flex min-w-0 flex-col">
-          <p data-web-only data-cat="organize" className="fade-up pill self-start" style={{ "--d": "0ms" } as React.CSSProperties}>
-            <ShieldCheck size={14} strokeWidth={2} aria-hidden />
-            <span className="tabular">{local}/{TOOLS.length}</span>
-            {t["home.privateBadge"]}
-          </p>
+          <div data-web-only className="fade-up flex flex-wrap items-center gap-2" style={{ "--d": "0ms" } as React.CSSProperties}>
+            <p data-cat="organize" className="pill">
+              <ShieldCheck size={14} strokeWidth={2} aria-hidden />
+              <span className="tabular">{local}/{TOOLS.length}</span>
+              {t["home.privateBadge"]}
+            </p>
+            {/* The exception, said where the claim is: AI can use the server. */}
+            <Link href={`/${lang}/privacy`} className="pill text-ink-2 hover:text-ink">{t["home.aiBadge"]}</Link>
+          </div>
           <h1 data-app-title className="display hero-title mt-6 max-w-[14ch] text-[3rem] sm:text-[4.5rem] lg:text-[5.4rem]">
             <Words text={t["home.title"]} />
           </h1>

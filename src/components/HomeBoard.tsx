@@ -65,6 +65,7 @@ export function HomeBoard() {
       <div className="board-card board-figure">
         <DotNumber value={`${local}/${TOOLS.length}`} height={40} />
         <span className="mt-auto pt-4 text-[14px] font-medium text-ink-2">{t("home.privateBadge")}</span>
+        <span className="mt-0.5 text-[12.5px] text-muted">{t("home.aiBadge")}</span>
       </div>
 
       <div className="board-card board-figure">
