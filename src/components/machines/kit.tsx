@@ -7,7 +7,7 @@
 // a display, a knurled knob in the machine's own accent colour. Drawn in
 // SVG, in a 300 by 300 box.
 
-import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { thumbUrl } from "@/lib/pdf/thumbs";
 import { reducedMotion } from "@/lib/paper";
 
@@ -98,7 +98,15 @@ export const ACCENTS = {
   violet: ["#c7b4ff", "#7c5ce6", "#5638c0"],
   teal: ["#8fe5dc", "#14a399", "#0b7770"],
   rose: ["#ffa3b8", "#e3305c", "#b0173e"],
+  indigo: ["#b4bcff", "#5b5ff0", "#3b3fc4"],
+  lime: ["#c6f08a", "#62a816", "#457a0c"],
+  sky: ["#a8dcff", "#2b9be8", "#166fb0"],
+  amber: ["#ffcf85", "#e8890c", "#b06505"],
+  magenta: ["#f5a8f0", "#c13fc0", "#902a90"],
 } as const satisfies Record<string, Accent>;
+
+// A machine's id for its gradients and filters, unique on the page.
+export const useSvgId = () => "mc" + useId().replace(/[^a-zA-Z0-9]/g, "");
 
 // Ids for one machine's gradients and filters, unique on the page.
 const Ids = createContext("m");
@@ -282,13 +290,14 @@ export function Engraved({ x, y, children, anchor = "start" }: { x: number; y: n
   );
 }
 
-// A sheet: the user's page when there is a picture of it, ruled lines when not.
-export function Sheet({ x, y, w, h, pic, opacity = 1 }: { x: number; y: number; w: number; h: number; pic?: string | null; opacity?: number }) {
+// A sheet: the user's page when there is a picture of it, ruled lines when
+// not, nothing at all when blank.
+export function Sheet({ x, y, w, h, pic, opacity = 1, blank }: { x: number; y: number; w: number; h: number; pic?: string | null; opacity?: number; blank?: boolean }) {
   const url = useUrl();
   return (
     <g opacity={opacity}>
       <rect x={x} y={y} width={w} height={h} rx="2" fill="#fff" filter={url("soft")} />
-      {pic ? (
+      {blank ? null : pic ? (
         <image href={pic} x={x + 4} y={y + 4} width={w - 8} height={h - 8} preserveAspectRatio="xMidYMid meet" />
       ) : (
         Array.from({ length: Math.floor((h - 26) / 14) }, (_, i) => (

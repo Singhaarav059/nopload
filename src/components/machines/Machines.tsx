@@ -10,14 +10,14 @@
 // from the job's progress (kit.tsx useDrive), finished and still for
 // reduced motion.
 
-import { useId } from "react";
+import type { ReactNode } from "react";
 import type { ToolId } from "@/lib/tools";
 import { VacuumSealer } from "./VacuumSealer";
-import { ACCENTS, Ball, Body, Button, Engraved, Knob, Lcd, LcdText, Led, Meter, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures } from "./kit";
+import { Camera, Cabinet, Claw, Embosser, Flipper, Funnel, Intercom, LabelMaker, Patcher, Polaroid, Radio, Shredder, Shuffler } from "./PageMachines";
+import { Bookmarker, Clipper, Conveyor, Cropper, DyeBath, Folder, InkRoller, Iron, LightTable, Loupe, Rollers, Squeegee, Tiler, Washer } from "./ShopMachines";
+import { ACCENTS, Ball, Body, Button, Engraved, Knob, Lcd, LcdText, Led, Meter, Sheet, Svg, easeIn, easeInOut, easeOut, fill, seg, urlOf, useDrive, usePictures, useSvgId } from "./kit";
 
 type Props = { files?: File[]; value: number };
-
-const useSvgId = () => "mc" + useId().replace(/[^a-zA-Z0-9]/g, "");
 
 // Merge: the pages fly in from either side into one stack, and the press's
 // lever comes down: its head staples the stack's corner.
@@ -176,26 +176,55 @@ const sig = (s: number) => ({
   y: 246 - 16 * Math.sin(s * Math.PI * 5) * Math.sin(Math.PI * s) + 7 * Math.cos(s * Math.PI * 10),
 });
 
-// Sign and Verify: a flatbed plotter's gantry carries the pen across the
-// page and writes the signature.
-function Plotter({ files, value }: Props) {
+type Pt = { x: number; y: number; ink: boolean };
+// Pen moves: from one point to the next, in steps, with ink or without.
+function route(strokes: { x: number; y: number }[][]): Pt[] {
+  const out: Pt[] = [];
+  strokes.forEach((line, s) => {
+    line.forEach((q, i) => {
+      const prev = i ? line[i - 1] : s ? strokes[s - 1].at(-1)! : null;
+      const steps = prev ? Math.max(1, Math.round(Math.hypot(q.x - prev.x, q.y - prev.y) / 3)) : 1;
+      for (let k = 1; k <= steps; k++) {
+        const f = prev ? k / steps : 1;
+        out.push({ x: prev ? prev.x + (q.x - prev.x) * f : q.x, y: prev ? prev.y + (q.y - prev.y) * f : q.y, ink: i > 0 });
+      }
+    });
+  });
+  return out;
+}
+const SIG_PATH = route([Array.from({ length: 161 }, (_, i) => sig(i / 160))]);
+// Forms: a tick in each box and a word on its line.
+const FORM_PATH = route(
+  [0, 1, 2, 3].flatMap((i) => {
+    const y = 128 + i * 34;
+    return [
+      [{ x: 101, y: y + 8 }, { x: 105.5, y: y + 13 }, { x: 113, y: y + 2 }],
+      Array.from({ length: 14 }, (_, j) => ({ x: 126 + j * (40 + i * 8) / 13, y: y + 11 - (j % 2 ? 5 : 0) - Math.sin(j) * 1.5 })),
+    ];
+  }),
+);
+
+// Sign and Forms: a flatbed plotter's gantry carries the pen across the
+// page and writes the signature, or ticks the boxes and fills the lines.
+function Plotter({ files, value, form }: Props & { form?: boolean }) {
   const id = useSvgId();
   const url = urlOf(id);
   const { p } = useDrive(value);
   const [pic] = usePictures(files, 1);
+  const pts = form ? FORM_PATH : SIG_PATH;
   const k = easeInOut(seg(p, 0.12, 0.88));
   const rest = { x: 150, y: 150 };
-  const a = sig(0);
-  const b = sig(1);
+  const a = pts[0];
+  const b = pts[pts.length - 1];
   const pre = easeInOut(seg(p, 0, 0.12));
   const post = easeInOut(seg(p, 0.88, 1));
-  const at = p < 0.12 ? { x: rest.x + (a.x - rest.x) * pre, y: rest.y + (a.y - rest.y) * pre } : p > 0.88 ? { x: b.x + (rest.x - b.x) * post, y: b.y + (rest.y - b.y) * post } : sig(k);
-  const lift = p < 0.12 || p > 0.88 ? 6 : 0;
-  const n = Math.floor(k * 160);
+  const n = Math.floor(k * (pts.length - 1));
+  const at = p < 0.12 ? { x: rest.x + (a.x - rest.x) * pre, y: rest.y + (a.y - rest.y) * pre } : p > 0.88 ? { x: b.x + (rest.x - b.x) * post, y: b.y + (rest.y - b.y) * post } : pts[n];
+  const lift = p < 0.12 || p > 0.88 || !pts[n].ink ? 6 : 0;
   let d = "";
   for (let i = 0; i <= n; i++) {
-    const q = sig(i / 160);
-    d += `${i ? "L" : "M"}${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
+    const q = pts[i];
+    if (q.ink) d += `${i && pts[i - 1].ink ? "L" : "M"}${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
   }
   return (
     <Svg id={id} accent={ACCENTS.green}>
@@ -210,7 +239,14 @@ function Plotter({ files, value }: Props) {
       <rect x="10" y="76" width="9" height="212" rx="4" fill={url("steel")} />
       <rect x="281" y="76" width="9" height="212" rx="4" fill={url("steel")} />
       <Sheet x={83} y={86} w={134} h={192} pic={pic} />
-      {n > 0 && <path d={d} fill="none" stroke="#1d2d7a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
+      {form &&
+        [0, 1, 2, 3].map((i) => (
+          <g key={i}>
+            <rect x="99" y={128 + i * 34} width="15" height="15" rx="2" fill="#fff" stroke="#8a9099" strokeWidth="1.2" />
+            <line x1="124" y1={142 + i * 34} x2="202" y2={142 + i * 34} stroke="#b9bfc6" strokeWidth="1.2" />
+          </g>
+        ))}
+      {d && <path d={d} fill="none" stroke="#1d2d7a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
       <g transform={`translate(0 ${-lift})`}>
         <rect x="8" y={at.y - 44} width="284" height="11" rx="5" fill={url("steelv")} filter={url("soft")} />
         <rect x="4" y={at.y - 50} width="22" height="23" rx="6" fill={url("accentv")} />
@@ -225,13 +261,11 @@ function Plotter({ files, value }: Props) {
   );
 }
 
-type ScanMode = "ocr" | "redact" | "compare" | "read";
+type ScanMode = "ocr" | "read";
 const ROWS = [1, 0.9, 0.95, 0.6, 1, 0.85, 0.7, 1, 0.5];
 const MARKS: Record<ScanMode, Record<number, string>> = {
   ocr: Object.fromEntries(ROWS.map((_, i) => [i, "#4f8cff"])),
-  read: { 1: "#ffd43b", 3: "#ffd43b", 6: "#ffd43b" },
-  redact: { 1: "#111", 4: "#111", 5: "#111", 7: "#111" },
-  compare: { 2: "#ff5a4e", 5: "#ff5a4e", 6: "#2fbf71" },
+  read: { 1: "#2b9be8", 3: "#2b9be8", 6: "#2b9be8" },
 };
 
 // OCR, Redact, Compare and the reading tools: a scanner's light sweeps
@@ -266,8 +300,7 @@ function Scanner({ files, value, mode, label }: Props & { mode: ScanMode; label:
         const color = MARKS[mode][i];
         const shown = Math.min(1, (bar - y) / 18);
         if (!color || shown <= 0) return null;
-        const solid = mode === "redact";
-        return <rect key={i} x={X + 10} y={y - 3} width={(124 - 20) * (solid ? 1 : w)} height={solid ? 10 : 8} rx="2" fill={color} opacity={shown * (solid ? 1 : mode === "read" ? 0.55 : 0.32)} />;
+        return <rect key={i} x={X + 10} y={y - 3} width={(124 - 20) * w} height="8" rx="2" fill={color} opacity={shown * (mode === "read" ? 0.45 : 0.32)} />;
       })}
       {p < 0.97 && (
         <g>
@@ -482,24 +515,52 @@ function Stamp({ files, value, number }: Props & { number?: boolean }) {
   );
 }
 
-export type MachineKind = "sealer" | "press" | "guillotine" | "lock" | "unlock" | "plotter" | "ocr" | "redact" | "compare" | "read" | "turntable" | "printer" | "typewriter" | "stamp" | "number";
-
-const KINDS: Partial<Record<MachineKind, ToolId[]>> = {
-  sealer: ["compress", "linearize", "grayscale", "examKit", "repair", "flatten"],
-  press: ["merge", "mix", "jpgToPdf", "booklet", "nUp", "scan", "attachments"],
-  guillotine: ["split", "extract", "remove", "removeBlank"],
+const KINDS = {
+  sealer: ["compress", "examKit"],
+  press: ["merge"],
+  shuffler: ["mix"],
+  guillotine: ["split"],
+  claw: ["extract"],
+  sorter: ["organize"],
+  shredder: ["remove"],
+  shredBlank: ["removeBlank"],
+  camera: ["scan"],
+  patcher: ["repair"],
   lock: ["protect"],
   unlock: ["unlock"],
-  plotter: ["sign", "verify"],
-  ocr: ["ocr", "cleanScans"],
-  redact: ["redact", "sanitize"],
-  compare: ["compare"],
-  read: ["summarize", "chat", "listen", "translate", "view"],
-  turntable: ["rotate", "organize", "crop", "resize"],
-  typewriter: ["edit", "forms", "metadata", "bookmarks"],
+  plotter: ["sign"],
+  form: ["forms"],
+  loupe: ["verify"],
+  ocr: ["ocr"],
+  squeegee: ["cleanScans"],
+  ink: ["redact"],
+  washer: ["sanitize"],
+  lighttable: ["compare"],
+  funnel: ["summarize"],
+  intercom: ["chat"],
+  flipper: ["translate"],
+  radio: ["listen"],
+  read: ["view"],
+  turntable: ["rotate"],
+  cropper: ["crop"],
+  rollers: ["resize"],
+  typewriter: ["edit"],
+  label: ["headerFooter"],
+  tag: ["metadata"],
+  bookmarker: ["bookmarks"],
   stamp: ["watermark"],
-  number: ["pageNumbers", "headerFooter"],
-};
+  number: ["pageNumbers"],
+  iron: ["flatten"],
+  clipper: ["attachments"],
+  conveyor: ["linearize"],
+  tiler: ["nUp"],
+  folder: ["booklet"],
+  dye: ["grayscale"],
+  polaroid: ["pdfToJpg"],
+  cabinet: ["pdfToPdfa"],
+  embosser: ["accessible"],
+} satisfies Record<string, ToolId[]>;
+export type MachineKind = keyof typeof KINDS | "printer";
 
 // Which machine a tool gets; the converters and anything new, the printer.
 export function machineFor(tool: ToolId): MachineKind {
@@ -507,34 +568,59 @@ export function machineFor(tool: ToolId): MachineKind {
   return "printer";
 }
 
-const READ_LABEL: Partial<Record<ToolId, string>> = { translate: "A → 文", listen: "▶ ))))", summarize: "∑ Aa", chat: "? Aa" };
-
 export function Machine({ tool, files, value }: { tool: ToolId; files?: File[]; value: number }) {
   const kind = machineFor(tool);
   const props = { files, value };
+  const scan = (mode: ScanMode, label: string) => <Scanner {...props} mode={mode} label={label} />;
+  const show: Record<MachineKind, () => ReactNode> = {
+    sealer: () => <VacuumSealer file={files?.[0]} value={value} />,
+    press: () => <Press {...props} />,
+    shuffler: () => <Shuffler {...props} />,
+    guillotine: () => <Guillotine {...props} />,
+    claw: () => <Claw {...props} />,
+    sorter: () => <Claw {...props} reorder />,
+    shredder: () => <Shredder {...props} />,
+    shredBlank: () => <Shredder {...props} blank />,
+    camera: () => <Camera {...props} />,
+    patcher: () => <Patcher {...props} />,
+    lock: () => <Safe {...props} />,
+    unlock: () => <Safe {...props} open />,
+    plotter: () => <Plotter {...props} />,
+    form: () => <Plotter {...props} form />,
+    loupe: () => <Loupe {...props} />,
+    ocr: () => scan("ocr", "OCR ▮▮▮"),
+    read: () => scan("read", "Aa ▮▮"),
+    squeegee: () => <Squeegee {...props} />,
+    ink: () => <InkRoller {...props} />,
+    washer: () => <Washer {...props} />,
+    lighttable: () => <LightTable {...props} />,
+    funnel: () => <Funnel {...props} />,
+    intercom: () => <Intercom {...props} />,
+    flipper: () => <Flipper {...props} />,
+    radio: () => <Radio {...props} />,
+    turntable: () => <Turntable {...props} />,
+    cropper: () => <Cropper {...props} />,
+    rollers: () => <Rollers {...props} />,
+    typewriter: () => <Typewriter {...props} />,
+    label: () => <LabelMaker {...props} />,
+    tag: () => <LabelMaker {...props} tag />,
+    bookmarker: () => <Bookmarker {...props} />,
+    stamp: () => <Stamp {...props} />,
+    number: () => <Stamp {...props} number />,
+    iron: () => <Iron {...props} />,
+    clipper: () => <Clipper {...props} />,
+    conveyor: () => <Conveyor {...props} />,
+    tiler: () => <Tiler {...props} />,
+    folder: () => <Folder {...props} />,
+    dye: () => <DyeBath {...props} />,
+    polaroid: () => <Polaroid {...props} />,
+    cabinet: () => <Cabinet {...props} />,
+    embosser: () => <Embosser {...props} />,
+    printer: () => <Printer {...props} tool={tool} />,
+  };
   return (
     <div aria-hidden className="machine-stage">
-      {kind === "sealer" ? (
-        <VacuumSealer file={files?.[0]} value={value} />
-      ) : kind === "press" ? (
-        <Press {...props} />
-      ) : kind === "guillotine" ? (
-        <Guillotine {...props} />
-      ) : kind === "lock" || kind === "unlock" ? (
-        <Safe {...props} open={kind === "unlock"} />
-      ) : kind === "plotter" ? (
-        <Plotter {...props} />
-      ) : kind === "ocr" || kind === "redact" || kind === "compare" || kind === "read" ? (
-        <Scanner {...props} mode={kind} label={kind === "ocr" ? "OCR ▮▮▮" : kind === "redact" ? "████ ██" : kind === "compare" ? "A ⇄ B" : (READ_LABEL[tool] ?? "Aa ▮▮")} />
-      ) : kind === "turntable" ? (
-        <Turntable {...props} />
-      ) : kind === "typewriter" ? (
-        <Typewriter {...props} />
-      ) : kind === "stamp" || kind === "number" ? (
-        <Stamp {...props} number={kind === "number"} />
-      ) : (
-        <Printer {...props} tool={tool} />
-      )}
+      {show[kind]()}
     </div>
   );
 }
