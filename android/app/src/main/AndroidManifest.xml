@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The whole app is Google's LauncherActivity (android-browser-helper): it opens
+<!-- The whole app is Google's LauncherActivity (android-browser-helper, with a
+     crash report added: Launcher.java, CrashActivity.java): it opens
      the site in Chrome full screen, verified by Digital Asset Links, and hands
      it the files Android opens or shares with Nopload. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -15,6 +16,8 @@
     </queries>
 
     <application
+        android:name=".App"
+        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
@@ -25,10 +28,9 @@
         <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
 
         <activity
-            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:name=".Launcher"
             android:exported="true"
             android:label="@string/app_name"
-            android:launchMode="singleTask"
             android:alwaysRetainTaskState="true">
 
             <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="@string/launch_url" />
@@ -40,7 +42,7 @@
             <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR" android:resource="@color/paper" />
             <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION" android:value="300" />
             <meta-data android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY" android:value="dev.pages.nopload.fileprovider" />
-            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="customtabs" />
+            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="webview" />
             <meta-data android:name="android.support.customtabs.trusted.LAUNCH_HANDLER_CLIENT_MODE" android:value="navigate-existing" />
             <!-- A file opened with Nopload goes to /en/open through launchQueue,
                  as on a computer; one PDF opens straight in the viewer. -->
@@ -85,8 +87,24 @@
 
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
 
+        <!-- "Manage storage" in Android's app settings opens Chrome's settings for the site.
+             The launcher turns this on at every launch, so it must be declared. -->
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+            android:exported="false">
+            <meta-data android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL" android:value="@string/launch_url" />
+        </activity>
+
+        <!-- The last crash, in its own process so it shows even if the launch crashes again. -->
+        <activity
+            android:name=".CrashActivity"
+            android:process=":crash"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+
         <activity
             android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
             android:configChanges="orientation|screenSize" />
 
         <!-- Shares the splash image with Chrome, so the launch looks seamless. -->
