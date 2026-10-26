@@ -1,9 +1,12 @@
-// On-device AI in real browsers. Chat with PDF answers "What is the invoice
-// total?" on a 20-page PDF with the right page citation: first with no model
-// at all, then with the light model the visitor chooses to download. The
-// model comes from this site only after the click, works again after a
-// reload with no network, and no request ever leaves the site. Summarize
-// stays fast without WebGPU. A scanned PDF is read by the conversions' auto-OCR.
+// On-device AI in real browsers, on a copy of the site without server AI.
+// Chat with PDF never answers with bare passages: with no model that writes
+// it asks the visitor to turn AI on, even when the AI worker breaks, and
+// downloads nothing. The light model comes from this site only after the
+// click, is still there after a reload with no network, and no request ever
+// leaves the site. Summarize stays fast without WebGPU. A scanned PDF is read
+// by the conversions' auto-OCR.
+//
+// (Written answers from server AI, and their citations: tests/e2e/ai-cloud.mjs.)
 //
 // AI_LARGE=1 also downloads the small (273 MB) and large (570 MB) models and
 // runs them (WebGPU in Chrome; slow on the CPU elsewhere): a written answer
@@ -74,22 +77,27 @@ await suite(async ({ browser, test }) => {
     if (url.includes("/vendor/models/")) modelFiles.push(url);
   });
 
-  await test("no model: cites page 14 for the invoice total, downloads nothing", async () => {
+  // No model that writes: the answer is the request to turn AI on, never the PDF's own text.
+  const needsAi = (a) => {
+    if (!a.text.includes(t["chat.needsAi"])) throw new Error(`not asked to turn on AI: ${a.text}`);
+    if (a.text.includes("$1,234.50") || a.pages.length) throw new Error(`showed passages: ${a.text}`);
+  };
+
+  await test("no model: the chat asks to turn on AI, shows no passages, downloads nothing", async () => {
     await open(page, "/en/chat-with-pdf");
     await pick(page, [twenty]);
     await page.getByLabel(t["chat.ask"]).waitFor();
     await page.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 30000 });
-    const a = await ask(page, "What is the invoice total?");
-    if (a.pages[0] !== 14) throw new Error(`cited ${a.pages}: ${a.text}`);
-    if (!a.text.includes("$1,234.50")) throw new Error(a.text);
+    await page.locator("[data-needs-ai]").first().waitFor({ timeout: 15000 });
+    needsAi(await ask(page, "What is the invoice total?"));
     if (modelFiles.length) throw new Error(`fetched ${modelFiles[0]}`);
-    return `cites p. ${a.pages.join(", ")}`;
+    return "asked to turn on AI";
   });
 
   // The AI worker breaks: its script fails, or it never answers. The page
-  // must not wait on it forever: it answers by keywords instead.
+  // must not wait on it forever.
   for (const mode of ["crashes", "never answers"]) {
-    await test(`the AI worker ${mode}: chat still answers`, async () => {
+    await test(`the AI worker ${mode}: chat still reads the PDF and asks to turn on AI`, async () => {
       const broken = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
       try {
         await broken.addInitScript((crash) => {
@@ -106,35 +114,24 @@ await suite(async ({ browser, test }) => {
         await open(p, "/en/chat-with-pdf");
         await pick(p, [twenty]);
         await p.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 30000 });
-        const a = await ask(p, "What is the invoice total?", 50000);
-        if (a.pages[0] !== 14 || !a.text.includes("$1,234.50")) throw new Error(`cited ${a.pages}: ${a.text}`);
-        return `answered by keywords, cites p. ${a.pages[0]}`;
+        needsAi(await ask(p, "What is the invoice total?", 50000));
+        return "asked to turn on AI";
       } finally {
         await broken.close();
       }
     });
   }
 
-  await test("a citation shows its page", async () => {
-    await page.getByRole("button", { name: t["chat.nextPage"] }).click();
-    await page.locator("[data-citation='14']").first().click();
-    await page.locator("[data-chat-page='14']").waitFor({ timeout: 5000 });
-    return "page 14 shown";
-  });
-
   let ms = 0;
-  await test("light model: downloads on request, then answers by meaning", async () => {
+  await test("light model: downloads on request, and alone doesn't answer", async () => {
     ms = await download(page, "light", 120000);
-    const a = await ask(page, "How much do we owe Northwind in total?");
-    if (a.pages[0] !== 14) throw new Error(`cited ${a.pages}: ${a.text}`);
-    const by = await page.locator("[data-answer]").last().innerText();
-    if (!by.includes(t["chat.by.light"])) throw new Error(`not the light model: ${by}`);
+    needsAi(await ask(page, "How much do we owe Northwind in total?"));
     const parts = new Set(modelFiles.map((u) => u.split("/vendor/models/")[1].split("/")[0]));
     if ([...parts].some((p) => !p.startsWith("light-"))) throw new Error(`fetched ${[...parts]}`);
-    return `downloaded in ${ms} ms, cites p. ${a.pages.join(", ")}`;
+    return `downloaded in ${ms} ms`;
   });
 
-  await test("after a reload, offline: the model is still here and answers", async () => {
+  await test("after a reload, offline: the model is still here, nothing fetched again", async () => {
     await open(page, "/en/chat-with-pdf");
     // The service worker keeps the page's code once it controls the page,
     // and the page loads the AI worker and, with a model on the device, its
@@ -161,24 +158,21 @@ await suite(async ({ browser, test }) => {
       await pick(page, [twenty]);
       await page.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 30000 });
       await row(page, "light").getByRole("radio").waitFor({ timeout: 10000 });
-      const a = await ask(page, "What is the invoice total?");
-      if (a.pages[0] !== 14) throw new Error(`cited ${a.pages}`);
+      needsAi(await ask(page, "What is the invoice total?"));
       if (modelFiles.length !== before) throw new Error("fetched the model again");
     } finally {
       await ctx.setOffline(false);
     }
-    return "answered offline";
+    return "still on the device offline";
   });
 
-  await test("a scanned PDF: pages read by auto-OCR, answer cites page 1", async () => {
+  await test("a scanned PDF: pages read by auto-OCR before any question", async () => {
     await open(page, "/en/chat-with-pdf");
     await pick(page, ["scanned.pdf"]);
     await page.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 120000 });
     const note = await page.locator("[data-ocr-note]").getAttribute("data-ocr-note");
     if (note !== "ocrUsed") throw new Error(`note ${note}`);
-    const a = await ask(page, "What is the total due?");
-    if (a.pages[0] !== 1 || !a.text.includes("1,250.00")) throw new Error(`cited ${a.pages}: ${a.text}`);
-    return "OCR note shown, cites p. 1";
+    return "OCR note shown";
   });
 
   await test("summary without a model in under 10 s", async () => {

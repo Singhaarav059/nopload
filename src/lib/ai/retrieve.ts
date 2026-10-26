@@ -1,8 +1,10 @@
 // Finds the chunks that answer a question: Okapi BM25 over the words
-// (Robertson & Zaragoza, 2009), fused with the embedding model's cosine
-// ranking when there is one by reciprocal rank fusion (Cormack, Clarke &
-// Büttcher, 2009). Keywords catch names, numbers and codes; embeddings catch
-// the same meaning in other words.
+// (Robertson & Zaragoza, 2009), the chunks that contain the question's
+// distinctive words letter for letter, and the embedding model's cosine
+// ranking when there is one, fused by reciprocal rank fusion (Cormack, Clarke
+// & Büttcher, 2009). Keywords catch names, numbers and codes; the exact
+// match catches a name inside a longer string ("hazelnut" in
+// "HAZELNUTCAFE@okaxis"); embeddings catch the same meaning in other words.
 
 import type { Chunk } from "./chunk";
 
@@ -94,14 +96,78 @@ export function fuse<T>(lists: T[][], key: (x: T) => unknown, k = 60): { item: T
 
 export type Vectors = { query: ArrayLike<number>; chunks: ArrayLike<number>[] };
 
-// The k chunks that best answer `query`, best first.
+// The words a question is asked with rather than about ("what is the
+// biggest payment"): they say what to do with the document, not what to
+// find in it, so they're never looked for letter for letter.
+const GENERIC = new Set(
+  (
+    "biggest largest highest greatest maximum max most top smallest lowest least minimum min cheapest total sum overall altogether average mean count number list all every each " +
+    "payment paid pay amount money spent spend spending received receive credit credited debit debited transaction transfer transferred bill charge fee cost price balance " +
+    "account statement document pdf file page date month year week day time first last find show give mention mentioned name many much big small large high low " +
+    "did does was were has have had get got made make any some one two this that these those from into out incoming outgoing sent went go gone spend bought buy paying spending"
+  ).split(" "),
+);
+
+// The question's distinctive words, as written (lower case, three letters or
+// more), and its quoted phrases: what the document must contain, letter for
+// letter, to be about them.
+export function exactTerms(question: string): string[] {
+  const quoted = [...question.matchAll(/["“”«»']([^"“”«»']{3,})["“”«»']/g)].map((m) => m[1].trim().toLowerCase());
+  const words = (question.toLowerCase().match(/[\p{L}\p{N}@._-]+/gu) ?? [])
+    .map((w) => w.replace(/^[._-]+|[._-]+$/g, ""))
+    .filter((w) => w.length >= 3 && !STOP.has(w) && !GENERIC.has(w) && !GENERIC.has(w.replace(/s$/, "")) && !CJK.test(w));
+  return [...new Set([...quoted, ...words])];
+}
+
+// The names the question asks about that appear nowhere in the document:
+// its distinctive words that look like names (capitalised after the first
+// word, quoted, or with digits or an @ in them), or its one distinctive word.
+// Other words ("went", "groceries") may just be phrased differently there.
+export function missingTerms(chunks: Chunk[], question: string): string[] {
+  const all = chunks.map((c) => c.text.toLowerCase()).join("\n");
+  const terms = exactTerms(question);
+  const named = new Set(
+    [
+      ...[...question.matchAll(/["“”«»']([^"“”«»']{3,})["“”«»']/g)].map((m) => m[1]),
+      ...(question.match(/(?<=\S\s+)\p{Lu}[\p{L}\p{N}@._-]*|[\p{L}\p{N}._-]*[\d@][\p{L}\p{N}@._-]*/gu) ?? []),
+    ].map((w) => w.trim().toLowerCase()),
+  );
+  return terms.filter((t) => (terms.length === 1 || named.has(t)) && !all.includes(t) && !all.includes(t.replace(/s$/, "")));
+}
+
+// "Biggest", "total", "list all": a question answered by looking across the
+// whole document rather than at one place in it.
+const AGGREGATE =
+  /\b(?:biggest|largest|highest|greatest|maximum|max|most|top|smallest|lowest|least|minimum|min|cheapest|total|sum|overall|altogether|average|mean|how much|how many|all|every|each|list|count)\b|\b(?:sab(?:se)?|kul|total)\b/i;
+export const isAggregate = (question: string) => AGGREGATE.test(question);
+
+// The chunks containing the question's distinctive words letter for letter,
+// those with more of them first.
+function exact(chunks: Chunk[], terms: string[]): Hit[] {
+  if (!terms.length) return [];
+  return chunks
+    .map((chunk) => {
+      const text = chunk.text.toLowerCase();
+      return { chunk, score: terms.filter((t) => text.includes(t) || text.includes(t.replace(/s$/, ""))).length };
+    })
+    .filter((h) => h.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
+// The k chunks that best answer `query`, best first. Chunks that contain the
+// question's distinctive words come before any that don't.
 export function search(chunks: Chunk[], query: string, o: { k?: number; vectors?: Vectors } = {}): Hit[] {
   const k = o.k ?? 5;
   const words = bm25(chunks, tokens(query));
-  if (!o.vectors) return words.slice(0, k);
-  const { query: qv, chunks: cv } = o.vectors;
-  const meaning = chunks.map((chunk, i) => ({ chunk, score: cosine(qv, cv[i]) })).sort((a, b) => b.score - a.score);
-  return fuse([words.slice(0, 50), meaning.slice(0, 50)], (h) => h.chunk.id, 60)
-    .slice(0, k)
-    .map(({ item, score }) => ({ chunk: item.chunk, score }));
+  const found = exact(chunks, exactTerms(query));
+  const lists = [found.slice(0, 50), found.slice(0, 50), words.slice(0, 50)];
+  if (o.vectors) {
+    const { query: qv, chunks: cv } = o.vectors;
+    lists.push(chunks.map((chunk, i) => ({ chunk, score: cosine(qv, cv[i]) })).sort((a, b) => b.score - a.score).slice(0, 50));
+  }
+  const matched = new Map(found.map((h) => [h.chunk.id, h.score]));
+  return fuse(lists, (h) => h.chunk.id, 60)
+    .map(({ item, score }) => ({ chunk: item.chunk, score }))
+    .sort((a, b) => (matched.get(b.chunk.id) ?? 0) - (matched.get(a.chunk.id) ?? 0) || b.score - a.score)
+    .slice(0, k);
 }

@@ -15,14 +15,14 @@ export const prepareAi = () =>
     if (Object.values(s.stored).some(Boolean)) await e.prepareRuntime();
   });
 
-// Where a tool's AI runs, and the on-device models it can use. A device
-// that can run the models (src/lib/ai/engine.ts deviceCanRunModels) uses
-// on-device AI only, and the panel says what downloading a model gives.
-// Other devices, where this copy of the site has it, get server AI
-// (src/lib/ai/cloud.ts) by default: the panel says what it sends, with the
-// providers named in the privacy policy, and "On this device" says what it
-// gives up. Phones and tablets are never offered model downloads. The model list shows what each model does, its download size
-// and whether it's on this device. Nothing downloads until the visitor
+// Where a tool's AI runs, and the on-device models it can use. Where this
+// copy of the site has server AI (src/lib/ai/cloud.ts), it's offered on
+// every device and used by default unless a model that writes is on the
+// device (or the visitor chose On this device): phones always use it, since
+// they're never offered model downloads. The panel says what server AI
+// sends, with the providers named in the privacy policy, and what "On this
+// device" gives up. The model list shows what each model does, its download
+// size and whether it's on this device. Nothing downloads until the visitor
 // presses Download; after that it works offline. `value` is what's in use
 // ("cloud" for server AI, a model, or "" for no model), which the tool's run
 // reads as the aiModel option. `task` picks the wording ("chat",
@@ -60,13 +60,15 @@ export function AiModels({ models, value, onChange, task }: { models: string[]; 
       setCloud(hasCloud);
       setCapable(able);
       if (s) setStatus(s);
-      // A capable device never uses server AI, whatever was picked before.
-      if (picked.current || (value && !(able && value === c.CLOUD))) return;
-      // The visitor's last choice; else server AI where it's offered; else the most capable model on the device.
+      if (picked.current || value) return;
+      // The visitor's last choice of a model that's here; else server AI on a
+      // phone, when it was chosen, or when no model that writes is here; else
+      // the most capable model on the device.
       const chosen = e.chosenModel();
       const best = s ? [...served].reverse().find((m) => s.stored[m]) : undefined;
-      if (!able && hasCloud && (chosen === c.CLOUD || !chosen)) onChange(c.CLOUD);
-      else if (!onPhone && chosen && chosen !== c.CLOUD && chosen !== "device" && served.includes(chosen) && s?.stored[chosen]) onChange(chosen);
+      const writes = s ? served.some((m) => m !== "light" && s.stored[m]) : false;
+      if (!onPhone && chosen && chosen !== c.CLOUD && chosen !== "device" && served.includes(chosen) && s?.stored[chosen]) onChange(chosen);
+      else if (hasCloud && (onPhone || chosen === c.CLOUD || (!chosen && !writes))) onChange(c.CLOUD);
       else {
         setDevice(true);
         onChange(onPhone ? "" : (best ?? ""));
@@ -92,8 +94,7 @@ export function AiModels({ models, value, onChange, task }: { models: string[]; 
 
   // A phone with no server AI here has nothing to choose.
   if (capable === null || (!ids.length && !cloud) || (phone && !cloud)) return null;
-  // Server AI is offered only to devices that can't run the models.
-  const server = cloud && !capable;
+  const server = cloud;
 
   const choose = async (id: Choice) => {
     picked.current = true;
@@ -191,20 +192,12 @@ export function AiModels({ models, value, onChange, task }: { models: string[]; 
     </>
   );
 
-  // On-device AI only: a device that can run the models (it's told what a
-  // download gives, and why there's no server AI), or no server AI here.
+  // On-device AI only: there's no server AI here.
   if (!server)
     return (
       <section aria-labelledby="ai-models" className="mt-6 border-t border-line pt-5" data-ai-models data-ai-mode="device" data-ai-capable={capable ? "" : undefined}>
         <p id="ai-models" className="text-[14px] font-medium">{t("ai.models")}</p>
-        {capable && cloud ? (
-          <div className="mt-1 space-y-1.5 text-[13px] leading-relaxed text-ink-2">
-            <p>{t(`ai.capable.${task}`)}</p>
-            <p className="text-muted">{t("ai.capable.why")}</p>
-          </div>
-        ) : (
-          <p className="mt-1 text-[13px] text-muted">{t("ai.modelsNote")}</p>
-        )}
+        <p className="mt-1 text-[13px] text-muted">{t("ai.modelsNote")}</p>
         {list}
       </section>
     );

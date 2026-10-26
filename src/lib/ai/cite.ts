@@ -1,10 +1,9 @@
-// Page citations. The model sees the retrieved chunks as numbered sources,
-// each with its page, and is asked to cite them as [1], [2]. Its answer's
-// markers are mapped back to pages here; a marker naming a source or page
-// that wasn't given is dropped, so a citation always points at text the
-// answer was built from. An answer with no markers gets the sources it
-// borrows its words from. Without a model, the answer is the sentences that
-// match the question best, each with its own page.
+// Page citations. The model sees the retrieved chunks as excerpts, each
+// starting with its page ("p. 5"), and is asked to cite pages as (p. 5).
+// Its answer's markers are mapped back to pages here; a marker naming a
+// source or page that wasn't given is dropped, so a citation always points
+// at text the answer was built from. An answer with no markers gets the
+// sources it borrows its words from.
 
 import { splitSentences } from "./extractive";
 import { tokens, type Hit } from "./retrieve";
@@ -14,14 +13,27 @@ export type Source = { n: number; page: number; text: string };
 export type Part = { text: string; pages?: number[] };
 export type Answer = { parts: Part[]; pages: number[] };
 
+// The excerpts for the prompt: the chunks' pages in document order, each
+// once, with its units in page order; where chunks of a page overlap, the
+// shared units are sent once, so a row is never counted twice in a total.
 export function numberSources(hits: Hit[]): { sources: Source[]; context: string } {
-  const sources = hits.map((h, i) => ({ n: i + 1, page: h.chunk.page, text: h.chunk.text }));
-  return { sources, context: sources.map((s) => `[${s.n}] (page ${s.page}) ${s.text}`).join("\n") };
+  const pages = new Map<number, Map<number, string>>();
+  for (const { chunk } of hits) {
+    const units = pages.get(chunk.page) ?? new Map<number, string>();
+    chunk.units.forEach((u, i) => units.set(chunk.from + i, u));
+    pages.set(chunk.page, units);
+  }
+  const sources = [...pages.keys()]
+    .sort((a, b) => a - b)
+    .map((page, i) => ({ n: i + 1, page, text: [...pages.get(page)!].sort((a, b) => a[0] - b[0]).map(([, u]) => u).join("\n") }));
+  return { sources, context: sources.map((s) => `(p. ${s.page})\n${s.text}`).join("\n\n") };
 }
 
-// One or more markers in a row: [1], [1, 2], [p. 3], [page 3], (page 3), (p. 3).
-const MARKER = /\[\s*\d+(?:\s*[,;]\s*\d+)*\s*\]|[[(]\s*p(?:age|\.|g\.?)?\s*\d+\s*[\])]/gi;
-const GROUP = new RegExp(`(?:\\s*(?:${MARKER.source}))+`, "gi");
+// One or more markers in a row: [1], [1, 2], [p. 3], [page 3], (page 3),
+// (p. 3), (p. 2, p. 7), (pp. 2–3), or a bare "p. 3" at the end of a sentence.
+const MARKER =
+  /\[\s*\d+(?:\s*[,;]\s*\d+)*\s*\]|[[(]\s*(?:pp?\.?|pages?|pg\.?)\s*\d+(?:\s*(?:[,;&–-]|and)\s*(?:pp?\.?\s*|pages?\s*)?\d+)*\s*[\])]|\bpp?\.\s?\d+(?:\s*(?:[,–-]|and)\s*(?:p\.\s?)?\d+)*(?=\s*[.;,]?\s*(?:$|\n|[A-Z]))/gim;
+const GROUP = new RegExp(`(?:\\s*(?:${MARKER.source}))+`, "gim");
 
 const unique = (xs: number[]) => [...new Set(xs)];
 
@@ -66,39 +78,3 @@ export function attribute(answer: string, sources: Source[]): number[] {
   }
   return unique(pages);
 }
-
-// Without a model: up to `max` sentences from the retrieved chunks that share
-// the most (rare) words with the question, best first. A chunk that ranked
-// higher breaks ties. `similar`, when given, scores by meaning instead
-// (cosine similarity). Sentences well behind the best one are left out.
-export function extractiveAnswer(question: string, hits: Hit[], o: { max?: number; similar?: number[] } = {}): { text: string; page: number }[] {
-  const q = new Set(tokens(question));
-  const sentences = hits.flatMap((h, rank) => splitSentences(h.chunk.text).map((text) => ({ text, page: h.chunk.page, rank })));
-  // Rarer words count for more, as in the index.
-  const df = new Map<string, number>();
-  const bags = sentences.map((s) => new Set(tokens(s.text)));
-  for (const bag of bags) for (const t of bag) df.set(t, (df.get(t) ?? 0) + 1);
-  const scored = sentences.map((s, i) => {
-    let score = o.similar?.[i] ?? 0;
-    if (!o.similar) for (const t of q) if (bags[i].has(t)) score += Math.log(1 + sentences.length / df.get(t)!);
-    return { ...s, score: score - s.rank * 1e-3 };
-  });
-  const best = Math.max(0, ...scored.map((s) => s.score));
-  const floor = o.similar ? Math.max(0.2, best - 0.12) : best * 0.5;
-  const seen = new Set<string>();
-  return scored
-    .filter((s) => s.score > 0 && s.score >= floor)
-    .sort((a, b) => b.score - a.score)
-    .filter((s) => {
-      const key = s.text.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, o.max ?? 3)
-    .map(({ text, page }) => ({ text, page }));
-}
-
-// The sentences of an extractive answer, with their sentence list in
-// document order, for extractiveAnswer's `similar`.
-export const answerSentences = (hits: Hit[]) => hits.flatMap((h) => splitSentences(h.chunk.text));

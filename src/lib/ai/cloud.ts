@@ -1,15 +1,35 @@
-// The cloud AI (functions/api/ai.ts), from the page's side: Claude by
-// Anthropic, with Cloudflare Workers AI as its backup. Only the text a task
-// needs is sent (a question and the passages that answer it, a document's
-// text to summarise, blocks to translate), never the file. Any failure is a
-// CloudUnavailable, and the tools then use on-device AI instead.
+// The cloud AI (functions/api/ai.ts), from the page's side: a large model
+// (Llama 3.3 70B on Groq's free tier, Claude by Anthropic, or Cloudflare
+// Workers AI, the first of them that answers). Only the text a task needs is
+// sent (a question and the passages that answer it, a document's text to
+// summarise, blocks to translate), never the file. Any failure is a
+// CloudUnavailable (a CloudLimited when the visitor asked too much, too
+// fast), which the tools tell the visitor about, or answer on the device.
+// Answers are kept on this device for a week (./answers.ts): the same
+// request again costs no request.
 
 import { AI_CLOUD } from "../mode";
+import { answerKey, keepAnswer, keptAnswer } from "./answers";
 
 export const CLOUD = "cloud";
-export type Provider = "anthropic" | "cloudflare";
+// Who answered, as the endpoint's X-AI-Provider header names it.
+export type Provider = "groq" | "anthropic" | "gemini" | "openrouter" | "cloudflare";
+const PROVIDERS: Provider[] = ["groq", "anthropic", "gemini", "openrouter", "cloudflare"];
 
-export class CloudUnavailable extends Error {}
+// fallbackToLocal: every provider, key and model is used up for now, so the
+// page should answer on the device if it has a model there.
+export class CloudUnavailable extends Error {
+  fallbackToLocal = false;
+}
+// The fair-use limit for chat (functions/api/ai.ts): this visitor asked too
+// many questions this minute, or today.
+export class CloudLimited extends CloudUnavailable {
+  limit: "minute" | "day";
+  constructor(limit: "minute" | "day") {
+    super(`limit: ${limit}`);
+    this.limit = limit;
+  }
+}
 
 const ENDPOINT = "/api/ai";
 
@@ -20,12 +40,15 @@ export function cloudAvailable(): Promise<boolean> {
   if (!AI_CLOUD) return Promise.resolve(false);
   available ??= fetch(ENDPOINT, { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : null))
-    .then((s: { anthropic?: boolean; cloudflare?: boolean } | null) => !!(s?.anthropic || s?.cloudflare))
+    .then((s: Partial<Record<Provider, boolean>> | null) => PROVIDERS.some((p) => s?.[p]))
     .catch(() => false);
   return available;
 }
 
-const providerOf = (r: Response): Provider => (r.headers.get("X-AI-Provider") === "cloudflare" ? "cloudflare" : "anthropic");
+const providerOf = (r: Response): Provider => {
+  const name = r.headers.get("X-AI-Provider") as Provider | null;
+  return name && PROVIDERS.includes(name) ? name : "anthropic";
+};
 
 async function send(body: object, signal?: AbortSignal): Promise<Response> {
   let r: Response;
@@ -35,12 +58,38 @@ async function send(body: object, signal?: AbortSignal): Promise<Response> {
     if (signal?.aborted) throw e;
     throw new CloudUnavailable(String(e));
   }
-  if (!r.ok) throw new CloudUnavailable(`${r.status} ${await r.text().catch(() => "")}`.trim());
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    let info: { limit?: string; fallbackToLocal?: boolean } = {};
+    try {
+      info = JSON.parse(text);
+    } catch {
+      /* not JSON */
+    }
+    if (r.status === 429 && (info.limit === "minute" || info.limit === "day")) throw new CloudLimited(info.limit);
+    const e = new CloudUnavailable(`${r.status} ${text}`.trim());
+    e.fallbackToLocal = !!info.fallbackToLocal;
+    throw e;
+  }
   return r;
 }
 
+const known = (p: string): Provider => (PROVIDERS.includes(p as Provider) ? (p as Provider) : "anthropic");
+
 // A streamed reply; `onText` gets the text so far.
-export async function cloudText(body: object, o: { onText?: (text: string) => void; signal?: AbortSignal } = {}): Promise<{ text: string; provider: Provider }> {
+export async function cloudText(body: Record<string, unknown>, o: { onText?: (text: string) => void; signal?: AbortSignal } = {}): Promise<{ text: string; provider: Provider }> {
+  const key = await answerKey(body).catch(() => null);
+  const kept = key && (await keptAnswer(key));
+  if (kept) {
+    o.onText?.(kept.value);
+    return { text: kept.value, provider: known(kept.provider) };
+  }
+  const { text, provider } = await fetchText(body, o);
+  if (key) void keepAnswer(key, text, provider);
+  return { text, provider };
+}
+
+async function fetchText(body: object, o: { onText?: (text: string) => void; signal?: AbortSignal }): Promise<{ text: string; provider: Provider }> {
   const r = await send(body, o.signal);
   const provider = providerOf(r);
   if (!r.body) return { text: await r.text(), provider };
@@ -56,7 +105,13 @@ export async function cloudText(body: object, o: { onText?: (text: string) => vo
   return { text, provider };
 }
 
-export async function cloudJson<T>(body: object, signal?: AbortSignal): Promise<{ data: T; provider: Provider }> {
+export async function cloudJson<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<{ data: T; provider: Provider }> {
+  const key = await answerKey(body).catch(() => null);
+  const kept = key && (await keptAnswer(key));
+  if (kept) return { data: JSON.parse(kept.value) as T, provider: known(kept.provider) };
   const r = await send(body, signal);
-  return { data: (await r.json()) as T, provider: providerOf(r) };
+  const data = (await r.json()) as T;
+  const provider = providerOf(r);
+  if (key) void keepAnswer(key, JSON.stringify(data), provider);
+  return { data, provider };
 }
