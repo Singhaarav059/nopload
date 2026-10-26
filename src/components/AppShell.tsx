@@ -14,6 +14,7 @@ import { CATEGORIES, TOOLS } from "@/lib/tools";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { switchLanguage } from "@/lib/i18n/slugs";
 import { goToLanguage } from "@/lib/session";
+import { goHome } from "@/lib/home";
 import { useDialog } from "@/lib/useDialog";
 import { haptic, subscribeDevice, type Form, type Nav, type Os } from "@/lib/device";
 
@@ -110,7 +111,7 @@ function TabBar({ os, open, sheet, pre }: { os: Os | null; open: (s: Sheet) => v
           </>
         );
         return tab.href ? (
-          <Link key={tab.id} href={tab.href} data-tab={tab.id} aria-current={on ? "page" : undefined} className="app-tab" onClick={() => { haptic(); open(null); }}>
+          <Link key={tab.id} href={tab.href} data-tab={tab.id} aria-current={on ? "page" : undefined} className="app-tab" onClick={(e) => { haptic(); open(null); if (tab.id === "home") goHome(e, tab.href); }}>
             {body}
           </Link>
         ) : (
@@ -160,7 +161,7 @@ function Side({ nav, open }: { nav: Nav | null; open: (s: Sheet) => void }) {
             </>
           );
           return tab.href ? (
-            <Link key={tab.id} href={tab.href} data-tab={tab.id} aria-current={tab.current ? "page" : undefined} className="app-tab" onClick={() => haptic()}>{body}</Link>
+            <Link key={tab.id} href={tab.href} data-tab={tab.id} aria-current={tab.current ? "page" : undefined} className="app-tab" onClick={(e) => { haptic(); if (tab.id === "home") goHome(e, tab.href!); }}>{body}</Link>
           ) : (
             <button key={tab.id} type="button" data-tab={tab.id} aria-current={tab.current ? "page" : undefined} className="app-tab" onClick={() => { haptic(); open(tab.sheet!); }}>{body}</button>
           );
@@ -181,7 +182,7 @@ function Side({ nav, open }: { nav: Nav | null; open: (s: Sheet) => void }) {
         {tabs.filter((x) => x.id !== "tools").map((tab) => (
           <li key={tab.id}>
             {tab.href ? (
-              <Link href={tab.href} data-tab={tab.id} aria-current={tab.current ? "page" : undefined} className="app-side-item">
+              <Link href={tab.href} data-tab={tab.id} aria-current={tab.current ? "page" : undefined} className="app-side-item" onClick={(e) => tab.id === "home" && goHome(e, tab.href!)}>
                 <tab.icon size={17} strokeWidth={1.75} /> {tab.label}
               </Link>
             ) : (
@@ -342,7 +343,7 @@ function SettingsList() {
       </div>
       <div>
         <label className="mb-2 block text-[13px] font-semibold text-muted" htmlFor="app-lang">{t("nav.language")}</label>
-        <select id="app-lang" className="field" value={locale} onChange={(e) => void goToLanguage(switchLanguage(pathname, e.target.value as Locale))}>
+        <select id="app-lang" className="field" value={locale} onChange={(e) => void goToLanguage(switchLanguage(pathname, e.target.value as Locale), () => confirm(t("session.notKept")))}>
           {LOCALES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
         </select>
       </div>

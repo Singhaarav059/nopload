@@ -360,6 +360,8 @@ jobs:
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:office-run
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:storage
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: node scripts/ci-report.mjs "test:libreoffice" npm run test:libreoffice
       - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run test:libreoffice-parts

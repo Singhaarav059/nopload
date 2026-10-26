@@ -39,10 +39,12 @@ const fromBase64Url = (s: string) => {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 };
 
-// The fragment for a recipe, "#recipe=…".
-export function recipeHash(r: Recipe): string {
+// The fragment for a recipe, "#recipe=…", or null when it would be longer
+// than readRecipe takes (long option text): a link made here always opens.
+export function recipeHash(r: Recipe): string | null {
   const json = JSON.stringify({ v: 1, name: r.name.slice(0, 80), steps: cleanSteps(r.steps) });
-  return `#${KEY}${toBase64Url(new TextEncoder().encode(json))}`;
+  const body = toBase64Url(new TextEncoder().encode(json));
+  return body.length > MAX ? null : `#${KEY}${body}`;
 }
 
 // The recipe in a fragment ("#recipe=…"), null when there is none, "bad"

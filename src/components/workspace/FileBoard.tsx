@@ -61,7 +61,7 @@ function Card({ item, onRemove, sortable }: { item: Item; onRemove: () => void; 
     >
       {sortable && (
         <button ref={setActivatorNodeRef} {...attributes} aria-label={t("ws.moveItem", { name: item.file.name })}
-          className="absolute start-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md text-muted hover:text-ink pointer-coarse:h-10 pointer-coarse:w-10">
+          className="absolute start-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-line bg-surface text-muted hover:text-ink pointer-coarse:h-10 pointer-coarse:w-10">
           <GripVertical size={15} />
         </button>
       )}

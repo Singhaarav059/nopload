@@ -15,6 +15,7 @@ import { useDialog } from "@/lib/useDialog";
 import { ThemeMenu, ThemeSwitch } from "./ThemeMenu";
 import { openCommandBar } from "./CommandBar";
 import { InstallButton } from "./InstallGuide";
+import { goHome } from "@/lib/home";
 
 // Every tool's icon only shows in the phone menu: loaded when it opens (P3-03).
 const ToolIcon = dynamic(() => import("./ToolIcon").then((m) => m.ToolIcon), { ssr: false });
@@ -57,7 +58,7 @@ export function Header() {
   // A change of language loads a new page; the work on this one goes along (src/lib/session.ts).
   const switchLocale = (code: Locale) => {
     close();
-    void goToLanguage(switchLanguage(pathname, code));
+    void goToLanguage(switchLanguage(pathname, code), () => confirm(t("session.notKept")));
   };
 
   return (
@@ -66,7 +67,7 @@ export function Header() {
         {/* The frosted island is its own layer: a backdrop-filter on an
             ancestor would make it the containing block of the fixed menus below. */}
         <div aria-hidden className="header-scroll absolute inset-0 -z-10 rounded-full border border-line bg-[color-mix(in_oklab,var(--surface)_86%,transparent)] backdrop-blur-[16px] backdrop-saturate-150" />
-        <Link href={href("/")} className="me-4 rounded-full sm:me-6" aria-label={t("nav.home")}>
+        <Link href={href("/")} className="me-4 rounded-full sm:me-6" aria-label={t("nav.home")} onClick={(e) => { close(); goHome(e, href("/")); }}>
           <Logo />
         </Link>
 
@@ -140,7 +141,7 @@ export function Header() {
                       close();
                       if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                       e.preventDefault();
-                      void goToLanguage(switchLanguage(pathname, l.code));
+                      void goToLanguage(switchLanguage(pathname, l.code), () => confirm(t("session.notKept")));
                     }}
                     className={`rounded-xl px-3 py-1.5 text-start text-[14px] transition-colors hover:bg-surface-2 ${l.code === locale ? "bg-surface-2 font-medium text-ink" : "text-ink-2"}`}
                   >

@@ -1,9 +1,11 @@
 // The cloud AI endpoint (functions/api/ai.ts): Claude answers first, Workers
 // AI when Claude can't, a fixed prompt per task, capped inputs, and the
-// origin check. Anthropic is a local stand-in server; Workers AI a fake binding.
+// origin check, and the usage limits. Anthropic is a local stand-in server;
+// Workers AI, KV and D1 are fake bindings (D1 over node:sqlite).
 //
 //   node tests/ai-cloud.mjs
 import { createServer } from "node:http";
+import { DatabaseSync } from "node:sqlite";
 import { onRequestGet, onRequestPost, jobOf, parseTexts } from "../functions/api/ai.ts";
 
 let failed = 0;
@@ -255,6 +257,97 @@ await test("AI_DAILY_CHARS caps all visitors together", async () => {
   // Different visitors, alternating instances: four fit in 100,000 characters.
   for (let i = 0; i < 6; i++) statuses.push((await postTo(i % 2 ? other : { onRequestPost }, big, env, { "cf-connecting-ip": `10.5.5.${i}` })).status);
   eq(statuses, [200, 200, 200, 200, 429, 429], "statuses");
+});
+
+// A D1 database: the binding's prepare/bind/first/run/all over SQLite in
+// memory, so the limiter's real SQL runs. Each statement waits a tick
+// first, so concurrent requests interleave between statements, as on D1;
+// `broken` makes every query fail.
+const d1 = () => {
+  const db = new DatabaseSync(":memory:");
+  const mock = {
+    db,
+    broken: false,
+    queries: 0,
+    prepare(sql) {
+      const statement = (values) => {
+        const exec = async (how) => {
+          await null;
+          if (mock.broken) throw new Error("D1 is down");
+          mock.queries++;
+          return db.prepare(sql)[how](...values);
+        };
+        return {
+          bind: (...v) => statement(v),
+          first: async () => (await exec("get")) ?? null,
+          run: async () => ({ success: true, meta: await exec("run") }),
+          all: async () => ({ success: true, results: await exec("all") }),
+        };
+      };
+      return statement([]);
+    },
+  };
+  return mock;
+};
+// A summary request of exactly `n` characters, as the limiter counts them.
+const summaryOf = (n) => {
+  const size = (j) => j.system.length + j.messages.reduce((a, m) => a + m.content.length, 0);
+  const body = { task: "summarize", text: "t", points: 1, language: "en" };
+  return { ...body, text: "t".repeat(n - size(jobOf(body)) + 1) };
+};
+
+await test("with AI_QUOTA, a burst can't overshoot AI_DAILY_CHARS (5 × 359 against 500)", async () => {
+  mode = { reply: "- ok", status: 200 };
+  const quota = d1();
+  const env = { ...claude, AI_QUOTA: quota, AI_DAILY_CHARS: "500" };
+  const before = seen.length;
+  const statuses = await Promise.all([0, 1, 2, 3, 4].map((i) => postTo(i % 2 ? other : { onRequestPost }, summaryOf(359), env, { "cf-connecting-ip": `10.4.4.${i}` }).then((r) => r.status)));
+  eq(statuses.filter((s) => s === 200).length, 1, `one admitted (${statuses})`);
+  eq(statuses.filter((s) => s === 429).length, 4, "the rest refused");
+  eq(seen.length - before, 1, "Claude called once");
+  eq(quota.db.prepare("SELECT chars FROM ai_day").all().map((r) => r.chars), [359], "recorded usage");
+});
+
+await test("with only AI_LIMITS, the same burst gets through: KV is a budget, not a ceiling", async () => {
+  mode = { reply: "- ok", status: 200 };
+  const kv = kvStore();
+  const env = { ...claude, AI_LIMITS: kv, AI_DAILY_CHARS: "500" };
+  const statuses = await Promise.all([0, 1, 2, 3, 4].map((i) => post(summaryOf(359), env, { "cf-connecting-ip": `10.4.5.${i}` }).then((r) => r.status)));
+  eq(statuses.filter((s) => s === 200).length > 1, true, `more than one admitted (${statuses})`);
+});
+
+await test("with AI_QUOTA, two instances share one visitor's budget exactly", async () => {
+  mode = { reply: "ok", status: 200 };
+  const quota = d1();
+  const env = { ...claude, AI_QUOTA: quota, AI_LIMITS: kvStore() };
+  const statuses = await Promise.all(Array.from({ length: 60 }, (_, i) => postTo(i % 2 ? other : { onRequestPost }, chat, env, { "cf-connecting-ip": "10.4.6.1" }).then((r) => r.status)));
+  eq(statuses.filter((s) => s === 200).length, 40, "40 a minute, concurrently");
+  eq(quota.db.prepare("SELECT requests FROM ai_visitor WHERE ip = '10.4.6.1'").get().requests, 40, "the shared count");
+  eq(env.AI_LIMITS.data.size, 0, "KV isn't used when D1 is bound");
+});
+
+await test("when AI_QUOTA fails, requests are refused (503) and no model runs", async () => {
+  mode = { reply: "ok", status: 200 };
+  const quota = d1();
+  quota.broken = true;
+  const ai = workersAi("unused");
+  const before = seen.length;
+  const res = await post(chat, { ...claude, AI: ai, AI_QUOTA: quota, AI_LIMITS: kvStore() });
+  eq(res.status, 503, "status");
+  eq([seen.length - before, ai.calls], [0, 0], "neither provider called");
+  // It comes back once D1 does.
+  quota.broken = false;
+  eq((await post(chat, { ...claude, AI_QUOTA: quota })).status, 200, "recovered");
+});
+
+await test("with AI_QUOTA, a request no model answered is given back", async () => {
+  const quota = d1();
+  const env = { ...claude, AI_QUOTA: quota, AI_DAILY_CHARS: "500" };
+  mode = { reply: "", status: 529 };
+  eq((await post(summaryOf(359), env)).status, 503, "Claude down");
+  eq(quota.db.prepare("SELECT chars FROM ai_day").get().chars, 0, "the day's characters back");
+  mode = { reply: "- ok", status: 200 };
+  eq((await post(summaryOf(359), env)).status, 200, "so the next one fits");
 });
 
 await test("a POST without an Origin is refused", async () => {

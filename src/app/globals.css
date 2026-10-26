@@ -1059,20 +1059,24 @@ select.field {
     radial-gradient(100% 100% at 0% 100%, #ff8b47 0%, transparent 56%),
     #1d1534;
 }
+/* Edge to edge and up behind the header, so it has no edges of its own: it
+   only fades out downwards. (body clips the sideways overflow 100vw makes
+   where a scrollbar takes room.) */
 .aurora-wash {
-  position: absolute; inset: 0 0 auto; height: 760px; z-index: 0; pointer-events: none;
+  position: absolute; top: -120px; left: calc(50% - 50vw); width: 100vw; height: 880px; z-index: 0; pointer-events: none;
   background:
     radial-gradient(42% 46% at 12% 18%, #ff4fc4 0%, transparent 70%),
     radial-gradient(40% 48% at 58% 6%, #6b5cff 0%, transparent 72%),
     radial-gradient(38% 44% at 96% 30%, #2d7bff 0%, transparent 70%),
     radial-gradient(30% 34% at 30% 62%, #ff8b47 0%, transparent 70%);
   opacity: 0.2;
-  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 95%);
-  mask-image: linear-gradient(to bottom, #000 30%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 96%);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 96%);
 }
+body { overflow-x: clip; }
 :root[data-theme="dark"] .aurora-wash { opacity: 0.32; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .aurora-wash { opacity: 0.32; } }
-:root[data-app] .aurora-wash { height: 520px; }
+:root[data-app] .aurora-wash { height: 640px; }
 [data-app-hero] { z-index: 1; }
 .hero-title { letter-spacing: calc(var(--display-track) - 0.01em); }
 

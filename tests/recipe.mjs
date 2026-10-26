@@ -33,6 +33,18 @@ await test("passwords and files never go into a link", () => {
   ok(!Buffer.from(hash.slice(8), "base64url").toString().includes("hunter2"), "secret not in the link");
 });
 
+await test("every link made opens again; one too long isn't made", () => {
+  // Just under and well over the size the reader takes (the audit's case: 6,300 characters of watermark text).
+  for (const n of [1000, 1900, 2000, 2100, 2600]) {
+    const r = { name: "Long", steps: [{ tool: "watermark", options: { text: "QA ".repeat(n) } }] };
+    const hash = recipeHash(r);
+    if (hash === null) continue;
+    const back = readRecipe(hash);
+    ok(back !== "bad" && back?.steps[0].options.text === r.steps[0].options.text, `${n}: a link made here was refused`);
+  }
+  eq(recipeHash({ name: "Long", steps: [{ tool: "watermark", options: { text: "QA ".repeat(2100) } }] }), null, "6,300 characters: no link");
+});
+
 await test("no fragment, or another fragment, is no recipe", () => {
   eq(readRecipe(""), null, "empty");
   eq(readRecipe("#main"), null, "skip link");

@@ -23,8 +23,11 @@
 //                       (Its replies aren't streamed: see cloudflare() below.)
 //   ALLOWED_ORIGINS     other sites whose pages may call this, comma-separated
 //                       (default: https://nopload.vercel.app).
-//   AI_LIMITS           KV namespace binding; with it the per-visitor limits
-//                       below hold across Worker instances and restarts.
+//   AI_QUOTA            D1 database binding; with it the limits below are
+//                       exact: each request reserves its characters in one
+//                       SQL statement before any model runs.
+//   AI_LIMITS           KV namespace binding, used only without AI_QUOTA;
+//                       the limits then hold roughly across instances.
 //   AI_DAILY_CHARS      optional cap on the characters all visitors send in
 //                       a day (UTC); 2,000,000 is about 600,000 tokens.
 //   ANTHROPIC_MODEL, FALLBACK_MODEL, ANTHROPIC_BASE_URL   optional overrides.
@@ -34,7 +37,11 @@ import Anthropic from "@anthropic-ai/sdk";
 type WorkersAi = { run(model: string, input: object): Promise<unknown> };
 // The part of a Workers KV namespace binding the limiter uses.
 type Kv = { get(key: string, type: "json"): Promise<unknown>; put(key: string, value: string, o?: { expirationTtl?: number }): Promise<void> };
+// The part of a D1 database binding the limiter uses.
+type D1Statement = { bind(...values: unknown[]): D1Statement; first<T = Record<string, unknown>>(): Promise<T | null>; run(): Promise<unknown> };
+type D1 = { prepare(sql: string): D1Statement };
 export type Env = {
+  AI_QUOTA?: D1;
   AI_LIMITS?: Kv;
   AI_DAILY_CHARS?: string;
   ANTHROPIC_API_KEY?: string;
@@ -59,12 +66,17 @@ const MAX = { sources: 24_000, question: 2_000, history: 4, turn: 2_000, text: 6
 // A 100-page translation is about 35 requests and 300,000 characters.
 // AI_DAILY_CHARS, when set, also caps the characters all visitors together
 // send in a day (UTC).
-// With the AI_LIMITS binding (a KV namespace) the counts are shared by every
-// Worker instance; without it, or when KV fails, each instance counts on
-// its own, in memory, and a restart forgets. KV is eventually consistent,
-// so requests in the same second from different places can each slip
-// through: these are budgets, not a ceiling. The hard cap on spending is
-// the Anthropic account's own limit.
+// With the AI_QUOTA binding (a D1 database) the counts are exact: one SQL
+// statement adds a request only if it still fits, so concurrent requests
+// can't all pass (see allowD1). D1 is then the only judge: if it fails, the
+// request is refused (503) rather than counted somewhere weaker.
+// Without it, the AI_LIMITS binding (a KV namespace) shares the counts
+// between Worker instances, and without that, or when KV fails, each
+// instance counts on its own, in memory, and a restart forgets. KV reads,
+// adds and writes back (last write wins, eventually consistent), so
+// requests in the same second can each slip through and be recorded once:
+// a budget, not a ceiling. Either way characters aren't dollars: the hard
+// cap on spending is the Anthropic account's own limit.
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -110,9 +122,91 @@ async function allowShared(kv: Kv, ip: string, chars: number, cap: number, now: 
   return true;
 }
 
-async function allow(env: Env, ip: string, chars: number) {
+// D1: the tables, made on first use by each instance (no migration to run).
+const SCHEMA = [
+  "CREATE TABLE IF NOT EXISTS ai_day (day INTEGER PRIMARY KEY, chars INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS ai_visitor (ip TEXT PRIMARY KEY, at INTEGER NOT NULL, chars INTEGER NOT NULL, requests INTEGER NOT NULL, minute_at INTEGER NOT NULL, minute INTEGER NOT NULL)",
+];
+const schemas = new WeakMap<D1, Promise<unknown>>();
+function ensureSchema(db: D1) {
+  let made = schemas.get(db);
+  if (!made) {
+    made = Promise.all(SCHEMA.map((sql) => db.prepare(sql).run())).catch((e) => {
+      schemas.delete(db);
+      throw e;
+    });
+    schemas.set(db, made);
+  }
+  return made;
+}
+
+// Each reservation is one statement, so it's atomic: the row is added to
+// only when the WHERE holds, and RETURNING gives nothing when it doesn't.
+// (In DO UPDATE, a bare column is the stored value.) A first row is only
+// written when it fits: allowD1 refuses requests bigger than a whole limit.
+const RESERVE_DAY = `INSERT INTO ai_day (day, chars) VALUES (?1, ?2)
+  ON CONFLICT (day) DO UPDATE SET chars = chars + ?2 WHERE chars + ?2 <= ?3
+  RETURNING chars`;
+// The same rules as charge(): ?2 now, ?3 chars, ?4 HOUR, ?5 MINUTE, ?6 to ?8 LIMIT.
+const RESERVE_VISITOR = `INSERT INTO ai_visitor (ip, at, chars, requests, minute_at, minute) VALUES (?1, ?2, ?3, 1, ?2, 1)
+  ON CONFLICT (ip) DO UPDATE SET
+    at        = CASE WHEN ?2 - at >= ?4 THEN ?2 ELSE at END,
+    chars     = CASE WHEN ?2 - at >= ?4 THEN ?3 ELSE chars + ?3 END,
+    requests  = CASE WHEN ?2 - at >= ?4 THEN 1 ELSE requests + 1 END,
+    minute_at = CASE WHEN ?2 - at >= ?4 OR ?2 - minute_at >= ?5 THEN ?2 ELSE minute_at END,
+    minute    = CASE WHEN ?2 - at >= ?4 OR ?2 - minute_at >= ?5 THEN 1 ELSE minute + 1 END
+  WHERE ?2 - at >= ?4 OR (chars + ?3 <= ?6 AND requests < ?7 AND (?2 - minute_at >= ?5 OR minute < ?8))
+  RETURNING chars`;
+const REFUND_DAY = "UPDATE ai_day SET chars = max(0, chars - ?2) WHERE day = ?1";
+const REFUND_VISITOR = "UPDATE ai_visitor SET chars = max(0, chars - ?2) WHERE ip = ?1";
+
+// Reserves the request's characters (day first, then visitor), or reserves
+// nothing and returns false. A failing query throws: the caller refuses.
+async function allowD1(db: D1, ip: string, chars: number, cap: number, now: number) {
+  if (chars > LIMIT.chars || (cap && chars > cap)) return false;
+  await ensureSchema(db);
+  // Now and then, rows from earlier days and hours go.
+  if (Math.random() < 0.01) {
+    await db.prepare("DELETE FROM ai_day WHERE day < ?1").bind(Math.floor(now / DAY) - 1).run();
+    await db.prepare("DELETE FROM ai_visitor WHERE at < ?1").bind(now - HOUR).run();
+  }
+  const day = Math.floor(now / DAY);
+  if (cap && !(await db.prepare(RESERVE_DAY).bind(day, chars, cap).first())) return false;
+  const use = await db.prepare(RESERVE_VISITOR).bind(ip, now, chars, HOUR, MINUTE, LIMIT.chars, LIMIT.hour, LIMIT.minute).first();
+  if (!use && cap) await db.prepare(REFUND_DAY).bind(day, chars).run();
+  return !!use;
+}
+
+// Gives back the characters of a request no model answered (D1 only; best effort).
+async function refund(env: Env, ip: string, chars: number) {
+  if (!env.AI_QUOTA) return;
+  const day = Math.floor(Date.now() / DAY);
+  try {
+    await Promise.all([env.AI_QUOTA.prepare(REFUND_VISITOR).bind(ip, chars).run(), env.AI_DAILY_CHARS ? env.AI_QUOTA.prepare(REFUND_DAY).bind(day, chars).run() : null]);
+  } catch (e) {
+    console.warn("AI_QUOTA refund failed:", e instanceof Error ? e.message : e);
+  }
+}
+
+// "ok", "over" a limit, or "down": AI_QUOTA is bound but failed. That
+// fails closed: falling back to KV or memory would let a burst through
+// exactly when the exact count can't be had.
+async function allow(env: Env, ip: string, chars: number): Promise<"ok" | "over" | "down"> {
   const now = Date.now();
   const cap = Math.max(0, Number(env.AI_DAILY_CHARS) || 0);
+  if (env.AI_QUOTA) {
+    try {
+      return (await allowD1(env.AI_QUOTA, ip, chars, cap, now)) ? "ok" : "over";
+    } catch (e) {
+      console.warn("AI_QUOTA failed, refusing:", e instanceof Error ? e.message : e);
+      return "down";
+    }
+  }
+  return (await allowBestEffort(env, ip, chars, cap, now)) ? "ok" : "over";
+}
+
+// Without AI_QUOTA: KV when bound, memory when not or when KV fails. Not a hard limit.
+async function allowBestEffort(env: Env, ip: string, chars: number, cap: number, now: number) {
   if (env.AI_LIMITS) {
     try {
       return await allowShared(env.AI_LIMITS, ip, chars, cap, now);
@@ -359,11 +453,18 @@ export async function onRequestPost({ request, env }: Context) {
   if (typeof job === "string") return json({ error: job }, 400);
   // Only the address Cloudflare saw: headers like X-Forwarded-For are the sender's to write.
   const ip = request.headers.get("CF-Connecting-IP") || "?";
-  if (!(await allow(env, ip, charsOf(job)))) return json({ error: "hourly limit reached" }, 429, { "Retry-After": "3600" });
+  // Reserved before any model runs, so a request over the limit never costs anything.
+  const chars = charsOf(job);
+  const allowed = await allow(env, ip, chars);
+  if (allowed === "down") return json({ error: "AI usage limits are unavailable" }, 503, { "Retry-After": "60" });
+  if (allowed === "over") return json({ error: "hourly limit reached" }, 429, { "Retry-After": "3600" });
 
   const signal = request.signal ?? new AbortController().signal;
   const started = await start(env, job, signal, body.provider === "cloudflare" ? "cloudflare" : undefined);
-  if (!started) return json({ error: "no AI provider answered" }, 503);
+  if (!started) {
+    await refund(env, ip, chars);
+    return json({ error: "no AI provider answered" }, 503);
+  }
   const headers = { ...SAFE, "X-AI-Provider": started.provider };
 
   if (job.json) {
