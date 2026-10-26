@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useI18n } from "./I18n";
+import { BRAND } from "@/lib/brand";
 import { VENDOR_VERSION } from "@/lib/vendor";
 
 // Registers the offline cache in production builds only, so dev reloads stay
@@ -23,7 +24,7 @@ export function ServiceWorker() {
   if (!stale) return null;
   return (
     <div role="alert" data-stale className="fixed inset-x-0 bottom-0 z-[70] flex flex-wrap items-center justify-center gap-3 border-t border-line bg-surface px-4 py-3 text-[15px] shadow-card">
-      {t("ws.staleBuild")}
+      {t("ws.staleBuild", { brand: BRAND.name })}
       <button className="btn btn-primary btn-sm" onClick={() => location.reload()}><RefreshCw size={15} /> {t("ws.reloadPage")}</button>
     </div>
   );

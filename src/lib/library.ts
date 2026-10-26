@@ -15,7 +15,7 @@ export type Recent = { id: string; name: string; size: number; type: string; ope
 // window. Rows kept earlier may still hold a Blob.
 type Row = Recent & { data: ArrayBuffer | Blob };
 
-const idOf = (f: { name: string; size: number }) => `${f.name}:${f.size}`;
+export const idOf = (f: { name: string; size: number }) => `${f.name}:${f.size}`;
 
 const listeners = new Set<() => void>();
 export const subscribeLibrary = (fn: () => void) => {

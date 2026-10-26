@@ -36,6 +36,34 @@ const near = (a, b, what, tol = 0.6) => {
 const ok = (cond, what) => {
   if (!cond) throw new Error(what);
 };
+// First, before anything has loaded PDFium: when its file can't be had
+// (offline, or the tab's build gone after a deploy), listing a page fails
+// as a download that failed, so the editor offers Try again and Reload; it
+// isn't reported as a damaged file (the editor used to show "nothing on this
+// page can be changed"). Once the file is back, the same page lists.
+{
+  const engine = (await load("pdfium")).pdfiumWasm;
+  const { toPdfError } = await load("errors");
+  const real = engine.load;
+  engine.load = async () => {
+    throw new Error("Couldn't download pdfium.wasm (404)");
+  };
+  const doc = await PDFDocument.create();
+  doc.addPage([300, 300]).drawText("Hello", { x: 40, y: 200, size: 18, font: await doc.embedFont(StandardFonts.Helvetica) });
+  const bytes = await doc.save();
+  await test("no engine: a failed download, not a damaged file; then it lists", async () => {
+    const err = await edit.listContent(asFile(bytes), 0).then(() => null, (e) => e);
+    if (!err) throw new Error("listed without its engine");
+    const code = toPdfError(err).code;
+    if (code !== "download_failed") throw new Error(`reported as ${code}: ${err.message}`);
+    engine.load = real;
+    const c = await edit.listContent(asFile(bytes), 0);
+    if (!c.paragraphs.some((p) => p.text === "Hello")) throw new Error(`then: ${JSON.stringify(c.paragraphs.map((p) => p.text))}`);
+    return "download_failed, then 1 paragraph";
+  });
+  engine.load = real;
+}
+
 const jpeg = new Uint8Array(readFileSync(join(root, "tests/fixtures/images/orient-1.jpg")));
 const jpeg2 = new Uint8Array(readFileSync(join(root, "tests/fixtures/images/motion.jpg")));
 

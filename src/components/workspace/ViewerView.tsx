@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -11,10 +11,10 @@ import {
 import { useI18n } from "../I18n";
 import { ToolIcon } from "../ToolIcon";
 import { docFor, thumbUrl } from "@/lib/pdf/thumbs";
-import { handOffTo } from "@/lib/handoff";
+import { clearOpenedFromOutside, handOffTo, openedFromOutside } from "@/lib/handoff";
 import { toolById, type ToolId } from "@/lib/tools";
 import type { Passage } from "@/lib/ai/speak";
-import { remember, rememberPage } from "@/lib/library";
+import { idOf, remember, rememberPage } from "@/lib/library";
 import type { Box, Highlight } from "@/lib/pdf/highlights";
 
 export const prepareViewer = () => Promise.all([import("@/lib/pdf/thumbs"), import("pdfjs-dist"), import("@/lib/ai/speak")]);
@@ -173,6 +173,42 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     };
   }, []);
 
+  // Back, as in a reader app. The address carries the document (?doc=, its
+  // place in Recent), so coming back to it, from a tool it was handed to or
+  // after a reload, opens it again where it was. Opened inside the app, the
+  // viewer is a step of its own that Back closes; opened from another app
+  // ("Open with"), it's the whole visit and Back returns to that app.
+  const [outside] = useState(openedFromOutside);
+  const stepped = useRef(false);
+  const closing = useRef(onClose);
+  useEffect(() => {
+    closing.current = onClose;
+  });
+  useEffect(() => {
+    clearOpenedFromOutside();
+    const url = new URL(location.href);
+    url.searchParams.set("doc", idOf(file));
+    if (outside || url.searchParams.get("doc") === new URLSearchParams(location.search).get("doc")) history.replaceState(history.state, "", url);
+    else {
+      history.pushState(history.state, "", url);
+      stepped.current = true;
+    }
+    const onPop = () => {
+      if (new URLSearchParams(location.search).has("doc")) return;
+      stepped.current = false;
+      closing.current();
+    };
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, [file, outside]);
+  const close = () => {
+    if (stepped.current) return history.back();
+    const url = new URL(location.href);
+    url.searchParams.delete("doc");
+    history.replaceState(history.state, "", url);
+    onClose();
+  };
+
   // The controls fade after a moment of reading, unless a panel is open.
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The mouse resting on the bar or the dock keeps them.
@@ -232,60 +268,180 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
     setCurrent(p);
   };
 
-  // Zooming keeps the same spot of the document under the eye.
+  // Zooming keeps the same spot of the document under the eye. While a pinch
+  // (two fingers, or the trackpad's) is under way the pages already drawn
+  // are only stretched, which the graphics chip does smoothly; when it ends
+  // they're laid out once at the new size, with the spot that was pinched
+  // put back under the fingers before anything is shown, and drawn sharp a
+  // moment later. The buttons, keys and a double tap zoom the same way, with
+  // a short animation.
   const zoomRef = useRef(zoom);
+  const committed = useRef(zoom);
   useEffect(() => {
     zoomRef.current = zoom;
+    committed.current = zoom;
   }, [zoom]);
+  const pagesEl = useRef<HTMLDivElement>(null);
+  type Spot = { page: number; fx: number; fy: number };
+  const anchor = useRef<(Spot & { x: number; y: number }) | null>(null);
+  // The page under a point of the screen (or the nearest), and where on it.
+  const spotAt = (x: number, y: number): Spot | null => {
+    let best: Spot | null = null;
+    let bestD = Infinity;
+    for (const el of pagesEl.current?.querySelectorAll<HTMLElement>("[data-page]") ?? []) {
+      const r = el.getBoundingClientRect();
+      const d = Math.max(r.left - x, 0, x - r.right) + Math.max(r.top - y, 0, y - r.bottom);
+      if (d < bestD) {
+        bestD = d;
+        best = { page: Number(el.dataset.page) - 1, fx: (x - r.left) / r.width, fy: (y - r.top) / r.height };
+      }
+      if (!d) break;
+    }
+    return best;
+  };
+  const unstretch = () => {
+    const holder = pagesEl.current;
+    if (!holder) return;
+    holder.style.transition = "";
+    holder.style.transform = "";
+    holder.style.willChange = "";
+  };
+  // Lays the pages out at the new size, the spot back at (x, y).
+  const commit = (z: number, x: number, y: number, spot: Spot | null) => {
+    const next = Math.max(0.5, Math.min(5, z));
+    zoomRef.current = next;
+    if (Math.round(fit * next) === Math.round(fit * committed.current)) return unstretch();
+    anchor.current = spot && { ...spot, x, y };
+    setZoom(next);
+  };
+  // Runs before the new layout is shown: no frame with the page in the wrong place.
+  useLayoutEffect(() => {
+    unstretch();
+    const a = anchor.current;
+    anchor.current = null;
+    const el = scroller.current;
+    const page = a && pagesEl.current?.querySelector<HTMLElement>(`[data-page="${a.page + 1}"]`);
+    if (!a || !el || !page) return;
+    const r = page.getBoundingClientRect();
+    el.scrollLeft += r.left + a.fx * r.width - a.x;
+    el.scrollTop += r.top + a.fy * r.height - a.y;
+  }, [width]);
+
+  const gesture = useRef<{ z: number; spot: Spot | null; x0: number; y0: number; s: number; x: number; y: number } | null>(null);
+  const begin = (x: number, y: number) => {
+    const holder = pagesEl.current;
+    if (!holder || reading) return null;
+    const r = holder.getBoundingClientRect();
+    gesture.current = { z: zoomRef.current, spot: spotAt(x, y), x0: x, y0: y, s: 1, x, y };
+    holder.style.transition = "none";
+    holder.style.transformOrigin = `${x - r.left}px ${y - r.top}px`;
+    holder.style.willChange = "transform";
+    return gesture.current;
+  };
+  const stretch = (s: number, x: number, y: number) => {
+    const g = gesture.current;
+    const holder = pagesEl.current;
+    if (!g || !holder) return;
+    g.s = Math.max(0.5, Math.min(5, g.z * s)) / g.z;
+    g.x = x;
+    g.y = y;
+    holder.style.transform = `translate(${x - g.x0}px, ${y - g.y0}px) scale(${g.s})`;
+  };
+  const finish = () => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (g) commit(g.z * g.s, g.x, g.y, g.spot);
+  };
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoomTo = (z: number, cx?: number, cy?: number) => {
     const el = scroller.current;
+    const holder = pagesEl.current;
     const next = Math.max(0.5, Math.min(5, z));
-    if (!el || next === zoomRef.current) return;
-    zoomRef.current = next;
+    if (!el || !holder || gesture.current || next === zoomRef.current) return;
     const r = el.getBoundingClientRect();
-    const ox = (cx ?? r.left + r.width / 2) - r.left, oy = (cy ?? r.top + r.height / 2) - r.top;
-    const fx = (el.scrollLeft + ox) / Math.max(1, el.scrollWidth), fy = (el.scrollTop + oy) / Math.max(1, el.scrollHeight);
-    setZoom(next);
-    requestAnimationFrame(() => {
-      el.scrollLeft = fx * el.scrollWidth - ox;
-      el.scrollTop = fy * el.scrollHeight - oy;
-    });
+    const x = cx ?? r.left + r.width / 2, y = cy ?? r.top + r.height / 2;
+    const spot = spotAt(x, y);
+    if (!zoomTimer.current) {
+      const h = holder.getBoundingClientRect();
+      holder.style.transformOrigin = `${x - h.left}px ${y - h.top}px`;
+    }
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return commit(next, x, y, spot);
+    holder.style.transition = "transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+    holder.style.transform = `scale(${next / committed.current})`;
+    zoomRef.current = next;
+    if (zoomTimer.current) clearTimeout(zoomTimer.current);
+    zoomTimer.current = setTimeout(() => {
+      zoomTimer.current = null;
+      commit(next, x, y, spot);
+    }, 200);
   };
 
   // Pinch with two fingers, or with the trackpad (ctrl + wheel).
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    let start: { d: number; z: number } | null = null;
+    let d0 = 0;
     const dist = (e: TouchEvent) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const mid = (e: TouchEvent) => [(e.touches[0].clientX + e.touches[1].clientX) / 2, (e.touches[0].clientY + e.touches[1].clientY) / 2] as const;
     const onStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) start = { d: dist(e), z: zoomRef.current };
+      if (e.touches.length !== 2) return;
+      d0 = dist(e);
+      begin(...mid(e));
     };
     const onMove = (e: TouchEvent) => {
-      if (!start || e.touches.length !== 2) return;
+      if (!gesture.current || e.touches.length !== 2) return;
       e.preventDefault();
-      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2, cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      zoomTo(start.z * (dist(e) / start.d), cx, cy);
+      stretch(dist(e) / d0, ...mid(e));
     };
-    const onEnd = () => {
-      start = null;
+    const onEnd = (e: TouchEvent) => {
+      if (gesture.current && e.touches.length < 2) finish();
     };
+    let wheelEnd: ReturnType<typeof setTimeout> | null = null;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      zoomTo(zoomRef.current * Math.exp(-e.deltaY / 300), e.clientX, e.clientY);
+      const g = gesture.current ?? begin(e.clientX, e.clientY);
+      if (!g) return;
+      stretch(g.s * Math.exp(-e.deltaY / 300), g.x0, g.y0);
+      if (wheelEnd) clearTimeout(wheelEnd);
+      wheelEnd = setTimeout(finish, 220);
     };
+    // Safari's own trackpad pinch (gesture events, scale from where it began).
+    type Gesture = UIEvent & { scale: number; clientX: number; clientY: number };
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      if (!gesture.current) begin((e as Gesture).clientX, (e as Gesture).clientY);
+    };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = gesture.current;
+      if (g) stretch((e as Gesture).scale, g.x0, g.y0);
+    };
+    const onGestureEnd = (e: Event) => {
+      e.preventDefault();
+      finish();
+    };
+    el.addEventListener("gesturestart", onGestureStart);
+    el.addEventListener("gesturechange", onGestureChange);
+    el.addEventListener("gestureend", onGestureEnd);
     el.addEventListener("touchstart", onStart, { passive: true });
     el.addEventListener("touchmove", onMove, { passive: false });
     el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       el.removeEventListener("touchstart", onStart);
       el.removeEventListener("touchmove", onMove);
       el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
       el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("gesturestart", onGestureStart);
+      el.removeEventListener("gesturechange", onGestureChange);
+      el.removeEventListener("gestureend", onGestureEnd);
+      if (wheelEnd) clearTimeout(wheelEnd);
     };
-     
+    // begin, stretch and finish read refs only; set up once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A tap on the page (not a drag, not a text selection) shows or hides the controls.
@@ -458,7 +614,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
   }, [panel, outline, doc]);
 
   const more = async (id: ToolId) => {
-    await handOffTo(id, [file]);
+    void handOffTo(id, [file]);
     router.push(href(`/${toolById(id).slug}`));
   };
 
@@ -471,7 +627,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         setPanel("search");
       } else if (e.key === "Escape") {
         if (panel) setPanel(null);
-        else onClose();
+        else close();
       } else if (!typing && !reading && (e.key === "ArrowRight" || e.key === "ArrowLeft") && zoomRef.current <= 1) {
         // Page by page, two at a time side by side.
         e.preventDefault();
@@ -485,7 +641,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
      
     // goTo reads the same state listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel, onClose, current, spread, reading, tops]);
+  }, [panel, close, current, spread, reading, tops]);
 
   // Full screen (where the browser allows it): the viewer alone on the display.
   useEffect(() => {
@@ -551,7 +707,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
         if (m && (Math.abs(m.x - e.clientX) > 2 || Math.abs(m.y - e.clientY) > 2)) wake();
       }}>
       <header className="vw-bar" {...holdProps}>
-        <button type="button" className={iconBtn} aria-label={t("viewer.close")} onClick={onClose}><X size={20} /></button>
+        <button type="button" className={iconBtn} aria-label={t("viewer.close")} onClick={close}><X size={20} /></button>
         <p className="min-w-0 flex-1 truncate text-[15px] font-medium">{file.name}</p>
         <button type="button" className={iconBtn} aria-label={t("viewer.search")} aria-pressed={panel === "search"} onClick={() => setPanel(panel === "search" ? null : "search")}><Search size={19} /></button>
         <button type="button" className={iconBtn} aria-label={t("viewer.reading")} aria-pressed={!!reading} onClick={toggleReading}><BookOpenText size={19} /></button>
@@ -676,7 +832,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
                 : reading.map((p, i) => p.kind === "heading" ? <h2 key={i}>{p.text}</h2> : <p key={i} data-list={p.kind === "list" || undefined}>{p.kind === "list" ? p.text.replace(/^[-–•*·▪◦]\s*/, "") : p.text}</p>)}
           </article>
         ) : doc && (
-          <div className="vw-pages" style={{ width: pos.width, height: pos.height }}>
+          <div ref={pagesEl} className="vw-pages" style={{ width: pos.width, height: pos.height }}>
             {ratios.map((r, i) => (
               <PageView key={i} doc={doc} index={i} width={width} ratio={r} top={pos.at[i].top} left={pos.at[i].left} query={query.trim().toLowerCase()}
                 marks={marks.filter((m) => m.page === i)} onMark={(id, at) => setPicked({ mark: id, at })} />
@@ -692,11 +848,11 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
             {reading ? t("viewer.reading") : t("viewer.page", { n: current + 1, total })}
           </button>
           <span className="vw-sep" />
-          <button type="button" className={iconBtn} aria-label={t("viewer.zoomOut")} onClick={() => (reading ? setReadSize((s) => Math.max(14, s - 2)) : zoomTo(zoom / 1.25))}><ZoomOut size={18} /></button>
+          <button type="button" className={iconBtn} aria-label={t("viewer.zoomOut")} onClick={() => (reading ? setReadSize((s) => Math.max(14, s - 2)) : zoomTo(zoomRef.current / 1.25))}><ZoomOut size={18} /></button>
           <button type="button" className="vw-zoom tabular-nums" aria-label={t("viewer.fit")} onClick={() => (reading ? setReadSize(19) : zoomTo(1))}>
             {reading ? `${readSize}px` : `${Math.round(zoom * 100)}%`}
           </button>
-          <button type="button" className={iconBtn} aria-label={t("viewer.zoomIn")} onClick={() => (reading ? setReadSize((s) => Math.min(32, s + 2)) : zoomTo(zoom * 1.25))}><ZoomIn size={18} /></button>
+          <button type="button" className={iconBtn} aria-label={t("viewer.zoomIn")} onClick={() => (reading ? setReadSize((s) => Math.min(32, s + 2)) : zoomTo(zoomRef.current * 1.25))}><ZoomIn size={18} /></button>
         </footer>
       )}
 

@@ -17,6 +17,7 @@ import { thumbUrl, pageSizes, docFor } from "@/lib/pdf/thumbs";
 import type { EditorItem, FieldInfo, FracRect } from "@/lib/pdf/edit";
 import { ContentLayer, itemFor, isFor, type ContentTarget, type PageContent } from "./ContentLayer";
 import { ContentPanel } from "./ContentPanel";
+import { useProblem } from "./ErrorBox";
 import { contentChanged } from "@/lib/pdf/contentchange";
 import { linkTarget } from "@/lib/pdf/links";
 import { scratchOut, loop } from "@/lib/gestures";
@@ -174,8 +175,12 @@ export function Editor({
   // Fields found on a flat form, waiting to be accepted or rejected.
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [detected, setDetected] = useState<null | "busy" | number>(null);
-  // Everything the page draws, for the Edit content tool.
+  // Everything the page draws, for the Edit content tool; or why it couldn't
+  // be read (shown as that, with a way to try again, never as an empty page).
   const [content, setContent] = useState<PageContent | null>(null);
+  const [contentFailed, setContentFailed] = useState<{ page: number; text: string; download: boolean } | null>(null);
+  const [contentTry, setContentTry] = useState(0);
+  const toProblem = useProblem();
   // Reading a scanned page's lines with OCR (Edit content), and in which languages.
   const [scanRead, setScanRead] = useState<{ page: number; state: "busy" | "done" | "none" | "turned" | "failed" } | null>(null);
   const [scanLang, setScanLang] = useState("eng");
@@ -253,13 +258,25 @@ export function Editor({
   useEffect(() => {
     if (tool !== "editText" || content?.page === page) return;
     let live = true;
-    import("@/lib/pdf/edit").then(({ listContent }) => listContent(file, page))
-      .catch(() => ({ objects: [], paragraphs: [] }))
-      .then((c) => live && setContent({ page, ...c }));
+    // Once more after a moment if it fails: a part of the engine still
+    // downloading, or a moment's shortage of memory, often passes.
+    const read = () => import("@/lib/pdf/edit").then(({ listContent }) => listContent(file, page));
+    read()
+      .catch(() => new Promise((r) => setTimeout(r, 900)).then(() => (live ? read() : Promise.reject(new Error("gone")))))
+      .then((c) => {
+        if (!live) return;
+        setContentFailed(null);
+        setContent({ page, ...c });
+      })
+      .catch((e) => {
+        if (!live) return;
+        const p = toProblem(e, file.name);
+        setContentFailed({ page, text: p.text, download: p.code === "download_failed" });
+      });
     return () => {
       live = false;
     };
-  }, [tool, page, file, content?.page]);
+  }, [tool, page, file, content?.page, contentTry, toProblem]);
 
   // The preview: the file saved with the content changes, this page drawn
   // from it, once changes stop for a moment. A paragraph being typed in is
@@ -311,6 +328,7 @@ export function Editor({
 
   const pageItems = items.value.filter((i) => i.page === page && !isContent(i));
   const pageContent = content?.page === page ? content : null;
+  const pageFailed = !pageContent && contentFailed?.page === page ? contentFailed : null;
   const contentItems = changes.filter((i) => i.page === page && isContent(i) && i.kind !== "textEdit");
   const pageMarks = marks.value.filter((m) => m.page === page);
   const selected = items.value.find((i) => i.id === sel) ?? null;
@@ -1453,7 +1471,8 @@ export function Editor({
         {selected && isFieldKind(selected.kind) && <FieldSettings item={selected} onChange={(p) => patch(selected.id, p)} />}
 
         {(tool === "editText" || (selected && isContent(selected))) && (
-          <ContentPanel content={pageContent ?? (tool === "editText" ? "busy" : null)}
+          <ContentPanel content={pageContent ?? (tool === "editText" && !pageFailed ? "busy" : null)}
+            failed={pageFailed} onRetry={() => { setContentFailed(null); setContentTry((n) => n + 1); }}
             item={selected && isContent(selected) ? selected : null} items={contentItems}
             status={previewState.key === previewKey ? previewState : { busy: changes.length > 0, error: null, note: null }}
             pageAspect={size ? size.h / size.w : 1.414}

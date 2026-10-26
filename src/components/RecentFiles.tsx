@@ -39,7 +39,7 @@ export function RecentFiles({ onOpen, className = "" }: { onOpen?: (file: File) 
     const file = await openRecent(r.id);
     if (!file) return void forget(r.id);
     if (onOpen) return onOpen(file);
-    await handOffTo("view", [file]);
+    void handOffTo("view", [file]);
     router.push(href(`/${toolById("view").slug}`));
   };
   const when = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });

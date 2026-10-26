@@ -153,10 +153,16 @@ await suite(async ({ name, browser, test }) => {
     try {
       await launch(page, [PDF]);
       await page.goto(base + "/en/open");
-      await page.waitForURL("**/en/pdf-viewer");
+      const before = await page.evaluate(() => history.length);
+      await page.waitForURL(/\/en\/pdf-viewer/);
       await page.getByRole("dialog", { name: PDF }).waitFor({ timeout: 20000 });
+      // Opened from another app, the viewer is the whole visit: no step of
+      // its own to go back through, so Back returns to that app.
+      await page.waitForFunction(() => new URLSearchParams(location.search).has("doc"));
+      const steps = await page.evaluate(() => history.length);
+      if (steps !== before) throw new Error(`${steps - before} step(s) added to the history: Back wouldn't return to the app it came from`);
       noForeign(foreign);
-      return "launchQueue file → /en/open → the viewer";
+      return "launchQueue file → /en/open → the viewer, Back leaves";
     } finally {
       await ctx.close();
     }
@@ -170,7 +176,7 @@ await suite(async ({ name, browser, test }) => {
       await until(page, () => localStorage.getItem("locale") === "fr", null, "the language to be remembered");
       await launch(page, [PDF]);
       await page.goto(base + "/en/open");
-      await page.waitForURL("**/fr/lecteur-pdf");
+      await page.waitForURL(/\/fr\/lecteur-pdf/);
       await page.getByRole("dialog", { name: PDF }).waitFor({ timeout: 20000 });
       return "/en/open → /fr/open → the viewer, in French";
     } finally {

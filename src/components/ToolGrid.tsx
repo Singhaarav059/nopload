@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "./IntentLink";
 import { useEffect, useRef, useState } from "react";
 import { Cloud, Search, Server, X } from "lucide-react";
 import { ToolIcon } from "./ToolIcon";
@@ -112,7 +112,7 @@ export function ToolGrid() {
             key={s.id}
             data-cat={s.id}
             aria-labelledby={`cat-${s.id}`}
-            className="pt-12"
+            className="tool-family pt-12"
           >
             <header className="reveal mb-5 flex items-center gap-4">
               <CategoryBadge id={s.id} size={52} />
@@ -125,7 +125,7 @@ export function ToolGrid() {
             <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {s.tools.map((tool) => (
                 <li key={tool.id} className="reveal">
-                  <Link
+                  <IntentLink
                     href={href(`/${tool.slug}`)}
                     data-tool={tool.id}
                     className="spot group flex h-full items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 transition-[border-color,box-shadow,translate] duration-500 ease-(--ease-out) hover:-translate-y-1 hover:border-(--tint-ink)/30 hover:shadow-lift"
@@ -142,7 +142,7 @@ export function ToolGrid() {
                       </span>
                       <span className="mt-1 block text-pretty text-[14px] leading-snug text-muted">{t(descKey(tool))}</span>
                     </span>
-                  </Link>
+                  </IntentLink>
                 </li>
               ))}
             </ul>

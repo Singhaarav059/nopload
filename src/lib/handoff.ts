@@ -14,6 +14,13 @@ export function handOff(files: File[]) {
 
 export const peekHandoff = () => pending;
 
+// A document opened with the app from another one ("Open with"): the viewer
+// is then the whole visit, and Back goes back to that app.
+let fromOutside = false;
+export const markOpenedFromOutside = () => void (fromOutside = true);
+export const openedFromOutside = () => fromOutside;
+export const clearOpenedFromOutside = () => void (fromOutside = false);
+
 export function clearHandoff() {
   pending = null;
 }
@@ -101,10 +108,14 @@ export const takeShared = async () => usable(await take(INBOX.shared), undefined
 export const stashShared = (files: File[]) => put(INBOX.shared, files);
 
 // Hands files to a tool that is about to open: in memory for a client-side
-// navigation, and stashed in case the tool's page loads afresh.
-export async function handOffTo(tool: ToolId, files: File[]) {
+// navigation, and stashed in case the tool's page loads afresh. The tool can
+// open at once (the stash is written meanwhile); awaiting this is only
+// needed before the page itself is left.
+let writing: Promise<unknown> = Promise.resolve();
+export function handOffTo(tool: ToolId, files: File[]) {
   handOff(files);
-  await put(INBOX.handoff, files, tool);
+  writing = put(INBOX.handoff, files, tool);
+  return writing;
 }
 
 // Called once the tool has mounted. Files already handed over in memory were
@@ -113,6 +124,8 @@ export async function handOffTo(tool: ToolId, files: File[]) {
 export async function restoreHandoff(tool: ToolId): Promise<File[]> {
   const inMemory = pending !== null;
   clearHandoff();
+  // A stash still being written is finished first, so it isn't left behind.
+  await writing.catch(() => {});
   const stash = await take(INBOX.handoff);
   return inMemory ? [] : (usable(stash, tool) ?? []);
 }

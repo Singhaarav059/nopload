@@ -99,6 +99,55 @@ await suite(async ({ browser, test }) => {
     }
   });
 
+  await test("pinch zoom stretches the pages, keeps the spot pinched in place, then redraws them", async () => {
+    let step = "start";
+    try {
+      await page.keyboard.press("0");
+      await page.waitForTimeout(300);
+      const x = 520, y = 420;
+      // The page under a point of the screen, and where on it.
+      const spot = () => page.evaluate(([x, y]) => {
+        const el = document.elementFromPoint(x, y)?.closest("[data-page]");
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { page: el.getAttribute("data-page"), fx: (x - r.left) / r.width, fy: (y - r.top) / r.height, w: el.offsetWidth, canvases: document.querySelectorAll(".vw-page canvas").length };
+      }, [x, y]);
+      const a = await spot();
+      if (!a) throw new Error("no page under the point");
+      step = "pinching";
+      // A trackpad pinch: wheel events with ctrl, sent from the page itself so
+      // the state mid-pinch can be read before it settles.
+      const mid = await page.evaluate(([x, y]) => {
+        const el = document.querySelector(".vw-scroll");
+        for (let i = 0; i < 4; i++) el.dispatchEvent(new WheelEvent("wheel", { ctrlKey: true, deltaY: -60, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+        // Mid-pinch: stretched by the graphics chip; nothing laid out again or cleared.
+        return [document.querySelector(".vw-pages").style.transform, document.querySelector('[data-page="1"]').offsetWidth, document.querySelectorAll(".vw-page canvas").length];
+      }, [x, y]);
+      if (!/scale\(/.test(mid[0])) throw new Error(`not stretched: "${mid[0]}"`);
+      if (mid[1] !== a.w) throw new Error(`laid out again mid-pinch: ${a.w} → ${mid[1]}`);
+      if (mid[2] < a.canvases) throw new Error(`pages cleared mid-pinch: ${a.canvases} → ${mid[2]}`);
+      step = "settled";
+      await page.waitForFunction(() => !document.querySelector(".vw-pages").style.transform, null, { timeout: 3000 });
+      const b = await spot();
+      if (b.w <= a.w * 1.1) throw new Error(`not zoomed: ${a.w} → ${b.w}`);
+      if (b.page !== a.page || Math.abs(b.fx - a.fx) > 0.02 || Math.abs(b.fy - a.fy) > 0.02) throw new Error(`spot moved: ${JSON.stringify(a)} → ${JSON.stringify(b)}`);
+      step = "controls";
+      // Showing or hiding the controls doesn't move the page.
+      const top = () => page.evaluate(() => document.querySelector('[data-page="1"]').getBoundingClientRect().top);
+      await wake();
+      const shown = await top();
+      await page.waitForFunction(() => !document.querySelector(".vw").hasAttribute("data-chrome"), null, { timeout: 6000 });
+      await page.waitForTimeout(450);
+      const hidden = await top();
+      if (Math.abs(shown - hidden) > 1) throw new Error(`page moved ${Math.round(hidden - shown)}px when the controls hid`);
+      await page.keyboard.press("0");
+      await page.waitForTimeout(400);
+      return `${a.w} → ${b.w} px, spot kept`;
+    } catch (e) {
+      throw new Error(`${step}: ${e.message.split("\n")[0]}`);
+    }
+  });
+
   await test("select text, highlight it, and save a copy with the highlight in it", async () => {
     let step = "select";
     try {
@@ -204,6 +253,33 @@ await suite(async ({ browser, test }) => {
     } catch (e) {
       const state = await page.evaluate(() => [document.querySelectorAll(".vw").length, document.querySelector(".vw")?.hasAttribute("data-chrome") ?? null, location.pathname]).catch((x) => String(x));
       throw new Error(`${step}: ${e.message.split("\n")[0]} ${JSON.stringify(state)}`);
+    }
+  });
+
+  await test("Back closes the viewer; from a tool it was handed to, Back opens it again", async () => {
+    let step = "open";
+    try {
+      await fresh();
+      await pick(page, ["report.pdf"]);
+      await viewer().waitFor();
+      await page.waitForFunction(() => new URLSearchParams(location.search).has("doc"));
+      step = "back closes";
+      await page.goBack();
+      await viewer().waitFor({ state: "detached" });
+      if (new URLSearchParams(new URL(page.url()).search).has("doc")) throw new Error(`still at ${page.url()}`);
+      step = "to edit";
+      await pick(page, ["report.pdf"]);
+      await viewer().waitFor();
+      await wake();
+      await bar(t["viewer.more"]).click();
+      await viewer().getByRole("menuitem", { name: t["tool.edit.name"] }).click();
+      await page.waitForURL(/\/en\/edit-pdf/);
+      step = "back reopens";
+      await page.goBack();
+      await viewer().waitFor();
+      return "closed by Back, reopened from Edit";
+    } catch (e) {
+      throw new Error(`${step}: ${e.message.split("\n")[0]} at ${page.url()}`);
     }
   });
 
