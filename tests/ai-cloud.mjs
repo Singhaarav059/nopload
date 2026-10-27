@@ -211,6 +211,19 @@ await test("pool: all of it used up: 503 with fallbackToLocal, after one more ro
   eq(tried(from).length, 6, `three models, tried twice: ${tried(from)}`);
 });
 
+await test("GET ?check asks every key and model once, names keys by number, never shows them", async () => {
+  free = { reply: "ok", status: 200, limited: new Set(["Bearer kZ2|openai/gpt-oss-20b"]) };
+  const env = pool("kZ1,kZ2", { GEMINI_API_KEYS: "gZ", AI_ORDER: "groq,cloudflare", AI: workersAi("ok") });
+  const res = await onRequestGet({ request: new Request("https://x/api/ai?check"), env });
+  const text = await res.text();
+  if (text.includes("kZ1") || text.includes("kZ2")) throw new Error(`a key was shown: ${text}`);
+  const report = JSON.parse(text);
+  eq([report.order, report.of, report.working], [["groq", "cloudflare"], 7, 6], "6 Groq slots and Workers AI, one limited");
+  const bad = report.results.filter((r) => !r.ok);
+  eq([bad.length, bad[0].key, bad[0].model], [1, 2, "openai/gpt-oss-20b"], "the limited one, by number");
+  eq(report.ignored.length, 1, "Gemini keys noted as off");
+});
+
 await test("pool: one GROQ_API_KEY still works, and keys never reach the logs", async () => {
   free = { reply: "Single key (p. 2).", status: 200 };
   const logged = [];
