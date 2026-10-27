@@ -104,6 +104,9 @@ function find(index: DocIndex, question: string, o: { k: number; wide: number; b
       used += chunk.text.length;
     }
   }
+  // Nothing matches: the opening and a little of every page, so the AI can
+  // say what isn't there rather than getting no excerpts at all.
+  if (!hits.length) return overview(index, 6000);
   return hits.sort((a, b) => a.chunk.id - b.chunk.id);
 }
 

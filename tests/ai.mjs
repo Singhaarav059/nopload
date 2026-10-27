@@ -309,6 +309,22 @@ await test("an answer's lists, table, heading and bold are laid out, with their 
   eq(JSON.stringify(emphasis("a **b** c")), JSON.stringify([{ text: "a " }, { text: "b", bold: true }, { text: " c" }]), "bold");
 });
 
+await test("a question matching nothing still sends excerpts, so the AI can say it isn't there", async () => {
+  const index = buildIndex([{ page: 1, text: "Health budget 2026-27 is Rs 1,05,530 crore, up 11%." }, { page: 2, text: "Infant mortality is 25 per 1,000." }]);
+  let sent = null;
+  const real = globalThis.fetch;
+  globalThis.fetch = async (_u, init) => {
+    sent = JSON.parse(init.body);
+    return new Response("I couldn't find any mention of cancer in the document.", { headers: { "X-AI-Provider": "groq" } });
+  };
+  try {
+    await askCloud(index, "What does it say about cancer?", {});
+  } finally {
+    globalThis.fetch = real;
+  }
+  if (!sent?.sources.includes("(p. 1)")) throw new Error(`excerpts: ${sent?.sources}`);
+});
+
 await test("overview questions read the whole document, other questions don't", () => {
   for (const q of ["What is this document about?", "what is this about", "Summarise it", "key points?", "What are the main figures in it?".replace("main figures", "main points")]) if (!isOverview(q)) throw new Error(`not an overview: ${q}`);
   for (const q of ["what does the pdf say about rent", "show all the big statistics", "what is the total", "who is it addressed to"]) if (isOverview(q)) throw new Error(`an overview: ${q}`);
