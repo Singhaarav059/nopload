@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The whole app is Google's LauncherActivity (android-browser-helper, with a
-     crash report added: Launcher.java, CrashActivity.java): it opens
-     the site in Chrome full screen, verified by Digital Asset Links, and hands
-     it the files Android opens or shares with Nopload. -->
+<!-- The app is Google's LauncherActivity (android-browser-helper) with a
+     launch screen and a crash report added (Launcher.java, CrashActivity.java):
+     it opens the site in Chrome full screen once Chrome confirms it by Digital
+     Asset Links, and hands it the files Android opens or shares with Nopload.
+     When Chrome can't confirm it, the site opens in the app's own web view
+     (WebApp.java) instead of with a browser bar. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Scan to PDF in the app's own web view (WebApp.java); asked for only when the scanner starts. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Chrome (and other browsers that can show the site full screen) must be visible to the app. -->
     <queries>
@@ -101,6 +106,14 @@
             android:process=":crash"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+
+        <!-- The site in the app's own web view, with no browser bar. -->
+        <activity
+            android:name=".WebApp"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/WebApp"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
         <activity
             android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"

@@ -35,8 +35,11 @@ import java.util.List;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {24, 28, 33, 34, 35, 36})
 public class LaunchTest {
-    // Chrome's side of the connection: accepts everything, as Chrome does.
+    // Chrome's side of the connection: accepts everything, as Chrome does, and
+    // answers the app's check that the site is its own with `verified` (null:
+    // no answer, as when Chrome can't reach the site).
     public static class FakeChrome extends CustomTabsService {
+        static Boolean verified = true;
         @Override protected boolean warmup(long flags) { return true; }
         @Override protected boolean newSession(@NonNull CustomTabsSessionToken s) { return true; }
         @Override protected boolean mayLaunchUrl(@NonNull CustomTabsSessionToken s, @Nullable Uri u, @Nullable Bundle b, @Nullable List<Bundle> o) { return true; }
@@ -44,7 +47,10 @@ public class LaunchTest {
         @Override protected boolean updateVisuals(@NonNull CustomTabsSessionToken s, @Nullable Bundle b) { return true; }
         @Override protected boolean requestPostMessageChannel(@NonNull CustomTabsSessionToken s, @NonNull Uri u) { return true; }
         @Override protected int postMessage(@NonNull CustomTabsSessionToken s, @NonNull String m, @Nullable Bundle b) { return 0; }
-        @Override protected boolean validateRelationship(@NonNull CustomTabsSessionToken s, int r, @NonNull Uri o, @Nullable Bundle b) { return true; }
+        @Override protected boolean validateRelationship(@NonNull CustomTabsSessionToken s, int r, @NonNull Uri o, @Nullable Bundle b) {
+            if (verified != null && s.getCallback() != null) s.getCallback().onRelationshipValidationResult(r, o, verified, null);
+            return true;
+        }
         @Override protected boolean receiveFile(@NonNull CustomTabsSessionToken s, @NonNull Uri u, int p, @Nullable Bundle b) { return true; }
     }
 
@@ -81,6 +87,7 @@ public class LaunchTest {
     @Before
     public void chrome() {
         org.robolectric.shadows.ShadowLog.stream = System.out;
+        FakeChrome.verified = true;
         install("com.android.chrome", "com.google.android.apps.chrome.Main");
         ShadowPackageManager pm = Shadows.shadowOf(ApplicationProvider.getApplicationContext().getPackageManager());
         ComponentName service = new ComponentName("com.android.chrome", "org.chromium.chrome.browser.customtabs.CustomTabsConnectionService");
@@ -197,7 +204,7 @@ public class LaunchTest {
         for (org.robolectric.android.controller.ActivityController<Launcher> c : alive) c.pause().stop().destroy();
     }
 
-    private void open(Intent intent) {
+    private Intent open(Intent intent) {
         intent.setComponent(new ComponentName(ApplicationProvider.getApplicationContext(), Launcher.class));
         // As Android starts it from the home screen or another app: in its own task.
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -205,6 +212,8 @@ public class LaunchTest {
         assertNotNull(a);
         // The splash waits for the opening animation, which a phone reports and a test doesn't.
         a.onEnterAnimationComplete();
+        // The launch screen shows while Chrome is asked.
+        org.junit.Assert.assertNotNull("no launch screen", a.findViewById(android.R.id.content));
         // Let the connection to Chrome come up and the launch go through.
         for (int i = 0; i < 20; i++) {
             ShadowLooper.idleMainLooper();
@@ -216,6 +225,80 @@ public class LaunchTest {
         if (started == null) started = Shadows.shadowOf((android.app.Application) ApplicationProvider.getApplicationContext()).getNextStartedActivity();
         System.out.println("LAUNCHED " + intent.getAction() + " -> " + (started == null ? "nothing" : started + " " + started.getData() + " pkg=" + started.getPackage()));
         assertNotNull("nothing launched", started);
+        return started;
+    }
+
+    private static boolean isWebView(Intent started) {
+        return started.getComponent() != null && started.getComponent().getClassName().equals(WebApp.class.getName());
+    }
+
+    // Chrome confirms the site is the app's own: it opens full screen in
+    // Chrome, never with a bar, and the app's launch screen shows meanwhile.
+    @Test
+    public void verifiedOpensInChrome() {
+        Intent i = new Intent(Intent.ACTION_MAIN);
+        i.addCategory(Intent.CATEGORY_LAUNCHER);
+        Intent started = open(i);
+        org.junit.Assert.assertFalse("opened in the web view", isWebView(started));
+        org.junit.Assert.assertEquals("com.android.chrome", started.getPackage());
+    }
+
+    // Chrome can't confirm it (it would show the site with a browser bar): the
+    // site opens in the app's own web view instead, with no bar.
+    @Test
+    public void unverifiedOpensInTheWebView() {
+        FakeChrome.verified = false;
+        Intent i = new Intent(Intent.ACTION_MAIN);
+        i.addCategory(Intent.CATEGORY_LAUNCHER);
+        Intent started = open(i);
+        org.junit.Assert.assertTrue("not the web view: " + started, isWebView(started));
+        org.junit.Assert.assertEquals("https://nopload.pages.dev/?source=android", extraUri(started));
+    }
+
+    // Chrome doesn't answer (offline, slow): after a few seconds, the web view.
+    @Test
+    public void noAnswerOpensInTheWebView() {
+        FakeChrome.verified = null;
+        Intent i = new Intent(Intent.ACTION_MAIN);
+        i.addCategory(Intent.CATEGORY_LAUNCHER);
+        Intent started = open(i);
+        org.junit.Assert.assertTrue("not the web view: " + started, isWebView(started));
+    }
+
+    private static String extraUri(Intent i) {
+        Bundle b = i.getExtras();
+        if (b == null) return "null";
+        if (b.containsKey(WebApp.EXTRA_URL)) return b.getString(WebApp.EXTRA_URL);
+        return b.toString();
+    }
+
+    // The web view opens the site, from the icon and with a PDF from "Open
+    // with", which goes to /en/open; links to other sites leave the app.
+    @Test
+    public void webViewOpens() {
+        android.content.Context c = ApplicationProvider.getApplicationContext();
+        WebApp a = Robolectric.buildActivity(WebApp.class, WebApp.intent(c, Uri.parse("https://nopload.pages.dev/?source=android"), null)).setup().get();
+        android.webkit.WebView web = find(a.findViewById(android.R.id.content), android.webkit.WebView.class);
+        assertNotNull("no web view", web);
+        org.junit.Assert.assertEquals("https://nopload.pages.dev/?source=android", Shadows.shadowOf(web).getLastLoadedUrl());
+
+        Intent pdf = new Intent(Intent.ACTION_VIEW);
+        pdf.setDataAndType(Uri.parse("content://com.android.providers.downloads.documents/document/1"), "application/pdf");
+        WebApp b = Robolectric.buildActivity(WebApp.class, WebApp.intent(c, Uri.parse("https://nopload.pages.dev/en/open"), pdf)).setup().get();
+        org.junit.Assert.assertEquals("https://nopload.pages.dev/en/open", Shadows.shadowOf(find(b.findViewById(android.R.id.content), android.webkit.WebView.class)).getLastLoadedUrl());
+
+        org.junit.Assert.assertTrue(WebApp.isOurs(Uri.parse("https://nopload.pages.dev/en/merge-pdf")));
+        org.junit.Assert.assertFalse(WebApp.isOurs(Uri.parse("https://example.com/")));
+        org.junit.Assert.assertFalse(WebApp.isOurs(Uri.parse("http://nopload.pages.dev/")));
+    }
+
+    private static <T extends android.view.View> T find(android.view.View v, Class<T> type) {
+        if (type.isInstance(v)) return type.cast(v);
+        if (v instanceof android.view.ViewGroup) for (int i = 0; i < ((android.view.ViewGroup) v).getChildCount(); i++) {
+            T f = find(((android.view.ViewGroup) v).getChildAt(i), type);
+            if (f != null) return f;
+        }
+        return null;
     }
 
     @Test
