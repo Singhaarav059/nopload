@@ -1,10 +1,9 @@
 // Finds the chunks that answer a question: Okapi BM25 over the words
 // (Robertson & Zaragoza, 2009), the chunks that contain the question's
-// distinctive words letter for letter, and the embedding model's cosine
-// ranking when there is one, fused by reciprocal rank fusion (Cormack, Clarke
-// & Büttcher, 2009). Keywords catch names, numbers and codes; the exact
-// match catches a name inside a longer string ("hazelnut" in
-// "HAZELNUTCAFE@okaxis"); embeddings catch the same meaning in other words.
+// distinctive words letter for letter, fused by reciprocal rank fusion
+// (Cormack, Clarke & Büttcher, 2009). Keywords catch names, numbers and
+// codes; the exact match catches a name inside a longer string ("hazelnut"
+// in "HAZELNUTCAFE@okaxis").
 
 import type { Chunk } from "./chunk";
 
@@ -70,16 +69,6 @@ function bm25(chunks: Chunk[], query: string[]): Hit[] {
     .sort((a, b) => b.score - a.score);
 }
 
-export function cosine(a: ArrayLike<number>, b: ArrayLike<number>) {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  return na && nb ? dot / Math.sqrt(na * nb) : 0;
-}
-
 // Reciprocal rank fusion: an item's score is the sum of 1 / (60 + rank)
 // over the lists it is in.
 export function fuse<T>(lists: T[][], key: (x: T) => unknown, k = 60): { item: T; score: number }[] {
@@ -93,8 +82,6 @@ export function fuse<T>(lists: T[][], key: (x: T) => unknown, k = 60): { item: T
     });
   return [...scores.values()].sort((a, b) => b.score - a.score);
 }
-
-export type Vectors = { query: ArrayLike<number>; chunks: ArrayLike<number>[] };
 
 // The words a question is asked with rather than about ("what is the
 // biggest payment"): they say what to do with the document, not what to
@@ -156,15 +143,11 @@ function exact(chunks: Chunk[], terms: string[]): Hit[] {
 
 // The k chunks that best answer `query`, best first. Chunks that contain the
 // question's distinctive words come before any that don't.
-export function search(chunks: Chunk[], query: string, o: { k?: number; vectors?: Vectors } = {}): Hit[] {
+export function search(chunks: Chunk[], query: string, o: { k?: number } = {}): Hit[] {
   const k = o.k ?? 5;
   const words = bm25(chunks, tokens(query));
   const found = exact(chunks, exactTerms(query));
   const lists = [found.slice(0, 50), found.slice(0, 50), words.slice(0, 50)];
-  if (o.vectors) {
-    const { query: qv, chunks: cv } = o.vectors;
-    lists.push(chunks.map((chunk, i) => ({ chunk, score: cosine(qv, cv[i]) })).sort((a, b) => b.score - a.score).slice(0, 50));
-  }
   const matched = new Map(found.map((h) => [h.chunk.id, h.score]));
   return fuse(lists, (h) => h.chunk.id, 60)
     .map(({ item, score }) => ({ chunk: item.chunk, score }))

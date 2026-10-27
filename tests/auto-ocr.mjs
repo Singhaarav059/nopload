@@ -289,10 +289,15 @@ await test("chat: a scanned page is read by auto-OCR and cited", async () => {
   eq(asked.length, before + 1, "OCR started once");
   eq(pages[0].text.replace(/\s+/g, " ").includes(SCANNED), true, `page 1: ${pages[0].text}`);
   eq(note, "ocrUsed", "note");
-  // A stand-in model: the OCR text reaches it as page 1's excerpt, and its citation becomes page 1.
+  // A stand-in server AI: the OCR text reaches it as page 1's excerpt, and its citation becomes page 1.
   let sent = "";
-  const generate = async (messages) => ((sent = messages.at(-1).content), "The total due is 1,250.00 (p. 1).");
-  const answer = await chat.askModel(await chat.buildIndex(pages), "What is the total due?", { generate });
+  const fetched = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (url !== "/api/ai") return fetched(url, init);
+    sent = JSON.parse(init.body).sources;
+    return new Response("The total due is 1,250.00 (p. 1).", { headers: { "X-AI-Provider": "groq" } });
+  };
+  const answer = await chat.askCloud(chat.buildIndex(pages), "What is the total due?", {}).finally(() => (globalThis.fetch = fetched));
   eq(sent.includes("(p. 1)") && sent.includes("1,250.00"), true, `page 1 sent: ${sent.slice(0, 160)}`);
   eq(answer.pages[0], 1, "cites page 1");
 });

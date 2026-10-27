@@ -43,13 +43,15 @@
 //   ANTHROPIC_API_KEY   secret; Claude, paid per use.
 //   AI                  Workers AI binding (free daily allowance).
 //                       (Its replies aren't streamed: see cloudflare() below.)
-//   GEMINI_API_KEYS, OPENROUTER_API_KEYS
-//                       secrets for Google Gemini's and OpenRouter's free
-//                       tiers. Their free tiers may use what they're sent to
-//                       improve their models, which the privacy policy
-//                       promises we don't allow: they're used only when
-//                       AI_FREE_TIERS_MAY_TRAIN is "1", and the privacy
-//                       policy (src/lib/legal.ts) must then say so.
+//   GEMINI_API_KEYS     secret: Google Gemini keys (aistudio.google.com),
+//                       comma-separated. The free tier may use what it's sent
+//                       to improve Google's AI, and its people may read it,
+//                       which the privacy policy (src/lib/legal.ts) says; by
+//                       default it's tried only after Groq and Claude.
+//   OPENROUTER_API_KEYS secret: OpenRouter keys; its free models may train on
+//                       what they're sent too, and the privacy policy doesn't
+//                       name it, so it's used only when AI_FREE_TIERS_MAY_TRAIN
+//                       is "1".
 //   GROQ_MODELS, CEREBRAS_MODELS, GEMINI_MODELS, OPENROUTER_MODELS
 //                       optional: each pool's models, best first, comma-separated.
 //   AI_ORDER            optional: which providers to try, in order,
@@ -472,8 +474,10 @@ async function* withoutThinking(pieces: Pieces): Pieces {
 // every key in its *_API_KEYS (or the one *_API_KEY) with every model in its
 // *_MODELS. Groq and Cerebras give each model its own rate limit, so a key's
 // second model is a second bucket.
-// trains: its free tier may use what it's sent to improve its models.
-type Pool = { name: string; url: string; keys: string[]; models: string[]; trains: boolean };
+// Free tiers that may train on what they're sent and that the privacy
+// policy doesn't name wait for AI_FREE_TIERS_MAY_TRAIN.
+const UNNAMED = new Set(["openrouter"]);
+type Pool = { name: string; url: string; keys: string[]; models: string[] };
 const list = (...values: (string | undefined)[]) => [...new Set(values.flatMap((v) => (v ?? "").split(",")).map((s) => s.trim()).filter(Boolean))];
 const pools = (env: Env): Record<string, Pool> => ({
   groq: {
@@ -481,28 +485,24 @@ const pools = (env: Env): Record<string, Pool> => ({
     url: `${env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"}/chat/completions`,
     keys: list(env.GROQ_API_KEYS, env.GROQ_API_KEY),
     models: list(env.GROQ_MODELS || env.GROQ_MODEL || "openai/gpt-oss-120b,qwen/qwen3.8-27b,openai/gpt-oss-20b"),
-    trains: false,
   },
   cerebras: {
     name: "cerebras",
     url: `${env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1"}/chat/completions`,
     keys: list(env.CEREBRAS_API_KEYS, env.CEREBRAS_API_KEY),
     models: list(env.CEREBRAS_MODELS || "llama-3.3-70b,llama3.1-8b"),
-    trains: false,
   },
   gemini: {
     name: "gemini",
     url: `${env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai"}/chat/completions`,
     keys: list(env.GEMINI_API_KEYS, env.GEMINI_API_KEY),
-    models: list(env.GEMINI_MODELS || env.GEMINI_MODEL || "gemini-3.8-flash,gemini-3.5-flash-lite"),
-    trains: true,
+    models: list(env.GEMINI_MODELS || env.GEMINI_MODEL || "gemini-3.5-flash-lite"),
   },
   openrouter: {
     name: "openrouter",
     url: `${env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1"}/chat/completions`,
     keys: list(env.OPENROUTER_API_KEYS, env.OPENROUTER_API_KEY),
     models: list(env.OPENROUTER_MODELS || env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free"),
-    trains: true,
   },
 });
 
@@ -600,7 +600,7 @@ export function slots(env: Env, rotate = 0): Slot[] {
     if (name === "anthropic") return env.ANTHROPIC_API_KEY ? [{ provider: name, id: name, run: (job, signal) => anthropic(env, job, signal) }] : [];
     if (name === "cloudflare") return env.AI ? [{ provider: name, id: name, run: (job) => withoutThinking(cloudflare(env, job)) }] : [];
     const p = free[name];
-    if (!p || !p.keys.length || (p.trains && !mayTrain)) return [];
+    if (!p || !p.keys.length || (UNNAMED.has(name) && !mayTrain)) return [];
     const start = rotate % p.keys.length;
     const ring = [...p.keys.slice(start), ...p.keys.slice(0, start)];
     return p.models.flatMap((model) => ring.map((key) => ({ provider: name, id: `${name}#${fingerprint(key)}#${model}`, run: (job: Job, signal: AbortSignal) => withoutThinking(openAi(p, key, model, job, signal)) })));
@@ -758,7 +758,7 @@ async function check(env: Env) {
   // Free tiers that are off because they may train are tried too: the check
   // sends them only "Say ok.", never anyone's text.
   const off = Object.values(free)
-    .filter((p) => p.keys.length && p.trains && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
+    .filter((p) => p.keys.length && UNNAMED.has(p.name) && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
     .flatMap((p) => p.models.flatMap((model) => p.keys.map((key) => ({ provider: p.name, id: `${p.name}#${fingerprint(key)}#${model}`, run: (j: Job, signal: AbortSignal) => withoutThinking(openAi(p, key, model, j, signal)) }))));
   const all = [...slots(env), ...off];
   const results = await Promise.all(
@@ -777,7 +777,7 @@ async function check(env: Env) {
     }),
   );
   const ignored = Object.values(free)
-    .filter((p) => p.keys.length && p.trains && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
+    .filter((p) => p.keys.length && UNNAMED.has(p.name) && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
     .map((p) => `${p.name}: keys set but off for visitors (its free tier may train on what it's sent); tested above with "Say ok." only`);
   const report = { order: providers(env), AI_ORDER: env.AI_ORDER ?? null, working: results.filter((r) => r.ok).length, of: results.length, results, ignored };
   lastCheck = { at: Date.now(), report };

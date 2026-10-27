@@ -1,12 +1,14 @@
 // Summarize PDF in real browsers: short, medium and long summaries of
-// report.pdf are shown on the page, each longer than the last, can be saved
-// as Markdown or text, nothing downloads by itself and no request leaves the
-// site.
+// report.pdf, written by the server AI (stood in for by ./ai-standin.mjs)
+// from the document's text, are shown on the page, each longer than the
+// last, can be saved as Markdown or text, nothing downloads by itself and no
+// request leaves the site.
 //
 //   node tests/e2e/summarize.mjs [chromium] [firefox] [webkit]   (see kit.mjs)
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { aiStandIn } from "./ai-standin.mjs";
 import { base, dict, open, pick, suite } from "./kit.mjs";
 
 const t = dict("en");
@@ -15,7 +17,9 @@ const origin = new URL(base).origin;
 const label = (key) => t[key].split(":")[0];
 
 await suite(async ({ name, browser, test }) => {
-  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 900 } });
+  // The service worker would hide /api/ai from the stand-in.
+  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 900 }, serviceWorkers: "block" });
+  const ai = await aiStandIn(ctx);
   const page = await ctx.newPage();
   const away = [];
   page.on("request", (r) => {
@@ -43,7 +47,9 @@ await suite(async ({ name, browser, test }) => {
     const n = Object.values(texts).map((s) => s.length);
     if (n.some((x) => !x)) throw new Error(`empty: ${JSON.stringify(texts)}`);
     if (!(n[0] < n[1] && n[1] < n[2])) throw new Error(`lengths ${n.join(", ")}`);
-    if (!texts.short.includes("Revenue grew 12 percent")) throw new Error(`short: ${texts.short}`);
+    const sent = ai.posts.filter((p) => p.body.task === "summarize").map((p) => p.body);
+    if (sent.map((b) => b.points).join(",") !== "3,5,8") throw new Error(`points asked: ${sent.map((b) => b.points)}`);
+    if (!sent.every((b) => /Revenue grew 12 percent/.test(b.text))) throw new Error("the document's text wasn't sent");
     if (downloaded !== before) throw new Error("downloaded by itself");
     return `${n.join(" < ")} characters`;
   });
@@ -58,8 +64,8 @@ await suite(async ({ name, browser, test }) => {
     const [mdName, md] = await save("res.downloadMd");
     const [txtName, txt] = await save("res.downloadTxt");
     if (mdName !== "report-summary.md" || txtName !== "report-summary.txt") throw new Error(`names ${mdName}, ${txtName}`);
-    if (!/^- Revenue grew/m.test(md)) throw new Error(`md: ${md.slice(0, 80)}`);
-    if (!/^• Revenue grew/m.test(txt) || txt.includes("- ")) throw new Error(`txt: ${txt.slice(0, 80)}`);
+    if (!/^- \S/.test(md)) throw new Error(`md: ${md.slice(0, 80)}`);
+    if (!/^• \S/.test(txt) || /^- /m.test(txt)) throw new Error(`txt: ${txt.slice(0, 80)}`);
     return "report-summary.md, report-summary.txt";
   });
 

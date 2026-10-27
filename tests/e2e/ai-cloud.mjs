@@ -1,12 +1,9 @@
 // Server AI in real browsers, with /api/ai (functions/api/ai.ts) stood in
-// for by the test. Without a model that writes on the device, it's the AI
-// tools' default: the panel says what is sent, only text is sent (never the
-// file), the answer cites its pages and says server AI wrote it, and a
-// citation shows its page. A failing server says so and offers to try
-// again, never showing the PDF's passages instead; "On this device" sends
-// nothing, asks to turn on AI, and is remembered. A device that can run the
-// models (forced "capable") gets server AI too until a model is downloaded,
-// and a model that fails to run brings it back.
+// for by the test. Every AI tool uses it, on every device: the panel says
+// what is sent, only text is sent (never the file), the answer cites its
+// pages and says AI wrote it, and a citation shows its page. A failing
+// server says so and offers to try again, never showing the PDF's passages
+// instead. Where there's no server AI, the tools say so and send nothing.
 //
 //   node tests/e2e/ai-cloud.mjs [chromium] [firefox] [webkit]   (see kit.mjs)
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -46,10 +43,6 @@ async function ask(page, question) {
 await suite(async ({ browser, test }) => {
   // The service worker would hide /api/ai from the stand-in.
   const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1280, height: 900 }, serviceWorkers: "block" });
-  // Which kind of device this is (src/lib/ai/engine.ts deviceCanRunModels).
-  let device = "weak";
-  await ctx.exposeBinding("deviceKind", () => device);
-  await ctx.addInitScript(async () => localStorage.setItem("nopload-ai-device", await window.deviceKind()));
   const page = await ctx.newPage();
   // How the stand-in answers next, and what it was sent.
   let mode = { status: 200, provider: "anthropic" };
@@ -71,16 +64,17 @@ await suite(async ({ browser, test }) => {
     return route.fulfill({ status: 400, json: { error: "unknown task" } });
   });
 
-  await test("chat: with no model, server AI is the default, and says what it sends", async () => {
+  await test("chat: says it uses the server AI and what it sends; no choice to make", async () => {
     await open(page, "/en/chat-with-pdf");
     await pick(page, [twenty]);
-    const panel = page.locator("[data-ai-models]");
-    await page.locator("[data-ai-mode='cloud']").waitFor({ timeout: 15000 });
-    const disclosure = await panel.locator("[data-ai-disclosure]").innerText();
-    for (const key of ["ai.server.sends.chat", "ai.server.who"]) if (!disclosure.includes(t[key])) throw new Error(`no ${key}: ${disclosure}`);
-    const link = await panel.locator("[data-ai-disclosure] a").getAttribute("href");
+    const panel = page.locator("[data-ai-notice='server']");
+    await panel.waitFor({ timeout: 15000 });
+    const text = await panel.innerText();
+    for (const key of ["ai.server.sends.chat", "ai.server.who"]) if (!text.includes(t[key])) throw new Error(`no ${key}: ${text}`);
+    const link = await panel.locator("a").getAttribute("href");
     if (link !== "/en/privacy#ai") throw new Error(`links ${link}`);
-    return "cloud selected, disclosure shown";
+    if (await page.locator("main [role=radiogroup]").count()) throw new Error("offers a choice of where AI runs");
+    return "notice shown, no choice";
   });
 
   await test("chat: the server AI answer cites page 14; only text was sent", async () => {
@@ -150,34 +144,11 @@ await suite(async ({ browser, test }) => {
     return "minute and day limits named";
   });
 
-  await test("chat: On this device states its limits, sends nothing, and is remembered", async () => {
-    await page.locator("[data-ai-choice='device']").click();
-    await page.locator("[data-ai-mode='device']").waitFor();
-    const limits = await page.locator("[data-ai-device]").innerText();
-    if (!limits.includes(t["ai.device.limits"])) throw new Error(limits);
-    const before = posts.length;
-    const a = await ask(page, "What is the invoice total?");
-    if (posts.length !== before) throw new Error("sent a request");
-    if (!a.text.includes(t["chat.needsAi"]) || a.text.includes("$1,234.50")) throw new Error(a.text);
-    // The card's button turns server AI on and asks again.
-    await page.locator("[data-answer]").last().locator("[data-use-cloud]").click();
-    await page.locator("[data-answer]").last().locator("[data-citation='14']").waitFor({ timeout: 30000 });
-    await page.locator("[data-ai-choice='device']").click();
-    await page.locator("[data-ai-mode='device']").waitFor();
-    await open(page, "/en/chat-with-pdf");
-    await pick(page, [twenty]);
-    await page.locator("[data-ai-mode='device']").waitFor({ timeout: 15000 });
-    await page.locator("[data-ai-choice='cloud']").click();
-    await page.locator("[data-ai-mode='cloud']").waitFor();
-    return "asked to turn on AI, cloud from the card, choice kept after reload";
-  });
-
   await test("summarize: written by server AI, labelled, text only", async () => {
     await open(page, "/en/summarize-pdf");
     await pick(page, ["report.pdf"]);
-    await page.locator("[data-ai-mode='cloud']").waitFor({ timeout: 15000 });
-    const disclosure = await page.locator("[data-ai-disclosure]").innerText();
-    if (!disclosure.includes(t["ai.server.sends.summarize"])) throw new Error(disclosure);
+    const notice = await page.locator("[data-ai-notice='server']").innerText({ timeout: 15000 });
+    if (!notice.includes(t["ai.server.sends.summarize"])) throw new Error(notice);
     await page.getByRole("button", { name: t["tool.summarize.action"], exact: true }).click();
     await page.locator("[data-summary]").waitFor({ timeout: 60000 });
     const summary = await page.locator("[data-summary]").innerText();
@@ -191,7 +162,7 @@ await suite(async ({ browser, test }) => {
   await test("translate: blocks go in batches, the PDF is rebuilt here", async () => {
     await open(page, "/en/translate-pdf");
     await pick(page, ["report.pdf"]);
-    await page.locator("[data-ai-mode='cloud']").waitFor({ timeout: 15000 });
+    await page.locator("[data-ai-notice='server']").waitFor({ timeout: 15000 });
     await page.getByRole("radio", { name: new RegExp(`^${t["choice.translateFormat.md"].split(":")[0]}`) }).click();
     const before = posts.length;
     const [dl] = await Promise.all([
@@ -206,51 +177,57 @@ await suite(async ({ browser, test }) => {
     return `${sent.length} request(s), ${sent.reduce((n, p) => n + p.body.texts.length, 0)} blocks`;
   });
 
-  await test("a capable device with no model: server AI by default, downloads offered", async () => {
-    device = "capable";
-    await page.evaluate(() => localStorage.removeItem("nopload-ai-model"));
-    await open(page, "/en/chat-with-pdf");
-    await pick(page, [twenty]);
-    await page.locator("[data-ai-mode='cloud']").waitFor({ timeout: 15000 });
-    await page.locator("[data-ai-choice='device']").click();
-    await page.locator("[data-ai-device] li").first().waitFor({ timeout: 5000 });
-    await page.locator("[data-ai-choice='cloud']").click();
-    return "server AI selected; models offered on this device";
+  await test("summarize: when server AI fails, it says so and makes no summary of its own", async () => {
+    mode = { status: 503 };
+    await open(page, "/en/summarize-pdf");
+    await pick(page, ["report.pdf"]);
+    await page.getByRole("button", { name: t["tool.summarize.action"], exact: true }).click();
+    await page.getByText(t["err.cloudFailed"]).first().waitFor({ timeout: 60000 });
+    if (await page.locator("[data-summary]").count()) throw new Error("showed a summary");
+    mode = { status: 200, provider: "anthropic" };
+    return t["err.cloudFailed"];
   });
 
-  await test("a capable device whose model fails is offered server AI", async () => {
-    // What markDeviceFailed (src/lib/ai/engine.ts) does when a model doesn't run.
-    await page.evaluate(() => {
-      localStorage.removeItem("nopload-ai-device");
-      localStorage.setItem("nopload-ai-device-failed", "1");
-      window.dispatchEvent(new Event("nopload:ai-device-failed"));
-    });
-    await page.locator("[data-ai-fell-back]").waitFor({ timeout: 5000 });
-    await page.locator("[data-ai-mode='cloud']").waitFor();
-    device = "weak";
-    return t["ai.deviceFailed"];
-  });
-
-  await test("a phone: server AI by default, no model downloads", async () => {
+  await test("a phone: the same server AI, nothing to download", async () => {
     const phone = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" }).catch(() => null);
     if (!phone) return "skipped: this browser can't emulate a phone";
     try {
-      await phone.route("**/api/ai", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { anthropic: true, cloudflare: true } }) : r.fulfill({ contentType: "text/plain", body: "The invoice total is $1,234.50 [1]." })));
+      await phone.route("**/api/ai", (r) => (r.request().method() === "GET" ? r.fulfill({ json: { groq: true } }) : r.fulfill({ contentType: "text/plain", body: "The invoice total is $1,234.50 (p. 14)." })));
       const p = await phone.newPage();
       await open(p, "/en/chat-with-pdf");
       await pick(p, [twenty]);
-      await p.locator("[data-ai-mode='cloud']").waitFor({ timeout: 15000 });
-      await p.locator("[data-ai-choice='device']").click();
-      await p.locator("[data-ai-phone]").waitFor();
-      const downloads = await p.locator("[data-ai-models] li").count();
-      if (downloads) throw new Error(`${downloads} models offered`);
-      return "server AI selected; on-device shows no downloads";
+      await p.locator("[data-ai-notice='server']").waitFor({ timeout: 15000 });
+      await p.waitForFunction(() => !document.querySelector("#chat-q")?.disabled, null, { timeout: 30000 });
+      const a = await ask(p, "What is the invoice total in this PDF?");
+      if (a.pages[0] !== 14) throw new Error(a.text);
+      return "answered by server AI";
     } finally {
       await phone.close();
     }
   });
 
-  await test("the AI tools' pages say AI on device or server, not 'Runs on your device'", async () => {
+  await test("no server AI here: the tools say so, take no questions and send nothing", async () => {
+    const none = await browser.newContext({ serviceWorkers: "block", locale: "en-US" });
+    try {
+      const sent = [];
+      await none.route("**/api/ai", (r) => {
+        if (r.request().method() !== "GET") sent.push(r.request().url());
+        return r.request().method() === "GET" ? r.fulfill({ json: { groq: false, anthropic: false, cloudflare: false } }) : r.fulfill({ status: 503, json: {} });
+      });
+      const p = await none.newPage();
+      await open(p, "/en/chat-with-pdf");
+      await pick(p, [twenty]);
+      await p.locator("[data-ai-unavailable]").waitFor({ timeout: 15000 });
+      await p.locator("[data-ai-notice='unavailable']").waitFor();
+      if (!(await p.locator("#chat-q").isDisabled())) throw new Error("the question box is enabled");
+      if (sent.length) throw new Error(`sent ${sent.length}`);
+      return t["ai.unavailable"];
+    } finally {
+      await none.close();
+    }
+  });
+
+  await test("the AI tools' pages say AI on our server, not 'Runs on your device'", async () => {
     await open(page, "/en/chat-with-pdf");
     const pill = await page.locator("header .pill").filter({ hasText: t["home.aiBadge"] }).count();
     const local = await page.locator("header .pill").filter({ hasText: t["home.privateBadge"] }).count();

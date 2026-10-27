@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { base, fixtures, launch, open, root } from "../kit.mjs";
 import { helpers, inspect, makeFixtures, outcome } from "./lib.mjs";
+import { aiStandIn } from "../ai-standin.mjs";
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -59,6 +60,8 @@ for (const lang of langs) {
     foreign.push(new URL(r.request().url()).host);
     return r.abort();
   });
+  // The AI tools' server AI, stood in for (the static build has none).
+  await aiStandIn(ctx);
   // A returning visitor: the service worker is installed before the tools run.
   {
     const p = await ctx.newPage();

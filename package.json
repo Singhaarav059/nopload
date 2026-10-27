@@ -123,7 +123,6 @@
     "test:e2e:editcontent": "node tests/e2e/editcontent.mjs",
     "test:ai": "node tests/ai.mjs",
     "test:ai-cloud": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/ai-cloud.mjs",
-    "test:e2e:ai": "node tests/e2e/ai.mjs",
     "test:e2e:ai-cloud": "node tests/e2e/ai-cloud.mjs",
     "test:e2e:exactsize": "node tests/e2e/exactsize.mjs chromium",
     "test:scanner": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/scanner-quad.mjs",
@@ -153,7 +152,6 @@
     "@fontsource/noto-sans-telugu": "^5.3.0",
     "@fontsource/noto-sans-thai": "^5.3.0",
     "@fontsource/tinos": "5.3.0",
-    "@huggingface/transformers": "4.3.1",
     "@jsquash/jpeg": "1.6.0",
     "@matbee/libreoffice-converter": "2.7.2",
     "@neslinesli93/qpdf-wasm": "^0.3.0",
@@ -323,9 +321,6 @@
     "sharp": "0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "allowScripts": {
-    "onnxruntime-node@1.30.0": true
   },
   "overrides": {
     "exceljs": {

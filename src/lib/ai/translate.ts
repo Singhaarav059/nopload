@@ -1,14 +1,9 @@
 "use client";
 
 // Translate PDF. Text goes, block by block (paragraphs, headings, list items,
-// table cells, headers and footers), to the cloud AI in batches when it's
-// picked (the default where the site has it; ./cloud.ts: the blocks' text
-// is sent, never the file). Otherwise, or for the rest when the cloud stops
-// answering, to the browser's built-in Translator when it has this language
-// pair on the device, else to the large model (Qwen3-0.6B, Apache-2.0) when
-// the visitor has downloaded it. There is no other fallback: the
-// permissively licensed translation-only models were either too large or
-// not clearly licensed, so without one of these the tool says how to get one.
+// table cells, headers and footers), to the server AI in batches (./cloud.ts:
+// the blocks' text is sent, never the file). When the server AI doesn't
+// answer, the tool says so.
 //
 // Output: Markdown (the text, page by page), or a PDF that keeps the layout:
 // the original text is taken out (../pdf/strip.ts), graphics and pictures
@@ -20,8 +15,8 @@ import { baseName, bytesOf, closePdf, hexToRgb, openPdf, pdfBlob, type Output, t
 import { PdfError } from "../pdf/errors";
 import { documentLayout, type PageLayout } from "../pdf/layout";
 import { blocks, bodySizeOf, type Line } from "../pdf/text";
-import { guessLanguage } from "./extractive";
 import { languageTag } from "./summarize";
+import { cloudJson, CloudUnavailable } from "./cloud";
 
 // A piece of text and the box it sat in (viewport points, top-left origin).
 // `room`: how wide its translation may run, to the edge of its column.
@@ -70,8 +65,7 @@ const BATCH = { chars: 9_000, items: 80 };
 // The cloud translator: batches of blocks, each sent as text only. A batch
 // that comes back incomplete is split and tried again; a block that still
 // fails, or a cloud that doesn't answer, throws CloudUnavailable.
-async function cloudTranslator(to: string): Promise<Engine> {
-  const { cloudJson, CloudUnavailable } = await import("./cloud");
+function cloudTranslator(to: string): Engine {
   const engine: Engine = { engine: "cloud", done: () => {}, translate: async (text) => (await batch([text]))[0] };
   const batch = async (texts: string[]): Promise<string[]> => {
     try {
@@ -108,51 +102,6 @@ function batches(texts: string[]): number[][] {
   if (cur.length) out.push(cur);
   return out;
 }
-
-// The translator to use, or null: the browser's when it has the pair, else
-// the large model when it's on the device.
-export async function translator(from: string | undefined, to: string, aiModel?: string): Promise<Engine | null> {
-  if (aiModel === "cloud") return cloudTranslator(to);
-  if (aiModel !== "large" && !("Translator" in globalThis)) return null;
-  const { builtinTranslator, status, generator, markDeviceFailed } = await import("./engine");
-  if (from) {
-    const t = await builtinTranslator(from, to);
-    if (t) return { translate: (s) => t.translate(s), engine: "builtin", done: () => t.destroy?.() };
-  }
-  if (aiModel !== "large") return null;
-  if (!(await status()).stored.large) return null;
-  const generate = generator("large");
-  const name = languageName(to);
-  return {
-    engine: "model",
-    done: () => {},
-    translate: async (text) => {
-      const out = await generate(
-        [
-          { role: "system", content: `You are a professional translator into ${name}.` },
-          { role: "user", content: `Translate into ${name}:\n\n${text}` },
-        ],
-        { maxNewTokens: Math.min(1024, 40 + text.length) },
-      ).catch((e) => {
-        // The model didn't run here: offer server AI from now on.
-        markDeviceFailed();
-        throw e;
-      });
-      // A label or quotes around the translation, and anything after it when the text was one paragraph.
-      let t = out.trim().replace(/^(translation|traducción|traduction|übersetzung)[^:\n]*:\s*/i, "").replace(/^["“«]([\s\S]*)["”»]$/, "$1");
-      if (!text.includes("\n")) t = t.split(/\n\s*\n/)[0];
-      return t.trim() || text;
-    },
-  };
-}
-
-const languageName = (tag: string) => {
-  try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(tag) ?? tag;
-  } catch {
-    return tag;
-  }
-};
 
 // Lines of `text` no wider than `width` at `size`, broken at spaces (or
 // anywhere, for scripts written without them).
@@ -221,7 +170,7 @@ async function drawPdf(bytes: Uint8Array, layouts: PageLayout[], units: Unit[], 
 
 export async function translatePdf(
   file: File,
-  o: { translateLang: string; translateFormat: string; aiModel?: string },
+  o: { translateLang: string; translateFormat: string },
   progress?: Progress,
   // Tests pass their own.
   engine?: Engine,
@@ -237,16 +186,13 @@ export async function translatePdf(
   const units = unitsOf(layouts);
   if (!units.some(words)) throw new PdfError("no_text", file.name);
   const to = languageTag(o.translateLang);
-  const from = guessLanguage(units.filter(words).map((u) => u.text).join("\n"));
-  let t = engine ?? (await translator(from, to, o.aiModel));
-  if (!t) throw new PdfError("no_translator", file.name);
+  const t = engine ?? cloudTranslator(to);
   // Blocks with words are translated; numbers, codes and the like stay.
   const done = units.map((u) => u.text);
   const todo = units.flatMap((u, k) => (words(u) ? [k] : []));
   const source = (k: number) => units[k].text.replace(/\s+/g, " ").trim();
   let n = 0;
   const step = () => progress?.(layouts.length + (n / Math.max(1, todo.length)) * layouts.length * 2, layouts.length * 4);
-  let cloudFailed = false;
   try {
     if (t.many) {
       try {
@@ -257,14 +203,9 @@ export async function translatePdf(
           step();
         }
       } catch (e) {
-        const { CloudUnavailable } = await import("./cloud");
         if (!(e instanceof CloudUnavailable)) throw e;
-        // The rest on this device: the browser's translator or the large model, if there's one.
-        console.warn("The cloud AI didn't answer; translating the rest on this device.", e);
-        cloudFailed = true;
-        const local = await translator(from, to, "large");
-        if (!local) throw new PdfError("cloud_failed", file.name);
-        t = local;
+        console.warn("The server AI didn't answer.", e);
+        throw new PdfError("cloud_failed", file.name);
       }
     }
     for (; n < todo.length; n++) {
@@ -274,7 +215,7 @@ export async function translatePdf(
   } finally {
     t.done();
   }
-  const note = `translate:${t.engine}${t.provider ? `:${t.provider}` : ""}${cloudFailed ? ":cloudFailed" : ""}`;
+  const note = `translate:${t.engine}${t.provider ? `:${t.provider}` : ""}`;
   const stem = `${baseName(file.name)}-${to}`;
   if (o.translateFormat === "md") {
     const md: string[] = [];

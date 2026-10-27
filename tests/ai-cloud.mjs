@@ -119,8 +119,8 @@ await test("GET says which providers are set up", async () => {
   const none = { groq: false, cerebras: false, anthropic: false, gemini: false, openrouter: false, cloudflare: false };
   eq(await (await onRequestGet({ env: { ...claude, AI: workersAi("") } })).json(), { ...none, anthropic: true, cloudflare: true }, "Claude and Workers AI");
   eq(await (await onRequestGet({ env: {} })).json(), none, "none");
-  eq(await (await onRequestGet({ env: { ...groq, GEMINI_API_KEY: "g", OPENROUTER_API_KEY: "o" } })).json(), { ...none, groq: true }, "free tiers that may train stay off");
-  eq(await (await onRequestGet({ env: { GEMINI_API_KEY: "g", AI_FREE_TIERS_MAY_TRAIN: "1" } })).json(), { ...none, gemini: true }, "unless allowed");
+  eq(await (await onRequestGet({ env: { ...groq, GEMINI_API_KEY: "g", OPENROUTER_API_KEY: "o" } })).json(), { ...none, groq: true, gemini: true }, "Gemini on with its keys; OpenRouter, which may train and isn't named, stays off");
+  eq(await (await onRequestGet({ env: { OPENROUTER_API_KEY: "o", AI_FREE_TIERS_MAY_TRAIN: "1" } })).json(), { ...none, openrouter: true }, "unless allowed");
 });
 
 await test("Groq's free tier answers first, streamed, with the chat prompt", async () => {
@@ -144,10 +144,17 @@ await test("Claude answers when Groq is over its free limit", async () => {
   eq([res.headers.get("x-ai-provider"), await res.text()], ["anthropic", "It ends in May (p. 2)."], "reply");
 });
 
-await test("Gemini and OpenRouter free tiers only when allowed to train, in AI_ORDER", async () => {
+await test("Gemini Flash-Lite after Groq and Claude; OpenRouter only when allowed to train, in AI_ORDER", async () => {
   free = { reply: "From the free tier (p. 2).", status: 200 };
   const keys = { GEMINI_API_KEY: "g", GEMINI_BASE_URL: `${freeBase}/gemini`, OPENROUTER_API_KEY: "o", OPENROUTER_BASE_URL: `${freeBase}/openrouter` };
-  eq((await post(chat, keys)).status, 503, "not allowed: none set up");
+  const gem = await post(chat, keys);
+  eq([gem.headers.get("x-ai-provider"), freeSeen.at(-1).body.model], ["gemini", "gemini-3.5-flash-lite"], "Gemini answers with Flash-Lite");
+  await gem.text();
+  free = { reply: "", status: 429 };
+  mode = { reply: "Claude first (p. 2).", status: 200 };
+  const order = await post(chat, { ...groq, ...claude, GEMINI_API_KEY: "g", GEMINI_BASE_URL: `${freeBase}/gemini` });
+  eq([order.headers.get("x-ai-provider"), await order.text()], ["anthropic", "Claude first (p. 2)."], "Groq busy: Claude before Gemini");
+  free = { reply: "From the free tier (p. 2).", status: 200 };
   const res = await post(chat, { ...keys, AI_FREE_TIERS_MAY_TRAIN: "1", AI_ORDER: "openrouter,gemini" });
   eq([res.headers.get("x-ai-provider"), await res.text()], ["openrouter", "From the free tier (p. 2)."], "reply");
   eq([freeSeen.at(-1).url, freeSeen.at(-1).body.model], ["/openrouter/chat/completions", "meta-llama/llama-3.3-70b-instruct:free"], "OpenRouter's free Llama");
@@ -213,16 +220,16 @@ await test("pool: all of it used up: 503 with fallbackToLocal, after one more ro
 
 await test("GET ?check asks every key and model once, names keys by number, never shows them", async () => {
   free = { reply: "ok", status: 200, limited: new Set(["Bearer kZ2|openai/gpt-oss-20b"]) };
-  const env = pool("kZ1,kZ2", { GEMINI_API_KEYS: "gZ", GEMINI_BASE_URL: `${freeBase}/gemini`, GEMINI_MODELS: "gemini-3.5-flash-lite", AI_ORDER: "groq,cloudflare", AI: workersAi("ok") });
+  const env = pool("kZ1,kZ2", { OPENROUTER_API_KEYS: "oZ", OPENROUTER_BASE_URL: `${freeBase}/openrouter`, AI_ORDER: "groq,cloudflare", AI: workersAi("ok") });
   const res = await onRequestGet({ request: new Request("https://x/api/ai?check"), env });
   const text = await res.text();
   if (text.includes("kZ1") || text.includes("kZ2")) throw new Error(`a key was shown: ${text}`);
   const report = JSON.parse(text);
-  eq([report.order, report.of, report.working], [["groq", "cloudflare"], 8, 7], "6 Groq slots, Workers AI and the off Gemini key, one limited");
-  eq(report.results.filter((r) => r.provider === "gemini" && r.ok).length, 1, "Gemini key tested though off for visitors");
+  eq([report.order, report.of, report.working], [["groq", "cloudflare"], 8, 7], "6 Groq slots, Workers AI and the off OpenRouter key, one limited");
+  eq(report.results.filter((r) => r.provider === "openrouter" && r.ok).length, 1, "OpenRouter key tested though off for visitors");
   const bad = report.results.filter((r) => !r.ok);
   eq([bad.length, bad[0].key, bad[0].model], [1, 2, "openai/gpt-oss-20b"], "the limited one, by number");
-  eq(report.ignored.length, 1, "Gemini keys noted as off");
+  eq(report.ignored.length, 1, "OpenRouter keys noted as off");
 });
 
 await test("pool: one GROQ_API_KEY still works, and keys never reach the logs", async () => {

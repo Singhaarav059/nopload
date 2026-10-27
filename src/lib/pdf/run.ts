@@ -165,11 +165,11 @@ export async function runTool(id: ToolId, files: File[], o: Opts, progress?: Pro
     }
     case "summarize": {
       const { summarizePdf } = await import("../ai/summarize");
-      return each(files, progress, (f, p) => summarizePdf(f, { summaryLength: s(o.summaryLength), summaryLang: s(o.summaryLang), aiModel: s(o.aiModel) }, p));
+      return each(files, progress, (f, p) => summarizePdf(f, { summaryLength: s(o.summaryLength), summaryLang: s(o.summaryLang) }, p));
     }
     case "translate": {
       const { translatePdf } = await import("../ai/translate");
-      return each(files, progress, (f, p) => translatePdf(f, { translateLang: s(o.translateLang), translateFormat: s(o.translateFormat), aiModel: s(o.aiModel) }, p));
+      return each(files, progress, (f, p) => translatePdf(f, { translateLang: s(o.translateLang), translateFormat: s(o.translateFormat) }, p));
     }
     case "pageNumbers": {
       const { pageNumbers, numberedPages, exhibitIndex } = await import("./edit");

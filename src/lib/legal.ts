@@ -3,7 +3,7 @@
 // release build refuses the placeholders), and the text should be reviewed by
 // a lawyer before going live.
 import { BRAND, OPERATOR } from "./brand";
-import { AI_CLOUD, STATIC } from "./mode";
+import { STATIC } from "./mode";
 
 // The static build has no server or cookies, so its text says so.
 const on = <T,>(when: boolean, items: T[]) => (when ? items : []);
@@ -32,17 +32,14 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
         h: "Files you process",
         p: STATIC
           ? [
-              AI_CLOUD
-                ? "Every tool works on your files inside your browser. Your files are never sent to us or to anyone else. The AI tools are the one exception to keeping their contents on your device: see “The AI tools” below."
-                : "Every tool runs entirely in your browser. Your files are never sent to us or to anyone else.",
+              "Every tool works on your files inside your browser. Your files are never sent to us or to anyone else. The AI tools are the one exception to keeping their contents on your device: see “The AI tools” below.",
               "Office and HTML files are laid out in your browser and saved through its own print dialog.",
               "High-fidelity Office conversion and high-accuracy OCR download their engines (LibreOffice, and PaddleOCR with ONNX Runtime) from this same site the first time you use them. They run on your device too, so your files still stay there.",
-              ...on(!AI_CLOUD, ["The AI tools (Chat with PDF, Summarize, Translate) download a model from this same site only when you choose one, and keep it on your device for next time. Models run on your device, as does your browser's built-in AI, which they use when it's already there. Your files and questions stay on your device."]),
             ]
           : [
               "Tools marked “Runs on your device” process files entirely in your browser. Those files are never sent to us.",
               "High-accuracy OCR downloads its engine (PaddleOCR with ONNX Runtime) from this same site the first time you use it. It runs on your device too, so your files still stay there.",
-              "The AI tools (Chat with PDF, Summarize, Translate) download a model from this same site only when you choose one, and keep it on your device for next time. Models run on your device, as does your browser's built-in AI, which they use when it's already there. Your files and questions stay on your device.",
+              "The AI tools (Chat with PDF, Summarize, Translate) send some of a document's text to AI services: see “The AI tools” below.",
               "Office conversions and web page conversion send the file to our server over HTTPS. We process it in memory or a temporary folder and delete it as soon as the result is returned. We don't keep copies or look at the contents.",
             ],
       },
@@ -54,19 +51,19 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
           "At most 12 files and 300 MB are kept; past that, the oldest go first. Remove one with its ✕ in Recent, all of them with Clear, or turn off “Remember opened files” (under Recent in the viewer, or in the app's Settings), which also removes those already kept. Clearing your browser data removes them too. On a shared computer, turn it off or use a private window.",
         ],
       },
-      ...on(AI_CLOUD, [{
+      {
         id: "ai",
         h: "The AI tools",
         p: [
-          "Chat with PDF, Summarize PDF and Translate PDF can run their AI on your device or on our server. On a computer with a capable graphics chip (WebGPU) and enough memory, you can download a model from this same site once; it stays on your device, and with it nothing is sent anywhere.",
-          "Until a model that writes is on your device, and always on phones and tablets, which can't run these models, the tools use our server AI by default. The tool says so next to its options, and you can choose on-device AI there instead. If a model fails to run on a device that seemed able, that device is offered server AI from then on.",
-          "With server AI, your file stays on your device, but some of its text is sent: for Chat with PDF, your question, the earlier questions and answers in that chat, and the passages of the PDF that best match the question; for Summarize PDF, the document's text (about the first 15,000 words, plus its key sentences when it's longer); for Translate PDF, the document's text, a few blocks at a time.",
-          "That text goes over HTTPS to a small function of ours on Cloudflare, which passes it to the first of these that answers: open models (gpt-oss by OpenAI, Qwen by Alibaba, Llama by Meta) run by Groq or by Cerebras; Claude, an AI model made by Anthropic; and Qwen3, an open model, on Cloudflare Workers AI.",
-          "We don't log the text or the answers. So that the same request is answered again without asking an AI model, the function keeps recent answers in its memory (never on disk) for up to six hours, under a code computed from the request rather than the text itself. To stop one visitor using up the service, it counts how much text each IP address sent in the last hour, for up to an hour, and how many chat questions it asked today (at most 10 a minute and 60 a day), until the end of the day. Groq, Cerebras, Anthropic and Cloudflare process the text under their own terms and privacy policies; under those terms none of them uses it to train AI models. They may keep it for a limited time to detect misuse.",
-          "Your browser keeps the answers server AI gave you for a week, on your device only, so asking the same question about the same PDF again is answered at once. Clearing this site's data in your browser removes them.",
-          "With on-device AI, nothing is sent. Chat with PDF answers only with a model, on your device or on our server, and never shows passages of the document as an answer on their own. Without a model, Summarize PDF and Translate PDF use your browser's built-in AI when it's already there, or Summarize PDF picks key sentences from the document itself, which gives simpler results.",
+          "Chat with PDF, Summarize PDF and Translate PDF use AI on our server; there is no AI on your device. Your file stays on your device, but some of its text is sent: for Chat with PDF, your question, the earlier questions and answers in that chat, and the passages of the PDF that best match the question; for Summarize PDF, the document's text (about the first 15,000 words, plus its key sentences when it's longer); for Translate PDF, the document's text, a few blocks at a time. Each tool says so next to its options. The other tools send nothing.",
+          "That text goes over HTTPS to a small function of ours on Cloudflare, which passes it to the first of these that answers: open models (gpt-oss by OpenAI, Qwen by Alibaba, Llama by Meta) run by Groq or by Cerebras; Claude, an AI model made by Anthropic; Gemini, an AI model made by Google, on Google's free tier; and Qwen3, an open model, on Cloudflare Workers AI. Gemini is asked only when Groq and Claude don't answer, so most text never reaches it.",
+          "Groq, Cerebras, Anthropic and Cloudflare process the text under their own terms and privacy policies; under those terms none of them uses it to train AI models. They may keep it for a limited time to detect misuse.",
+          "Google's terms for its free tier are different: Google may use the text it's sent, and the answers, to provide and improve its products and to develop its AI, and its human reviewers may read them (Google says it first separates them from our account). Google asks that sensitive, confidential or personal information isn't sent this way. For visitors in the European Economic Area, Switzerland and the United Kingdom, Google's terms apply its paid-service rules instead, under which it doesn't use the text to improve its products. If a document is sensitive, don't use the AI tools on it.",
+          "We don't log the text or the answers. So that the same request is answered again without asking an AI model, the function keeps recent answers in its memory (never on disk) for up to six hours, under a code computed from the request rather than the text itself. To stop one visitor using up the service, it counts how much text each IP address sent in the last hour, for up to an hour, and how many chat questions it asked today (at most 10 a minute and 60 a day), until the end of the day.",
+          "Your browser keeps the answers the AI gave you for a week, on your device only, so asking the same question about the same PDF again is answered at once. Clearing this site's data in your browser removes them.",
+          "Chat with PDF never shows passages of the document as an answer on their own. When the AI services don't answer, the tools say so and send nothing more.",
         ],
-      }]),
+      },
       ...on(!STATIC, [{
         h: "Messages",
         p: ["If you use the contact form we store your email address and message so we can reply."],
@@ -75,9 +72,7 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
         h: "Technical data",
         p: [
           STATIC
-            ? AI_CLOUD
-              ? "This site is served as plain files by a hosting provider, which may log requests (IP address, time, page requested) under its own privacy policy. Apart from the AI function described above, we don't run a server of our own."
-              : "This site is served as plain files by a hosting provider, which may log requests (IP address, time, page requested) under its own privacy policy. We don't run a server of our own."
+            ? "This site is served as plain files by a hosting provider, which may log requests (IP address, time, page requested) under its own privacy policy. Apart from the AI function described above, we don't run a server of our own."
             : "Our server logs requests (IP address, time, page requested) for security and rate limiting. Logs are kept for a short period and then deleted.",
         ],
       },
@@ -89,7 +84,7 @@ export const LEGAL: Record<"privacy" | "terms" | "cookies", LegalDoc> = {
         h: "Your rights",
         p: STATIC
           ? [
-              `We hold no personal data about you${AI_CLOUD ? ", apart from the hour-long, in-memory count of AI text per IP address described above" : ""}. What this site keeps in your browser (workflows, signatures, the PDFs you read and where you stopped, your language, your AI choice) is removed when you clear your browser data.`,
+              "We hold no personal data about you, apart from the in-memory counts of AI use per IP address described above. What this site keeps in your browser (workflows, signatures, the PDFs you read and where you stopped, your language, the AI answers you got) is removed when you clear your browser data.",
             ]
           : [
               "What this site keeps in your browser (workflows, signatures, the PDFs you read and where you stopped, your language) is removed when you clear your browser data. To have a message you sent through the contact form deleted, contact us.",

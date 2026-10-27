@@ -1,9 +1,11 @@
-// Summarize PDF: extractive TextRank over the document's own sentences, the
-// browser's built-in Summarizer and Translator when they are already on the
-// device, and nothing fetched from anywhere.
+// Summarize PDF: the document's text (prose and table figures), read on the
+// device, goes to the server AI, stood in for here; the summary is its key
+// points, in the language asked for. Long documents send their opening and
+// their key sentences (TextRank over the document's own sentences). When the
+// server AI doesn't answer, it's an error, not a summary made some other way.
 //
 //   node tests/summarize.mjs
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { load, openPdf, check, eq, root } from "./lib/load.mjs";
@@ -22,66 +24,21 @@ const run = async (bytes, o, name) => {
   return { ...out, text: await out.blob.text() };
 };
 
-// No request may leave the page while summarising.
+// The stand-in server AI: `reply` answers each request, and `sent` is what it got.
+// Any other request fails the test.
+let reply = (body) => Array.from({ length: body.points }, (_, i) => `${i + 1}. Point ${i + 1} in ${body.language}`).join("\n");
+const sent = [];
 let requests = 0;
-globalThis.fetch = async () => {
+globalThis.fetch = async (url, init) => {
+  if (url === "/api/ai" && init?.method === "POST") {
+    const body = JSON.parse(init.body);
+    sent.push(body);
+    const r = reply(body);
+    return typeof r === "string" ? new Response(r, { headers: { "X-AI-Provider": "groq" } }) : Response.json(r, { status: r.status });
+  }
   requests++;
   throw new Error("network");
 };
-
-// A longer document: an article with a title, sections and filler.
-async function article() {
-  const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const sections = [
-    ["Solar power adoption", [
-      "Solar power adoption in cities grew quickly over the last decade as panel prices fell.",
-      "Cheaper solar panels made rooftop solar power affordable for many households in cities.",
-      "The weather was pleasant on the day the survey started.",
-      "City councils now offer grants that pay for part of a rooftop solar installation.",
-    ]],
-    ["Storage and the grid", [
-      "Battery storage lets households keep solar power for the evening, when demand peaks.",
-      "Grid operators worry that rooftop solar power makes demand harder to predict.",
-      "Lunch was served in the main hall.",
-      "New battery storage tariffs reward households that share stored solar power with the grid.",
-    ]],
-    ["Outlook", [
-      "Analysts expect solar power and battery storage to supply a third of city electricity by 2035.",
-      "The next survey will measure how grants change solar adoption in smaller towns.",
-    ]],
-  ];
-  let page = doc.addPage([595, 842]);
-  let y = 780;
-  const line = (text, f, size) => {
-    if (y < 60) {
-      page = doc.addPage([595, 842]);
-      y = 780;
-    }
-    page.drawText(text, { x: 50, y, size, font: f });
-    y -= size * 1.6;
-  };
-  line("City Energy Survey", bold, 24);
-  y -= 10;
-  for (const [heading, sentences] of sections) {
-    line(heading, bold, 16);
-    for (const s of sentences) {
-      // About 75 characters a line, like a real paragraph.
-      const words = s.split(" ");
-      let cur = "";
-      for (const w of words) {
-        if ((cur + " " + w).length > 75) {
-          line(cur, font, 11);
-          cur = w;
-        } else cur = cur ? cur + " " + w : w;
-      }
-      line(cur, font, 11);
-    }
-    y -= 12;
-  }
-  return doc.save();
-}
 
 await test("sentences: split, abbreviations and e-mail addresses kept whole", () => {
   const s = ex.splitSentences("Revenue grew 12 percent. Contact jane.doe@example.com for details. Is it good? Yes!", "en");
@@ -107,173 +64,94 @@ await test("markdown to plain text", () => {
   eq(ex.markdownToText("### Outlook\n\n- One point.\n- **Two** points."), "Outlook\n\n• One point.\n• Two points.", "plain");
 });
 
-await test("report.pdf: short < medium < long, all non-empty, nothing fetched", async () => {
-  const out = {};
-  for (const summaryLength of ["short", "medium", "long"]) out[summaryLength] = (await run(report, { summaryLength })).text.trim();
-  for (const [k, v] of Object.entries(out)) if (!v) throw new Error(`${k} is empty`);
-  if (!(out.short.length < out.medium.length && out.medium.length < out.long.length)) {
-    throw new Error(`lengths ${out.short.length}, ${out.medium.length}, ${out.long.length}`);
-  }
-  eq(out.short.includes("Revenue grew 12 percent this quarter, driven by renewals."), true, "the key sentence leads");
-  // The three pages repeat each other; a sentence appears once.
-  eq(out.long.split("Revenue grew 12 percent").length - 1, 1, "repeated sentence kept once");
-  eq(requests, 0, "requests");
+await test("key sentences: on-topic ones, filler left out, in document order", () => {
+  const units = [
+    ["Solar power adoption", "Solar power adoption in cities grew quickly over the last decade as panel prices fell."],
+    ["Solar power adoption", "Cheaper solar panels made rooftop solar power affordable for many households in cities."],
+    ["Solar power adoption", "The weather was pleasant on the day the survey started."],
+    ["Storage and the grid", "Battery storage lets households keep solar power for the evening, when demand peaks."],
+    ["Storage and the grid", "Lunch was served in the main hall."],
+    ["Outlook", "Analysts expect solar power and battery storage to supply a third of city electricity by 2035."],
+  ].map(([heading, text]) => ({ heading, text }));
+  const md = ex.summarize({ units, headings: ["Solar power adoption", "Storage and the grid", "Outlook"] }, "long", "en");
+  eq(/weather|Lunch/.test(md), false, "filler left out");
+  const at = units.map((u) => md.indexOf(u.text)).filter((i) => i >= 0);
+  eq(at.length >= 2 && at.every((i, k) => k === 0 || i > at[k - 1]), true, `document order: ${md}`);
 });
 
-await test("report.pdf: Markdown output, named after the file, marked as extractive", async () => {
-  const out = await run(report, {});
+await test("report.pdf: the text and table figures go to the server AI, never the file", async () => {
+  const before = sent.length;
+  const out = await run(report, { summaryLength: "medium" });
+  const body = sent[before];
+  eq(`${body.task} ${body.points} ${body.language}`, "summarize 5 en", "task, points, language");
+  eq(body.text.includes("Revenue grew 12 percent"), true, "the prose");
+  eq(body.text.includes("North: 1,200 · 1,350 · 12%"), true, "the table's figures");
+  eq(body.text.includes("%PDF"), false, "not the file");
   eq(out.name, "report-summary.md", "name");
   eq(out.blob.type.startsWith("text/markdown"), true, "type");
-  eq(out.note, "summary:extractive:tables", "note");
-  eq(/^- /m.test(out.text), true, "key points as a list");
+  eq(out.note, "summary:cloud:groq", "note");
+  eq(out.text, "- Point 1 in en\n- Point 2 in en\n- Point 3 in en\n- Point 4 in en\n- Point 5 in en\n", "points as a Markdown list");
+  eq(requests, 0, "other requests");
 });
 
-await test("report.pdf: the table's figures are in, the contact line is out", async () => {
-  const { text } = await run(report, { summaryLength: "medium" });
-  eq(/jane\.doe@example\.com|555 0134|Contact/.test(text), false, "no contact details");
-  for (const row of ["North: 1,200 · 1,350 · 12%", "South: 980 · 1,105 · 13%", "West: 2,040 · 2,210 · 8%"]) eq(text.includes(row), true, row);
-  // The three pages repeat the table; it is listed once.
-  eq(text.split("North:").length - 1, 1, "table listed once");
-  eq(ex.boilerplate("Revenue grew 12 percent this quarter."), false, "a fact is no boilerplate");
-  eq(ex.boilerplate("Call +44 20 7946 0958 or visit www.example.com."), true, "phone and link");
+await test("short, medium and long ask for 3, 5 and 8 points", async () => {
+  for (const [summaryLength, n] of [["short", 3], ["medium", 5], ["long", 8]]) {
+    await run(report, { summaryLength });
+    eq(sent.at(-1).points, n, summaryLength);
+  }
 });
 
-const art = await article();
-await test("article: picks on-topic sentences, leaves out filler, keeps document order", async () => {
-  const { text } = await run(art, { summaryLength: "medium" });
-  eq(text.includes("weather"), false, "filler about the weather");
-  eq(text.includes("Lunch"), false, "filler about lunch");
-  eq((text.match(/solar/gi) ?? []).length >= 2, true, "on topic");
-  const long = (await run(art, { summaryLength: "long" })).text;
-  const a = long.indexOf("Solar power adoption in cities");
-  const b = long.indexOf("Analysts expect");
-  eq(a >= 0 && b > a, true, "document order");
-  eq(long.includes("### Storage and the grid"), true, "long summary grouped by section");
+await test("another language: asked for by its tag; the document's own needs none", async () => {
+  await run(report, { summaryLang: "fr" });
+  eq(sent.at(-1).language, "fr", "fr");
+  await run(report, { summaryLang: "zh-tw" });
+  eq(sent.at(-1).language, "zh-Hant", "zh-tw");
+  await run(report, { summaryLang: "zh-cn" });
+  eq(sent.at(-1).language, "zh", "zh-cn");
+  await run(report, { summaryLang: "en" });
+  eq(sent.at(-1).language, "en", "same as the document");
 });
 
-await test("a PDF with no text is a no_text error", async () => {
+await test("a long document: its opening and key sentences, flagged as truncated", async () => {
+  const doc = await PDFDocument.create();
+  const { StandardFonts } = await import("pdf-lib");
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (let p = 0; p < 40; p++) {
+    const page = doc.addPage([595, 842]);
+    for (let l = 0; l < 40; l++) page.drawText(`Page ${p + 1} line ${l + 1} talks about the budget for the harbour project in detail.`, { x: 40, y: 800 - l * 19, size: 10, font });
+  }
+  const out = await run(await doc.save(), {}, "long.pdf");
+  const body = sent.at(-1);
+  eq(body.text.length <= 58000, true, `${body.text.length} characters sent`);
+  eq(body.text.includes("Key sentences from the rest:"), true, "key sentences");
+  eq(out.note, "summary:cloud:groq:truncated", "note");
+});
+
+await test("the server AI doesn't answer, or answers with no points: cloud_failed", async () => {
+  for (const r of [() => ({ status: 503, error: "no AI provider answered" }), () => "I can't help with that."]) {
+    reply = r;
+    let code = "";
+    try {
+      await run(report, { summaryLang: "de" });
+    } catch (e) {
+      code = e.code;
+    }
+    eq(code, "cloud_failed", "error code");
+  }
+});
+
+await test("a PDF with no text is a no_text error, and nothing is sent", async () => {
   const doc = await PDFDocument.create();
   doc.addPage([300, 300]);
-  const bytes = await doc.save();
+  const before = sent.length;
+  let code = "";
   try {
-    await run(bytes, {}, "blank.pdf");
+    await run(await doc.save(), {}, "blank.pdf");
   } catch (e) {
-    eq(e.code, "no_text", "code");
-    return;
+    code = e.code;
   }
-  throw new Error("no error");
-});
-
-// The browser's own models, stubbed: used only when already on the device.
-const calls = [];
-class Summarizer {
-  static state = "available";
-  static async availability(o) {
-    calls.push(["availability", o]);
-    return Summarizer.state;
-  }
-  static async create(o) {
-    calls.push(["create", o]);
-    return {
-      inputQuota: 100000,
-      measureInputUsage: async (t) => t.length,
-      summarize: async () => "- Built-in summary.",
-      destroy() {},
-    };
-  }
-}
-class Translator {
-  static state = "available";
-  static async availability(o) {
-    calls.push(["tavailability", o]);
-    return Translator.state;
-  }
-  static async create(o) {
-    calls.push(["tcreate", o]);
-    return { translate: async (t) => `[${o.targetLanguage}] ${t}`, destroy() {} };
-  }
-}
-
-await test("built-in Summarizer is used when it is available", async () => {
-  globalThis.Summarizer = Summarizer;
-  calls.length = 0;
-  const out = await run(report, { summaryLength: "short" });
-  eq(out.note, "summary:builtin:tables", "note");
-  // Its key points, then the table's figures.
-  eq(out.text.trim().split("\n\n")[0], "- Built-in summary.", "text");
-  const created = calls.find((c) => c[0] === "create")?.[1];
-  eq(created?.length, "short", "length passed");
-  eq(created?.type, "key-points", "type");
-});
-
-await test("built-in Summarizer that would need a download is left alone", async () => {
-  for (const state of ["downloadable", "downloading", "unavailable"]) {
-    Summarizer.state = state;
-    calls.length = 0;
-    const out = await run(report, {});
-    eq(out.note, "summary:extractive:tables", `note when ${state}`);
-    eq(calls.some((c) => c[0] === "create"), false, `create called when ${state}`);
-  }
-  Summarizer.state = "available";
-});
-
-await test("a broken built-in Summarizer falls back to the extractive summary", async () => {
-  const create = Summarizer.create;
-  Summarizer.create = async () => {
-    throw new Error("NotAllowedError");
-  };
-  const out = await run(report, {});
-  Summarizer.create = create;
-  eq(out.note, "summary:extractive:tables", "note");
-  eq(out.text.includes("Revenue grew"), true, "text");
-});
-
-await test("another language: translated line by line by the built-in Translator", async () => {
-  delete globalThis.Summarizer;
-  globalThis.Translator = Translator;
-  calls.length = 0;
-  const out = await run(report, { summaryLang: "es" });
-  eq(out.note, "summary:extractive:tables", "note");
-  const first = out.text.split("\n").find((l) => l.startsWith("- "));
-  eq(first?.startsWith("- [es] "), true, "list marker kept, text translated");
-  const created = calls.find((c) => c[0] === "tcreate")?.[1];
-  eq(created?.sourceLanguage, "en", "source");
-  eq(created?.targetLanguage, "es", "target");
-});
-
-await test("Chinese locales map to the Translator's language tags", async () => {
-  calls.length = 0;
-  await run(report, { summaryLang: "zh-tw" });
-  eq(calls.find((c) => c[0] === "tcreate")?.[1].targetLanguage, "zh-Hant", "zh-tw");
-  calls.length = 0;
-  await run(report, { summaryLang: "zh-cn" });
-  eq(calls.find((c) => c[0] === "tcreate")?.[1].targetLanguage, "zh", "zh-cn");
-});
-
-await test("another language without a Translator on the device: original language, flagged", async () => {
-  for (const state of ["downloadable", null]) {
-    if (state) {
-      Translator.state = state;
-      globalThis.Translator = Translator;
-    } else delete globalThis.Translator;
-    calls.length = 0;
-    const out = await run(report, { summaryLang: "fr" });
-    eq(out.note, "summary:extractive:tables:noLang", `note (${state ?? "no API"})`);
-    eq(out.text.includes("Revenue grew"), true, "original text");
-    eq(calls.some((c) => c[0] === "tcreate"), false, "create called");
-  }
-  delete globalThis.Translator;
-});
-
-await test("the document's own language needs no translation", async () => {
-  globalThis.Translator = Translator;
-  Translator.state = "available";
-  calls.length = 0;
-  const out = await run(report, { summaryLang: "en" });
-  eq(out.note, "summary:extractive:tables", "note");
-  eq(calls.some((c) => c[0] === "tcreate"), false, "translator created");
-  delete globalThis.Translator;
-  eq(requests, 0, "requests");
+  eq(code, "no_text", "code");
+  eq(sent.length, before, "nothing sent");
 });
 
 console.log(results.failed ? `\n${results.failed} failed` : "\nall passed");

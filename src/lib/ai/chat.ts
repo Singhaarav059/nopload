@@ -2,13 +2,10 @@
 // auto-OCR of pages that are pictures of text), tidied and cut into chunks
 // that keep each row whole (./chunk.ts), and indexed (./retrieve.ts). A
 // question finds its chunks (many more, across the whole document, when it
-// asks for the biggest, a total or a list); then a language model writes
-// the answer from them, citing pages (./cite.ts):
-//  - on this device (./engine.ts): nothing leaves it, or
-//  - in the cloud (./cloud.ts): only the question, the passages found for
-//    it and the earlier turns are sent, never the file.
-// The passages themselves are never the answer: without a model, the chat
-// asks the visitor to turn one on (src/components/workspace/ChatView.tsx).
+// asks for the biggest, a total or a list); then the server AI (./cloud.ts)
+// writes the answer from them, citing pages (./cite.ts). Only the question,
+// the passages found for it and the earlier turns are sent, never the file.
+// The passages themselves are never the answer.
 
 import { closePdf, openPdf, type Progress } from "../pdf/common";
 import { documentLayout, type PageLayout } from "../pdf/layout";
@@ -78,14 +75,10 @@ export async function readDocument(file: File, o: { ocr?: string; ocrLang?: stri
   return { pages, note };
 }
 
-// Embeds texts with the light model: one unit-length vector each.
-export type Embed = (texts: string[]) => Promise<number[][]>;
+export type DocIndex = { pages: PageText[]; chunks: Chunk[] };
 
-export type DocIndex = { pages: PageText[]; chunks: Chunk[]; vectors?: number[][] };
-
-export async function buildIndex(pages: PageText[], embed?: Embed): Promise<DocIndex> {
-  const chunks = chunkPages(pages);
-  return { pages, chunks, vectors: embed && chunks.length ? await embed(chunks.map((c) => c.text)) : undefined };
+export function buildIndex(pages: PageText[]): DocIndex {
+  return { pages, chunks: chunkPages(pages) };
 }
 
 // Has an amount or a number worth comparing in it.
@@ -96,10 +89,9 @@ const NUMBERED = /\d/;
 // at least `wide` of the best chunks, then, while `budget` characters allow,
 // the rest of the chunks with numbers in them, so a maximum or a sum is
 // taken over all of them and not just the few that sound most like the question.
-async function find(index: DocIndex, question: string, o: { k: number; wide: number; budget: number; embed?: Embed }): Promise<Hit[]> {
-  const vectors = index.vectors && o.embed ? { query: (await o.embed([question]))[0], chunks: index.vectors } : undefined;
+function find(index: DocIndex, question: string, o: { k: number; wide: number; budget: number }): Hit[] {
   const wide = isAggregate(question);
-  const hits = search(index.chunks, question, { k: wide ? Math.max(o.k, o.wide) : o.k, vectors });
+  const hits = search(index.chunks, question, { k: wide ? Math.max(o.k, o.wide) : o.k });
   if (wide) {
     let used = hits.reduce((n, h) => n + h.chunk.text.length, 0);
     const taken = new Set(hits.map((h) => h.chunk.id));
@@ -123,44 +115,7 @@ function excerpts(index: DocIndex, question: string, hits: Hit[]) {
   return { sources, context: note + context };
 }
 
-export type Message = { role: "system" | "user" | "assistant"; content: string };
-// Streams the model's reply; `onText` gets the text so far.
-export type Generate = (messages: Message[], o: { maxNewTokens: number; onText?: (text: string) => void; signal?: AbortSignal }) => Promise<string>;
-
-// The instructions. English: the small models follow English instructions
-// best, and are told to answer in the question's language.
-export const SYSTEM = [
-  "You answer questions about a document using only the excerpts from it below. Each excerpt starts with its page, like (p. 5).",
-  "Answer in one to three plain sentences. Never copy the document's lines; give only the names and amounts that answer the question.",
-  "End each sentence with its page, like (p. 5).",
-  "For the biggest, smallest, a total or a list, check every amount in the excerpts. In bank statements, money going out (debits, payments) is not money coming in (credits); say which you mean.",
-  "If the answer or a name asked about isn't in the excerpts, say \"I couldn't find any mention of X in the document.\"",
-  "Answer in the language of the question.",
-].join("\n");
-
-// With a model: the answer written from the best chunks, with its citations
-// as pages. Earlier turns (questions and answers, without their sources)
-// come along so follow-up questions make sense.
-export async function askModel(
-  index: DocIndex,
-  question: string,
-  o: { generate: Generate; embed?: Embed; history?: Message[]; onPartial?: (a: Answer) => void; signal?: AbortSignal; k?: number },
-): Promise<Answer> {
-  // A small model reads 4 chunks, or 12 for a question across the document.
-  const hits = await find(index, question, { k: o.k ?? 4, wide: 12, budget: 7_000, embed: o.embed });
-  const { sources, context } = excerpts(index, question, hits);
-  const messages: Message[] = [
-    { role: "system", content: SYSTEM },
-    ...(o.history ?? []).slice(-4),
-    { role: "user", content: `Excerpts from the document:\n${context}\n\nQuestion: ${question}` },
-  ];
-  const text = await o.generate(messages, {
-    maxNewTokens: 320,
-    signal: o.signal,
-    onText: o.onPartial && ((t) => o.onPartial!(citations(t, sources))),
-  });
-  return cited(text, sources);
-}
+export type Message = { role: "user" | "assistant"; content: string };
 
 function cited(text: string, sources: ReturnType<typeof numberSources>["sources"]): Answer {
   const answer = citations(text, sources);
@@ -172,17 +127,18 @@ function cited(text: string, sources: ReturnType<typeof numberSources>["sources"
   return answer;
 }
 
-// With the cloud AI: the same, written by a large model (functions/api/ai.ts
-// says which) from more passages than a small model can read. Throws
-// CloudUnavailable when it can't.
+// The answer, written by the server AI (functions/api/ai.ts says which model)
+// from the best chunks, with its citations as pages. Earlier turns
+// (questions and answers, without their sources) come along so follow-up
+// questions make sense. Throws CloudUnavailable when it can't answer.
 export async function askCloud(
   index: DocIndex,
   question: string,
-  o: { embed?: Embed; history?: Message[]; onPartial?: (a: Answer) => void; signal?: AbortSignal },
+  o: { history?: Message[]; onPartial?: (a: Answer) => void; signal?: AbortSignal },
 ): Promise<Answer & { provider: Provider }> {
   // 10 chunks, or for a question across the document 15 and then every
   // chunk with numbers that fits (the endpoint takes 24,000 characters).
-  const hits = await find(index, question, { k: 10, wide: 15, budget: 21_000, embed: o.embed });
+  const hits = find(index, question, { k: 10, wide: 15, budget: 21_000 });
   const { sources, context } = excerpts(index, question, hits);
   const { text, provider } = await cloudText(
     { task: "chat", sources: context, question, history: (o.history ?? []).slice(-4) },

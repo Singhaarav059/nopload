@@ -13,7 +13,7 @@ import { StepTrail } from "./StepTrail";
 import { Processing } from "./Processing";
 import { useSplitHints } from "./splitHints";
 import type { PageItem } from "./PageBoard";
-import { AiModels, prepareAi } from "./AiModels";
+import { AiNotice } from "./AiNotice";
 import { ErrorBox, useProblem, type Problem } from "./ErrorBox";
 import { peekHandoff, restoreHandoff } from "@/lib/handoff";
 import { forgetSession, hasUnsavedEdits, resumeSession, setSessionSource, type EditorSnapshot } from "@/lib/session";
@@ -220,10 +220,9 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
       STAMPS.includes(tool.id) ? load.StampPreview() : null,
     ]);
     const code = () => Promise.all([engine(), views()]);
-    const ai = !!tool.ai && tool.mode !== "chat";
-    const timer = setTimeout(() => void import("@/lib/offline").then((m) => m.warm(tool.id, ai ? () => Promise.all([code(), prepareAi()]) : code)).catch(() => {}), 1500);
+    const timer = setTimeout(() => void import("@/lib/offline").then((m) => m.warm(tool.id, code)).catch(() => {}), 1500);
     return () => clearTimeout(timer);
-  }, [tool.id, tool.mode, tool.ai]);
+  }, [tool.id, tool.mode]);
 
   // PDF/A: resolution and text layer only matter when some page has to become an image.
   const pdfaLevel = tool.id === "pdfToPdfa" ? String(options.pdfaLevel) : null;
@@ -612,7 +611,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         {errorBox}
         <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
         <div className="mt-6">
-          <ChatView key={items[0].id} file={files[0]} models={tool.ai ?? []} options={options} defs={tool.options}
+          <ChatView key={items[0].id} file={files[0]} options={options} defs={tool.options}
             onOption={(k, v) => setOptions((o) => ({ ...o, [k]: v }))} onError={(e) => void drop(items[0].id, files[0], e)} />
         </div>
       </div>
@@ -702,7 +701,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         <aside className="card h-max p-5 lg:sticky lg:top-[88px]">
           <p className="mb-5 text-[14px] font-medium">{t("ws.options")}</p>
           <Options restore defs={tool.options} values={options} notes={notes} onChange={(k, v) => setOptions((o) => ({ ...o, [k]: v }))} />
-          {tool.ai && <AiModels task={tool.id} models={tool.ai} value={String(options.aiModel ?? "")} onChange={(v) => setOptions((o) => ({ ...o, aiModel: v }))} />}
+          {tool.ai && <AiNotice task={tool.id} />}
           <button className="btn btn-primary btn-lg mt-6 hidden w-full lg:inline-flex" onClick={start}>
             {t(`tool.${tool.id}.action`)} <ArrowRight size={18} className="rtl:rotate-180" />
           </button>
