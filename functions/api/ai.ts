@@ -755,7 +755,12 @@ async function check(env: Env) {
   if (lastCheck && Date.now() - lastCheck.at < 10 * 60_000) return lastCheck.report;
   const free = pools(env);
   const job: Job = { system: "Reply with the single word: ok", messages: [{ role: "user", content: "Say ok." }], maxTokens: 64 };
-  const all = slots(env);
+  // Free tiers that are off because they may train are tried too: the check
+  // sends them only "Say ok.", never anyone's text.
+  const off = Object.values(free)
+    .filter((p) => p.keys.length && p.trains && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
+    .flatMap((p) => p.models.flatMap((model) => p.keys.map((key) => ({ provider: p.name, id: `${p.name}#${fingerprint(key)}#${model}`, run: (j: Job, signal: AbortSignal) => withoutThinking(openAi(p, key, model, j, signal)) }))));
+  const all = [...slots(env), ...off];
   const results = await Promise.all(
     all.map(async (s) => {
       const [, fp, model] = s.id.split("#");
@@ -773,7 +778,7 @@ async function check(env: Env) {
   );
   const ignored = Object.values(free)
     .filter((p) => p.keys.length && p.trains && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
-    .map((p) => `${p.name}: keys set but off (its free tier may train on what it's sent)`);
+    .map((p) => `${p.name}: keys set but off for visitors (its free tier may train on what it's sent); tested above with "Say ok." only`);
   const report = { order: providers(env), AI_ORDER: env.AI_ORDER ?? null, working: results.filter((r) => r.ok).length, of: results.length, results, ignored };
   lastCheck = { at: Date.now(), report };
   return report;
