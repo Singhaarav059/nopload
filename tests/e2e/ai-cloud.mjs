@@ -73,7 +73,7 @@ await suite(async ({ browser, test }) => {
     for (const key of ["ai.server.sends.chat", "ai.server.who"]) if (!text.includes(t[key])) throw new Error(`no ${key}: ${text}`);
     const link = await panel.locator("a").getAttribute("href");
     if (link !== "/en/privacy#ai") throw new Error(`links ${link}`);
-    if (await page.locator("main [role=radiogroup]").count()) throw new Error("offers a choice of where AI runs");
+    if (await page.locator("main [data-ai-choice], main [data-ai-models]").count()) throw new Error("offers a choice of where AI runs");
     return "notice shown, no choice";
   });
 
@@ -181,6 +181,8 @@ await suite(async ({ browser, test }) => {
     mode = { status: 503 };
     await open(page, "/en/summarize-pdf");
     await pick(page, ["report.pdf"]);
+    // A length not asked for before, so no answer kept on this device stands in.
+    await page.getByRole("radio", { name: new RegExp(`^${t["choice.summaryLength.long"].split(":")[0]}`) }).click();
     await page.getByRole("button", { name: t["tool.summarize.action"], exact: true }).click();
     await page.getByText(t["err.cloudFailed"]).first().waitFor({ timeout: 60000 });
     if (await page.locator("[data-summary]").count()) throw new Error("showed a summary");
