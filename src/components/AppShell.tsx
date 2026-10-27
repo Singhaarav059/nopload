@@ -59,13 +59,23 @@ export function AppShell() {
     const id = setTimeout(() => setWarm(true), 1500);
     return () => clearTimeout(id);
   }, [app]);
+  // A page can open a sheet: the home's "Tools" tile (HomeBoard.tsx).
+  useEffect(() => {
+    const show = (e: Event) => {
+      const kind = (e as CustomEvent).detail;
+      if (kind === "tools" || kind === "settings") setSheet(kind);
+    };
+    window.addEventListener("nopload:sheet", show);
+    return () => window.removeEventListener("nopload:sheet", show);
+  }, []);
   const pathname = usePathname();
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
     setLastPath(pathname);
     setSheet(null);
   }
-useRipple(os === "android");
+  useRipple(os === "android");
+  useHeaderOnScroll(app && form === "phone");
   // Until the app has started (and in the page as built), the tab bar is
   // there anyway, hidden unless the page turns out to be the app on a phone
   // (app.css): the app's first frame already has it, instead of it arriving.
@@ -99,8 +109,11 @@ function TabBar({ os, open, sheet, pre }: { os: Os | null; open: (s: Sheet) => v
   const { t } = useI18n();
   const tabs = useTabs();
   const material = os === "android";
+  // The highlight slides to the chosen tab (app.css, phones).
+  const at = tabs.findIndex((tab) => (sheet ? sheet === tab.sheet : !!tab.current));
   return (
     <nav aria-label={t("app.nav")} data-tabbar={pre ? "pre" : material ? "material" : "ios"} className="app-tabbar">
+      <span aria-hidden className="app-tab-slide" data-none={at < 0 || undefined} style={{ "--at": Math.max(0, at) } as React.CSSProperties} />
       {tabs.map((tab) => {
         // A sheet tab is lit while its sheet is open, or while on one of its pages (Tools on a tool page).
         const on = sheet ? sheet === tab.sheet : !!tab.current;
@@ -122,6 +135,37 @@ function TabBar({ os, open, sheet, pre }: { os: Os | null; open: (s: Sheet) => v
       })}
     </nav>
   );
+}
+
+// Phones: the header is clear over the top of the page and glass once it
+// scrolls (data-scrolled), and goes out of sight while scrolling down,
+// back as soon as the page scrolls up (data-hide-header), as apps do.
+function useHeaderOnScroll(on: boolean) {
+  useEffect(() => {
+    if (!on) return;
+    const root = document.documentElement;
+    let last = scrollY;
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const y = scrollY;
+      root.toggleAttribute("data-scrolled", y > 8);
+      if (y < 80 || y < last - 6) root.removeAttribute("data-hide-header");
+      else if (y > last + 6) root.setAttribute("data-hide-header", "");
+      if (Math.abs(y - last) > 6) last = y;
+    };
+    const onScroll = () => {
+      if (!ticking) requestAnimationFrame(update);
+      ticking = true;
+    };
+    update();
+    addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      removeEventListener("scroll", onScroll);
+      root.removeAttribute("data-scrolled");
+      root.removeAttribute("data-hide-header");
+    };
+  }, [on]);
 }
 
 // Android's ripple: where the finger lands on a control, for the CSS in app.css.

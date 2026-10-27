@@ -11,6 +11,8 @@ import { ReportView } from "./ReportView";
 import { handOff } from "@/lib/handoff";
 import { humanSize, type Output } from "@/lib/pdf/common";
 import { markdownToText } from "@/lib/ai/extractive";
+import { blocksOf } from "@/lib/ai/format";
+import { Blocks } from "./AnswerBlocks";
 import { TOOLS, type Tool, type ToolId } from "@/lib/tools";
 import { reducedMotion } from "@/lib/paper";
 import { gsap } from "gsap";
@@ -295,11 +297,12 @@ function Summary({ output, named }: { output: Output; named: boolean }) {
     };
   }, [output]);
   const text = useMemo(() => markdownToText(md), [md]);
+  const blocks = useMemo(() => blocksOf(md, []), [md]);
   const base = output.name.replace(/\.md$/i, "");
   return (
     <section className="mx-auto mt-6 max-w-[640px] rounded-xl border border-line bg-surface text-start">
       {named && <h3 className="truncate border-b border-line px-4 py-2.5 text-[14px] font-medium">{base}</h3>}
-      <div data-summary className="max-h-[420px] overflow-auto whitespace-pre-wrap px-4 py-3 text-[15px] leading-relaxed">{text}</div>
+      <div data-summary className="max-h-[60dvh] overflow-auto overscroll-contain px-5 py-4 text-[15px] leading-relaxed [overflow-wrap:anywhere]"><Blocks blocks={blocks} /></div>
       <div className="flex flex-wrap gap-2 border-t border-line px-4 py-2.5">
         <button className="btn btn-quiet" onClick={async () => {
           try {

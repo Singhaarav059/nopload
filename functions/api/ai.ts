@@ -325,8 +325,10 @@ const languageName = (tag: string) => {
 export const CHAT_SYSTEM = [
   "You answer questions about one document, using only the excerpts from it that follow. Each excerpt starts with its page number, like \"p. 5\".",
   "Rules:",
-  "- Answer concisely, in plain natural sentences. No headings, tables or lists of raw lines; never paste the document's lines back. Quote a name, ID, merchant, UPI ID or amount only when it is part of the answer.",
-  "- End each sentence that states a fact with the page it comes from, like (p. 5), or (p. 2, p. 7) for several.",
+  "- Answer exactly what was asked, and make it easy to read. Start with a direct answer in one or two short sentences. When the answer has several items, figures, steps or points, follow with a short Markdown list (\"- \" or \"1. \"), one item per line. For figures compared across several rows (like a value for each state or year), use a small Markdown table with a header row, at most 5 columns and 12 rows, picking the rows that matter. Put the key figure or term in **bold**. For a long answer with distinct parts, a \"### \" heading may open each part. Keep it short: no filler, no repeating the question.",
+  "- Rewrite in your own words; never paste the document's lines, URLs, footnotes or raw table rows back. Quote a name, ID, merchant, UPI ID or amount only when it is part of the answer.",
+  "- When asked what the document is about or for a summary, say what kind of document it is, who it is from and its subject, then its main points; never answer with a disclaimer, a footnote or a list of sources.",
+  "- End each sentence, list item or table row that states a fact with the page it comes from, like (p. 5), or (p. 2, p. 7) for several; in a table, in a last \"Page\" column.",
   "- For the biggest, largest, highest, smallest, lowest, a total, a count or a list, go through every excerpt and every amount in it before answering. Give the amount, who or what it was for, and its date when shown.",
   "- In bank, card or UPI statements, keep money going out (debits, payments, withdrawals, transfers sent) apart from money coming in (credits, deposits, refunds, transfers received), and say which you mean. \"Payment\" means money going out unless the question says otherwise.",
   "- If the excerpts don't answer the question, or a name or word it asks about isn't in them, say \"I couldn't find any mention of X in the document.\" with X being what was asked about. Never guess or use outside knowledge.",
@@ -348,7 +350,7 @@ export function jobOf(body: Record<string, unknown>): Job | string {
     return {
       system: CHAT_SYSTEM,
       messages: [...history, { role: "user", content: `Excerpts from the document:\n${sources}\n\nQuestion: ${question}` }],
-      maxTokens: 900,
+      maxTokens: 1200,
       chat: true,
     };
   }

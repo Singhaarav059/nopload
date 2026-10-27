@@ -22,6 +22,8 @@
 }
 :root[data-app][data-nav="tabs"] { --tabbar-h: 54px; }
 :root[data-app][data-nav="tabs"][data-os="android"] { --tabbar-h: 80px; }
+/* Phones: the tab bar floats above the page (see "Phones: a floating tab bar" below). */
+:root[data-app][data-nav="tabs"][data-form="phone"] { --tabbar-h: 78px; }
 :root[data-app][data-nav="rail"] { --side-w: 80px; }
 :root[data-app][data-nav="sidebar"] { --side-w: 264px; }
 :root[data-app][data-nav="fluent"] { --side-w: 280px; }
@@ -389,7 +391,6 @@
    tools. The website's introduction stays on the website. */
 :root[data-app] [data-app-hero] { padding-top: 1.25rem; padding-bottom: 0; }
 :root[data-app] [data-app-title] { margin-top: 0; font-size: clamp(1.9rem, 5vw, 2.6rem); max-width: 22ch; }
-:root[data-app] [data-app-tight] { margin-top: 2.5rem; }
 
 /* ---------- Gestures ---------- */
 
@@ -759,3 +760,96 @@ html[data-app] .install-pill { display: none; }
   .vw-btn, .vw-count, .vw-zoom { min-height: 44px; }
   .vw-btn { min-width: 44px; }
 }
+
+/* ---------- Only in the app ---------- */
+[data-app-only] { display: none; }
+:root[data-app] [data-app-only] { display: revert; }
+
+/* ---------- The app's home: one screen, not a long page ---------- */
+:root[data-app] .board { margin-bottom: 8px; }
+:root[data-app] .board-read { min-height: 168px; }
+:root[data-app] .board-quick ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.board-all {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px;
+  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line);
+}
+/* The drop area as a row: the app opens files from its picker and Open with. */
+:root[data-app] .dropzone { border-width: 1px; border-style: solid; border-radius: 22px; padding: 12px 14px; gap: 12px; }
+:root[data-app] .dropzone > div:first-child { width: 44px; }
+:root[data-app][data-form="phone"] .dropzone p + p { display: none; }
+
+/* ---------- Phones: a floating tab bar ---------- */
+/* A glass bar off the edges, rounded, with the chosen tab's highlight
+   sliding to it (--at, set by AppShell.tsx) and its icon popping. */
+:root[data-app][data-form="phone"] .app-tabbar {
+  inset-inline: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  height: calc(var(--tabbar-h) - 10px);
+  padding: 0 6px;
+  border-radius: 26px;
+  border: 1px solid color-mix(in oklab, var(--line-strong) 70%, transparent);
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.45), 0 2px 8px -4px rgb(0 0 0 / 0.2);
+  animation: app-bar-in 520ms var(--ease-spring) both;
+}
+:root[data-app][data-form="phone"] .app-tabbar .app-tab { position: relative; z-index: 1; justify-content: center; padding-top: 0; gap: 3px; }
+:root[data-app][data-form="phone"] .app-tabbar .app-tab-icon { width: 52px; height: 30px; border-radius: 15px; background: none !important; animation: none; }
+:root[data-app][data-form="phone"] .app-tabbar .app-tab-label { font-size: 11px; font-weight: 600; }
+:root[data-app][data-form="phone"] .app-tabbar .app-tab[aria-current] { color: var(--ink); }
+:root[data-app][data-form="phone"] .app-tabbar .app-tab[aria-current] .app-tab-icon { color: var(--brand); animation: app-tab-pop 420ms var(--ease-spring); }
+.app-tab-slide { display: none; }
+:root[data-app][data-form="phone"] .app-tab-slide {
+  display: block;
+  position: absolute;
+  top: 50%;
+  inset-inline-start: calc(6px + (100% - 12px) / 5 * (var(--at) + 0.5));
+  width: 60px;
+  height: 52px;
+  margin-top: -26px;
+  translate: -50% 0;
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--brand) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand) 22%, transparent);
+  transition: inset-inline-start 460ms var(--ease-spring), opacity 200ms;
+}
+:root[dir="rtl"][data-app][data-form="phone"] .app-tab-slide { translate: 50% 0; }
+:root[data-app][data-form="phone"] .app-tab-slide[data-none] { opacity: 0; }
+@keyframes app-tab-pop { 0% { scale: 1; } 40% { scale: 1.18; translate: 0 -2px; } 100% { scale: 1; } }
+@keyframes app-bar-in { from { translate: 0 calc(100% + 24px); opacity: 0; } }
+
+/* ---------- Phones: the header gets out of the way ---------- */
+/* Clear over the page at the top, glass with a shadow once it scrolls, and
+   out of sight while scrolling down, back as soon as it scrolls up
+   (data-scrolled, data-hide-header: AppShell.tsx). */
+:root[data-app][data-form="phone"] header[data-site-header] {
+  transition: translate 340ms var(--ease-out), background-color 240ms, box-shadow 240ms, border-color 240ms;
+  background: transparent;
+  border-bottom-color: transparent;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+:root[data-app][data-form="phone"][data-scrolled] header[data-site-header] {
+  background: color-mix(in oklab, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
+  border-bottom-color: color-mix(in oklab, var(--line) 70%, transparent);
+  box-shadow: 0 8px 24px -16px rgb(0 0 0 / 0.5);
+}
+:root[data-app][data-form="phone"][data-hide-header] header[data-site-header] { translate: 0 -100%; }
+:root[data-app][data-form="phone"] header[data-site-header] .icon-btn { border-radius: 14px; }
+:root[data-app][data-form="phone"] header[data-site-header] .icon-btn:active { scale: 0.9; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-app] :is(.app-tab-slide, header[data-site-header]) { transition: none !important; }
+  :root[data-app] .app-tab-icon { animation: none !important; }
+}
+
+/* ---------- While a page loads ---------- */
+/* A page's shape in grey, shimmering, until it's there (loading.tsx). */
+.skeleton { position: relative; overflow: hidden; border-radius: 14px; background: var(--surface-2); }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; translate: -100% 0;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--ink) 7%, transparent), transparent);
+  animation: skeleton-shine 1.3s var(--ease-in-out) infinite;
+}
+@keyframes skeleton-shine { to { translate: 100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }

@@ -75,7 +75,8 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
         <HowGuide />
       </div>
 
-      <div data-app-tight className="mt-24 sm:mt-32">
+      {/* The app has its tools in its navigation (AppShell.tsx). */}
+      <div data-web-only className="mt-24 sm:mt-32">
         <ToolGrid />
       </div>
 

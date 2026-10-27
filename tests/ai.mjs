@@ -13,7 +13,8 @@ import { load, openPdf, check, eq, root, vendorDir } from "./lib/load.mjs";
 
 const { chunkPages } = await load("../ai/chunk");
 const { search, fuse, tokens } = await load("../ai/retrieve");
-const { exactTerms, missingTerms, isAggregate } = await load("../ai/retrieve");
+const { exactTerms, missingTerms, isAggregate, isOverview } = await load("../ai/retrieve");
+const { blocksOf, emphasis } = await load("../ai/format");
 const { cleanText, unitsOf } = await load("../ai/chunk");
 const { numberSources, citations, attribute } = await load("../ai/cite");
 const { readPages, buildIndex, askCloud } = await load("../ai/chat");
@@ -295,6 +296,22 @@ await test("translate when the server AI doesn't answer: a clear error, not Engl
     code = e.code;
   }
   eq(code, "cloud_failed", "error code");
+});
+
+await test("an answer's lists, table, heading and bold are laid out, with their citations", () => {
+  const sources = [{ n: 1, page: 3, text: "" }, { n: 2, page: 9, text: "" }];
+  const b = blocksOf("Health spending rose (p. 3).\n\n### By state\n- **Kerala** leads (p. 9)\n- Bihar trails (p. 3)\n\n| State | Share | Page |\n|---|---|---|\n| Kerala | 69% | p. 9 |\n| Bihar | 31% | p. 3 |\n\n1. First\n2. Second", sources);
+  eq(b.map((x) => x.kind).join(","), "p,h,ul,table,ol", "blocks");
+  eq(JSON.stringify(b[0].parts), JSON.stringify([{ text: "Health spending rose", pages: [3] }, { text: ".", pages: [] }]), "paragraph citation");
+  eq(b[2].items.map((it) => it[0].pages).join("|"), "9|3", "list citations");
+  eq(b[3].rows.length, 2, "table rows");
+  eq(JSON.stringify(b[3].rows[0][2]), JSON.stringify([{ text: "", pages: [9] }]), "a page column becomes a citation");
+  eq(JSON.stringify(emphasis("a **b** c")), JSON.stringify([{ text: "a " }, { text: "b", bold: true }, { text: " c" }]), "bold");
+});
+
+await test("overview questions read the whole document, other questions don't", () => {
+  for (const q of ["What is this document about?", "what is this about", "Summarise it", "key points?", "What are the main figures in it?".replace("main figures", "main points")]) if (!isOverview(q)) throw new Error(`not an overview: ${q}`);
+  for (const q of ["what does the pdf say about rent", "show all the big statistics", "what is the total", "who is it addressed to"]) if (isOverview(q)) throw new Error(`an overview: ${q}`);
 });
 
 console.log(results.failed ? `\n${results.failed} failed` : "\nall passed");

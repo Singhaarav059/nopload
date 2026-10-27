@@ -51,7 +51,7 @@ export function HeroDrop() {
           <span data-cat="edit" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-(--tint) text-(--tint-ink)">
             <FileText size={20} strokeWidth={1.75} aria-hidden />
           </span>
-          <p className="min-w-0 flex-1 text-pretty text-[15px] font-medium leading-snug">
+          <p className="line-clamp-3 min-w-0 flex-1 text-pretty text-[15px] font-medium leading-snug [overflow-wrap:anywhere]">
             {t("handoff.pick", { name: files.length > 1 ? `${files[0].name} +${files.length - 1}` : files[0].name })}
           </p>
           <button type="button" className="icon-btn shrink-0" aria-label={t("res.startOver")} onClick={() => setFiles(null)}>

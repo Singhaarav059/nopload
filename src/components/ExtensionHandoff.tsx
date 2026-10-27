@@ -18,7 +18,7 @@ export function ExtensionHandoff() {
   return (
     <div className="mx-auto max-w-[1240px] px-4 pt-4 sm:px-6">
       <div role="status" data-extension-file className="flex items-center gap-3 rounded-xl border border-line bg-surface py-2.5 pe-2 ps-4 text-[15px]">
-        <span className="min-w-0 flex-1 break-words">{t("handoff.pick", { name: got.name })}</span>
+        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{t("handoff.pick", { name: got.name })}</span>
         <button
           type="button"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:text-ink"

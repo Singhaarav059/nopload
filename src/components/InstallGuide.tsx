@@ -27,7 +27,7 @@ if (typeof window !== "undefined") {
 const noop = () => () => {};
 // Opened as the app (not the ?app=1 preview): already installed.
 const isInstalled = () =>
-  matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || (navigator as { standalone?: boolean }).standalone === true;
+  /NoploadApp\//.test(navigator.userAgent) || matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || (navigator as { standalone?: boolean }).standalone === true;
 const subscribe = (f: () => void) => {
   listeners.add(f);
   return () => listeners.delete(f);
