@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { FileText, Plus, X } from "lucide-react";
 import { useI18n } from "./I18n";
 import { ToolIcon } from "./ToolIcon";
 import { handOffTo, toolsFor } from "@/lib/handoff";
@@ -68,17 +68,20 @@ export function OpenFab() {
           <div ref={sheet} role="dialog" aria-modal aria-label={t("app.pickTool")} data-fab-sheet className="app-sheet">
             <span aria-hidden className="app-sheet-handle" />
             <div className="flex items-start gap-3 px-5 pb-3">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-[1.15rem] font-semibold tracking-[-0.02em]">{t("app.pickTool")}</h2>
-                <p className="mt-0.5 truncate text-[13.5px] text-muted">{files.length > 1 ? `${files[0].name} +${files.length - 1}` : files[0].name}</p>
-              </div>
+              <h2 className="min-w-0 flex-1 text-[1.15rem] font-semibold tracking-[-0.02em]">{t("app.pickTool")}</h2>
               <button type="button" className="icon-btn" aria-label={t("nav.close")} onClick={close}><X size={20} /></button>
             </div>
             <div className="app-sheet-body px-4 pb-6">
+              {/* The file, and a line from it down to what it can become. */}
+              <p className="file-chip glass blur-in">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-(--brand) text-[#000]"><FileText size={16} /></span>
+                <span className="truncate text-[14px] font-medium">{files.length > 1 ? `${files[0].name} +${files.length - 1}` : files[0].name}</span>
+              </p>
+              <span aria-hidden className="link-line" />
               {tools.length ? (
                 <ul className="pick-grid">
-                  {tools.map((tool) => (
-                    <li key={tool.id}>
+                  {tools.map((tool, i) => (
+                    <li key={tool.id} className="blur-in" style={{ "--i": Math.min(i, 10) } as React.CSSProperties}>
                       <a href={href(`/${tool.slug}`)} className="pick-card" onClick={(e) => { e.preventDefault(); open(tool); }}>
                         <ToolIcon tool={tool} size={40} />
                         <span className="line-clamp-2 text-[14px] font-medium leading-tight">{t(`tool.${tool.id}.name`)}</span>
