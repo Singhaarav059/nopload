@@ -24,12 +24,20 @@ import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
+import android.graphics.Typeface;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
@@ -61,6 +69,11 @@ public class WebApp extends Activity {
     private WebView web;
     private Native features;
     private View splash;
+    private ObjectAnimator pulse;
+    private FrameLayout root;
+    private View offline;
+    private int bg;
+    private boolean dark;
     private ValueCallback<Uri[]> picking;
     private PermissionRequest asking;
     // Files Android handed over, given to the page once, and whether they
@@ -85,12 +98,12 @@ public class WebApp extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        int bg = getResources().getColor(dark ? R.color.ink : R.color.paper, getTheme());
+        dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        bg = getResources().getColor(dark ? R.color.ink : R.color.paper, getTheme());
         getWindow().setStatusBarColor(bg);
         getWindow().setNavigationBarColor(bg);
 
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setFitsSystemWindows(true);
         root.setBackgroundColor(bg);
         web = new WebView(this);
@@ -104,6 +117,12 @@ public class WebApp extends Activity {
         cover.addView(logo, new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
         root.addView(cover, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         splash = cover;
+        // The logo breathes while the site loads.
+        pulse = ObjectAnimator.ofPropertyValuesHolder(logo, PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 0.92f), PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 0.92f), PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.75f));
+        pulse.setDuration(900);
+        pulse.setRepeatMode(ValueAnimator.REVERSE);
+        pulse.setRepeatCount(ValueAnimator.INFINITE);
+        pulse.start();
         setContentView(root);
 
         WebSettings s = web.getSettings();
@@ -126,6 +145,14 @@ public class WebApp extends Activity {
                 if (isOurs(u)) return false;
                 openOutside(u);
                 return true;
+            }
+
+            // The site can't be reached (offline before it was ever opened, the
+            // network down): the app's own screen, with Try again, instead of
+            // the web view's error page.
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) showOffline();
             }
 
             @Override
@@ -220,8 +247,58 @@ public class WebApp extends Activity {
         }
     }
 
+    private void showOffline() {
+        if (offline != null) return;
+        if (pulse != null) pulse.cancel();
+        int pad = (int) (28 * getResources().getDisplayMetrics().density);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(pad, pad, pad, pad);
+        box.setBackgroundColor(bg);
+        box.setClickable(true);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.splash);
+        int size = (int) (96 * getResources().getDisplayMetrics().density);
+        box.addView(logo, new LinearLayout.LayoutParams(size, size));
+        int ink = getResources().getColor(dark ? R.color.paper : R.color.ink, getTheme());
+        TextView title = new TextView(this);
+        title.setText(R.string.offline_title);
+        title.setTextSize(20);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(ink);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, pad / 2, 0, pad / 4);
+        box.addView(title);
+        TextView body = new TextView(this);
+        body.setText(R.string.offline_body);
+        body.setTextSize(15);
+        body.setTextColor(ink);
+        body.setAlpha(0.72f);
+        body.setGravity(Gravity.CENTER);
+        box.addView(body);
+        Button retry = new Button(this);
+        retry.setText(R.string.offline_retry);
+        retry.setOnClickListener(v -> {
+            root.removeView(box);
+            offline = null;
+            web.reload();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = pad / 2;
+        box.addView(retry, lp);
+        root.addView(box, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        offline = box;
+        if (splash != null) {
+            root.removeView(splash);
+            splash = null;
+        }
+    }
+
     private void hideSplash() {
+        if (offline != null) return;
         if (splash == null) return;
+        if (pulse != null) pulse.cancel();
         View s = splash;
         splash = null;
         s.animate().alpha(0).setDuration(250).withEndAction(() -> ((FrameLayout) s.getParent()).removeView(s)).start();

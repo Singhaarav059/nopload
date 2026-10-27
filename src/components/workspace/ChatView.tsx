@@ -6,6 +6,7 @@ import { useI18n } from "../I18n";
 import { PdfThumb } from "../PdfThumb";
 import { AiNotice } from "./AiNotice";
 import { Options } from "./Options";
+import { Blocks, Inline } from "./AnswerBlocks";
 import type { Answer, DocIndex, Message } from "@/lib/ai/chat";
 import type { OptionDef } from "@/lib/tools";
 
@@ -72,9 +73,16 @@ export function ChatView({ file, options, defs, onOption, onError }: {
     };
   }, []);
 
+  const box = useRef<HTMLElement>(null);
+  // A new question goes to the top of the chat, its answer filling in below
+  // it; the chat itself is kept in view, its box at the bottom.
   useEffect(() => {
-    log.current?.scrollTo({ top: log.current.scrollHeight });
-  }, [turns]);
+    const el = log.current?.querySelector<HTMLElement>(`[data-turn="${turns.length - 1}"]`);
+    if (el && log.current) log.current.scrollTo({ top: el.offsetTop - 12, behavior: "smooth" });
+    const r = box.current?.getBoundingClientRect();
+    const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tabbar-h")) || 0;
+    if (turns.length && r && (r.bottom > innerHeight - bar || r.top < 0)) box.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [turns.length]);
 
   // Asks `question`, as a new turn or again in place of turn `at`.
   const ask = async (question: string, at = turns.length) => {
@@ -86,7 +94,7 @@ export function ChatView({ file, options, defs, onOption, onError }: {
     setBusy(true);
     try {
       const [c, { CloudLimited, CloudUnavailable }] = await Promise.all([import("@/lib/ai/chat"), import("@/lib/ai/cloud")]);
-      const history: Message[] = turns.slice(0, at).flatMap((x) => (x.a ? [{ role: "user" as const, content: x.q }, { role: "assistant" as const, content: x.a.parts.map((p) => p.text).join(" ") }] : []));
+      const history: Message[] = turns.slice(0, at).flatMap((x) => (x.a ? [{ role: "user" as const, content: x.q }, { role: "assistant" as const, content: x.a.text ?? x.a.parts.map((p) => p.text).join(" ") }] : []));
       try {
         const a = await c.askCloud(index, question, { history, signal: ctl.signal, onPartial: (p) => update({ a: p }) });
         update({ a });
@@ -110,21 +118,37 @@ export function ChatView({ file, options, defs, onOption, onError }: {
 
   const pages = index?.pages.length ?? 0;
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-      <section aria-label={t("chat.title")} className="card flex min-h-[420px] min-w-0 flex-col">
-        <div ref={log} className="flex-1 space-y-5 overflow-auto p-5" aria-live="polite" data-chat-log>
+    <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
+      {/* As tall as the screen, never taller: questions and answers scroll
+          inside it, the question box stays at its bottom. */}
+      <section ref={box} aria-label={t("chat.title")} data-chat
+        style={{ scrollMarginBottom: "calc(var(--tabbar-h, 0px) + 16px)" }}
+        className="card relative flex h-[calc(100dvh-var(--tabbar-h,0px)-120px)] max-h-[900px] min-h-[420px] min-w-0 flex-col overflow-hidden lg:sticky lg:top-20">
+        <div ref={log} className="relative min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5" aria-live="polite" data-chat-log>
           {!index && (
             <div className="flex items-center gap-2 text-[14px] text-muted">
               <Loader2 size={16} className="animate-spin" /> {t("chat.reading", { pct: Math.round(reading * 100) })}
             </div>
           )}
-          {index && !turns.length && here !== false && <p className="text-[15px] text-muted">{t("chat.empty", { n: pages })}</p>}
+          {index && !turns.length && here !== false && (
+            <div className="space-y-4">
+              <p className="text-[15px] text-muted">{t("chat.empty", { n: pages })}</p>
+              <div className="space-y-2">
+                <p className="text-[12px] font-medium uppercase tracking-wide text-muted">{t("chat.try")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {(["chat.q.about", "chat.q.points", "chat.q.figures"] as const).map((k) => (
+                    <button key={k} type="button" data-suggestion className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-start text-[14px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink" disabled={busy || here === null} onClick={() => void ask(t(k))}>{t(k)}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           {here === false && <p className="rounded-xl border border-line bg-surface p-4 text-[15px]" data-ai-unavailable>{t("ai.unavailable")}</p>}
           {note && <p className="text-[13px] text-muted" data-ocr-note={note}>{t(`res.${note}`)}</p>}
           {turns.map((x, i) => (
-            <div key={i} className="space-y-2">
-              <p className="ms-auto w-fit max-w-[85%] rounded-xl bg-[color-mix(in_oklab,var(--brand)_10%,var(--surface))] px-3.5 py-2 text-[15px]">{x.q}</p>
-              <div className="max-w-[92%] text-[15px] leading-relaxed" data-answer={(x.a || x.cloudDown || x.limited || x.failed) && !(busy && i === turns.length - 1) ? "done" : "pending"}>
+            <div key={i} className={`space-y-3 ${i === turns.length - 1 ? "min-h-[calc(100%-1rem)]" : ""}`} data-turn={i}>
+              <p className="ms-auto w-fit max-w-[85%] break-words rounded-2xl rounded-ee-md bg-[color-mix(in_oklab,var(--brand)_10%,var(--surface))] px-3.5 py-2 text-[15px]">{x.q}</p>
+              <div className="min-w-0 text-[15px] leading-relaxed text-ink [overflow-wrap:anywhere]" data-answer={(x.a || x.cloudDown || x.limited || x.failed) && !(busy && i === turns.length - 1) ? "done" : "pending"}>
                 {x.limited ? (
                   <div className="space-y-2" data-limited={x.limited}>
                     <p className="text-ink-2">{t(x.limited === "minute" ? "chat.limitMinute" : "chat.limitDay")}</p>
@@ -140,31 +164,18 @@ export function ChatView({ file, options, defs, onOption, onError }: {
                 ) : x.failed ? (
                   <p className="text-danger">{t("chat.failed")}</p>
                 ) : x.a && x.a.parts.length ? (
-                  <p>
-                    {x.a.parts.map((p, k) => (
-                      <span key={k}>
-                        {k > 0 && !/^[.,;:!?)]/.test(p.text) && " "}
-                        {p.text}
-                        {p.pages?.map((n) => (
-                          <button key={n} data-citation={n} onClick={() => setPage(n)} aria-label={t("chat.showPage", { n })}
-                            className="mx-0.5 rounded border border-line px-1 align-baseline text-[12px] font-medium text-ink-2 hover:border-line-strong hover:text-ink">
-                            {t("chat.pageShort", { n })}
-                          </button>
-                        ))}
-                      </span>
-                    ))}
-                  </p>
+                  x.a.blocks?.length ? <Blocks blocks={x.a.blocks} onPage={setPage} /> : <p><Inline parts={x.a.parts} onPage={setPage} /></p>
                 ) : x.a ? (
                   <p className="text-muted">{t("chat.notFound")}</p>
                 ) : (
                   <Loader2 size={16} className="animate-spin text-muted" />
                 )}
-                {x.a && x.a.parts.length > 0 && !(busy && i === turns.length - 1) ? <p className="mt-1 text-[12px] text-muted" data-answered-by="cloud">{t("chat.by.server")}</p> : null}
+                {x.a && x.a.parts.length > 0 && !(busy && i === turns.length - 1) ? <p className="mt-2 text-[12px] text-muted" data-answered-by="cloud">{t("chat.by.server")}</p> : null}
               </div>
             </div>
           ))}
         </div>
-        <form className="flex gap-2 border-t border-line p-3" onSubmit={(e) => { e.preventDefault(); const question = q.trim(); if (question && index && !busy) { setQ(""); void ask(question); } }}>
+        <form className="flex shrink-0 gap-2 border-t border-line p-3" onSubmit={(e) => { e.preventDefault(); const question = q.trim(); if (question && index && !busy) { setQ(""); void ask(question); } }}>
           <label className="sr-only" htmlFor="chat-q">{t("chat.ask")}</label>
           <input id="chat-q" className="field h-11 flex-1 text-[15px]" placeholder={t("chat.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!index || here === false} autoComplete="off" />
           {busy ? (
@@ -176,7 +187,7 @@ export function ChatView({ file, options, defs, onOption, onError }: {
           )}
         </form>
       </section>
-      <aside className="space-y-4">
+      <aside className="space-y-4 lg:sticky lg:top-20">
         <div className="card p-4" data-chat-page={page}>
           <div className="mb-3 flex items-center justify-between text-[13px] text-ink-2">
             <button className="btn btn-quiet btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label={t("chat.prevPage")}><ChevronLeft size={16} className="rtl:rotate-180" /></button>

@@ -158,7 +158,8 @@ export function Header() {
             <Search size={18} strokeWidth={1.75} />
           </button>
 
-          <ThemeMenu />
+          {/* The app has the theme in its Settings. */}
+          <span data-web-only className="contents"><ThemeMenu /></span>
 
           <button data-web-only className="icon-btn md:hidden" aria-label={t("nav.menu")} aria-haspopup="dialog" aria-expanded={menu === "mobile"} onClick={() => setMenu("mobile")}>
             <Menu size={22} />

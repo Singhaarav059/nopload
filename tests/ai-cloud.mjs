@@ -282,8 +282,8 @@ await test("fair use: 10 chat questions a minute per visitor, then 429 with the 
   eq((await post(small, pool("kI1"), { "cf-connecting-ip": "10.8.8.8" })).status, 200, "summaries aren't chat questions");
 });
 
-await test("the chat prompt asks for page citations, plain answers, money in and out, and says what's missing", async () => {
-  for (const rule of ["(p. 5)", "never paste the document's lines", "every amount", "money going out", "money coming in", "I couldn't find any mention of X in the document."])
+await test("the chat prompt asks for page citations, readable answers, money in and out, and says what's missing", async () => {
+  for (const rule of ["(p. 5)", "never paste the document's lines", "Markdown list", "Markdown table", "what the document is about", "every amount", "money going out", "money coming in", "I couldn't find any mention of X in the document."])
     if (!CHAT_SYSTEM.includes(rule)) throw new Error(`missing: ${rule}`);
 });
 
@@ -457,7 +457,7 @@ await test("AI_DAILY_CHARS caps all visitors together", async () => {
   mode = { reply: "ok", status: 200 };
   const kv = kvStore();
   const env = { ...claude, AI_LIMITS: kv, AI_DAILY_CHARS: "100000" };
-  const big = { task: "chat", sources: "s".repeat(23_000), question: "q" };
+  const big = { task: "chat", sources: "s".repeat(22_000), question: "q" };
   const statuses = [];
   // Different visitors, alternating instances: four fit in 100,000 characters.
   for (let i = 0; i < 6; i++) statuses.push((await postTo(i % 2 ? other : { onRequestPost }, big, env, { "cf-connecting-ip": `10.5.5.${i}` })).status);

@@ -8,5 +8,8 @@
     <string name="crash_share">Share</string>
     <string name="crash_open">Open</string>
     <string name="saved">%1$s saved to Downloads</string>
+    <string name="offline_title">Can\'t reach Nopload</string>
+    <string name="offline_body">Check your connection, then try again. Once it has opened, the app works offline.</string>
+    <string name="offline_retry">Try again</string>
     <string name="save_failed">The file couldn\'t be saved.</string>
 </resources>

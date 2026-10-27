@@ -128,6 +128,12 @@ const AGGREGATE =
   /\b(?:biggest|largest|highest|greatest|maximum|max|most|top|smallest|lowest|least|minimum|min|cheapest|total|sum|overall|altogether|average|mean|how much|how many|all|every|each|list|count)\b|\b(?:sab(?:se)?|kul|total)\b/i;
 export const isAggregate = (question: string) => AGGREGATE.test(question);
 
+// "What is this about?", "Summarise it", "Main points": a question about the
+// document as a whole, answered from its opening and every page.
+const OVERVIEW =
+  /\b(?:what(?:'s| is| does)? (?:this|the|it)(?: (?:document|doc|pdf|file|report|paper|book))? (?:about|cover|say)\s*\??\s*$|about what|summar(?:y|ise|ize)|overview|main (?:points?|topics?|ideas?|takeaways?)|key (?:points?|takeaways?|findings)|gist|tl;?dr|purpose of (?:this|the))|\b(?:kis bare mein|saransh)\b/i;
+export const isOverview = (question: string) => OVERVIEW.test(question);
+
 // The chunks containing the question's distinctive words letter for letter,
 // those with more of them first.
 function exact(chunks: Chunk[], terms: string[]): Hit[] {

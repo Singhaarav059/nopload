@@ -13,7 +13,8 @@ import { blocks, bodySizeOf, type Line } from "../pdf/text";
 import { chunkPages, cleanText, type Chunk, type PageText } from "./chunk";
 import { attribute, citations, numberSources, type Answer } from "./cite";
 import { cloudText, type Provider } from "./cloud";
-import { isAggregate, missingTerms, search, type Hit } from "./retrieve";
+import { blocksOf } from "./format";
+import { isAggregate, isOverview, missingTerms, search, type Hit } from "./retrieve";
 
 export type { Answer, Part } from "./cite";
 export type { PageText } from "./chunk";
@@ -90,6 +91,7 @@ const NUMBERED = /\d/;
 // the rest of the chunks with numbers in them, so a maximum or a sum is
 // taken over all of them and not just the few that sound most like the question.
 function find(index: DocIndex, question: string, o: { k: number; wide: number; budget: number }): Hit[] {
+  if (isOverview(question)) return overview(index, o.budget);
   const wide = isAggregate(question);
   const hits = search(index.chunks, question, { k: wide ? Math.max(o.k, o.wide) : o.k });
   if (wide) {
@@ -101,6 +103,34 @@ function find(index: DocIndex, question: string, o: { k: number; wide: number; b
       taken.add(chunk.id);
       used += chunk.text.length;
     }
+  }
+  return hits.sort((a, b) => a.chunk.id - b.chunk.id);
+}
+
+// "What is this about?", "Summarise it": the opening of the document (its
+// title, introduction, contents), then the first chunk of every page, then
+// the rest in turn across the pages, while `budget` characters allow.
+function overview(index: DocIndex, budget: number): Hit[] {
+  const byPage = new Map<number, Chunk[]>();
+  for (const c of index.chunks) byPage.set(c.page, [...(byPage.get(c.page) ?? []), c]);
+  const order: Chunk[] = [...(byPage.get(index.chunks[0]?.page) ?? []).slice(0, 4)];
+  for (let round = 0; order.length < index.chunks.length; round++) {
+    let any = false;
+    for (const list of byPage.values())
+      if (list[round]) {
+        any = true;
+        order.push(list[round]);
+      }
+    if (!any) break;
+  }
+  const hits: Hit[] = [];
+  const taken = new Set<number>();
+  let used = 0;
+  for (const chunk of order) {
+    if (taken.has(chunk.id) || used + chunk.text.length > budget) continue;
+    hits.push({ chunk, score: 0 });
+    taken.add(chunk.id);
+    used += chunk.text.length;
   }
   return hits.sort((a, b) => a.chunk.id - b.chunk.id);
 }
@@ -117,12 +147,15 @@ function excerpts(index: DocIndex, question: string, hits: Hit[]) {
 
 export type Message = { role: "user" | "assistant"; content: string };
 
-function cited(text: string, sources: ReturnType<typeof numberSources>["sources"]): Answer {
-  const answer = citations(text, sources);
-  // No markers: cite the sources the answer's words come from.
-  if (!answer.pages.length && answer.parts.length) {
+function cited(text: string, sources: ReturnType<typeof numberSources>["sources"], final = true): Answer {
+  const answer = { ...citations(text, sources), blocks: blocksOf(text, sources), text };
+  // No markers: cite the sources the answer's words come from, at its end.
+  if (final && !answer.pages.length && answer.parts.length) {
     const pages = attribute(text, sources);
-    if (pages.length) return { parts: [{ text: answer.parts.map((p) => p.text).join(" "), pages }], pages };
+    if (pages.length) {
+      answer.blocks.push({ kind: "p", parts: [{ text: "", pages }] });
+      return { ...answer, parts: [{ text: answer.parts.map((p) => p.text).join(" "), pages }], pages };
+    }
   }
   return answer;
 }
@@ -142,7 +175,7 @@ export async function askCloud(
   const { sources, context } = excerpts(index, question, hits);
   const { text, provider } = await cloudText(
     { task: "chat", sources: context, question, history: (o.history ?? []).slice(-4) },
-    { signal: o.signal, onText: o.onPartial && ((t) => o.onPartial!(citations(t, sources))) },
+    { signal: o.signal, onText: o.onPartial && ((t) => o.onPartial!(cited(t, sources, false))) },
   );
   return { ...cited(text, sources), provider };
 }

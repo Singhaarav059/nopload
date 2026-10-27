@@ -11,7 +11,8 @@ import { tokens, type Hit } from "./retrieve";
 export type Source = { n: number; page: number; text: string };
 // A stretch of answer text and the pages it cites.
 export type Part = { text: string; pages?: number[] };
-export type Answer = { parts: Part[]; pages: number[] };
+// blocks: the answer laid out (./format.ts); text: as the model wrote it.
+export type Answer = { parts: Part[]; pages: number[]; blocks?: import("./format").Block[]; text?: string };
 
 // The excerpts for the prompt: the chunks' pages in document order, each
 // once, with its units in page order; where chunks of a page overlap, the
@@ -43,7 +44,7 @@ export function citations(answer: string, sources: Source[]): Answer {
   const parts: Part[] = [];
   let last = 0;
   const add = (text: string, pages: number[]) => {
-    if (text) parts.push({ text, pages });
+    if (text || (!parts.length && pages.length)) parts.push({ text, pages });
     else if (parts.length) parts[parts.length - 1].pages = unique([...(parts[parts.length - 1].pages ?? []), ...pages]);
   };
   for (const g of answer.matchAll(GROUP)) {
