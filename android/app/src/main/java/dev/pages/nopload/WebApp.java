@@ -45,12 +45,12 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-// The site in the app's own web view, used when Chrome can't show it full
-// screen (Launcher.java): no browser bar, and the launch screen stays until
-// the first page has drawn. What Chrome would do for the site, done here:
-// picking files, saving results to Downloads, the camera for the scanner,
-// links to other sites in the browser, and the files Android opens or
-// shares with Nopload, handed to /en/open through window.NoploadApp
+// The app: the site in its own web view, so there is never a browser bar,
+// with the launch screen kept until the first page has drawn. What a browser
+// would do for the site, done here: picking files, saving results to
+// Downloads, the camera for the scanner, links to other sites in the browser,
+// Read aloud's voices and printing (Native.java), and the files Android opens
+// or shares with Nopload, handed to /en/open through window.NoploadApp
 // (src/components/OpenFiles.tsx).
 public class WebApp extends Activity {
     static final String EXTRA_URL = "dev.pages.nopload.URL";
@@ -59,6 +59,7 @@ public class WebApp extends Activity {
     private static final int CAMERA = 2;
 
     private WebView web;
+    private Native features;
     private View splash;
     private ValueCallback<Uri[]> picking;
     private PermissionRequest asking;
@@ -115,6 +116,9 @@ public class WebApp extends Activity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setUserAgentString(s.getUserAgentString() + " NoploadApp/" + BuildConfig.VERSION_NAME);
         web.addJavascriptInterface(new Bridge(), "NoploadApp");
+        features = new Native(this, web);
+        features.start();
+        web.addJavascriptInterface(features, "NoploadNative");
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -126,11 +130,13 @@ public class WebApp extends Activity {
 
             @Override
             public void onPageCommitVisible(WebView view, String url) {
+                view.evaluateJavascript(Native.SCRIPT, null);
                 hideSplash();
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                view.evaluateJavascript(Native.SCRIPT, null);
                 hideSplash();
                 // Saving: remember the name a download link asks for, since
                 // the web view hands over only the blob: address.
@@ -360,6 +366,7 @@ public class WebApp extends Activity {
 
     @Override
     protected void onDestroy() {
+        features.shutdown();
         web.destroy();
         super.onDestroy();
     }
