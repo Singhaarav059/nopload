@@ -7,8 +7,9 @@
 //  - A pool of free tiers: each provider's keys (comma-separated in
 //    *_API_KEYS) times its models (each a separate rate limit on Groq and
 //    Cerebras), tried in order (AI_ORDER), the keys taking turns being first
-//    (round robin). By default: Groq (Llama 3.3 70B, then Llama 3.1 8B),
-//    Cerebras (the same two), then Claude (Anthropic, paid per use) and
+//    (round robin). By default: Groq (gpt-oss 120B, Qwen3.8 27B, gpt-oss
+//    20B: its free plan has had no Llama since August 2026), Cerebras
+//    (Llama 3.3 70B, Llama 3.1 8B), then Claude (Anthropic, paid per use) and
 //    Cloudflare Workers AI (a free daily allowance).
 //  - A key and model that answers 429 rests for a minute (or as long as its
 //    Retry-After asks) and the request moves on to the next one at once.
@@ -479,7 +480,7 @@ const pools = (env: Env): Record<string, Pool> => ({
     name: "groq",
     url: `${env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"}/chat/completions`,
     keys: list(env.GROQ_API_KEYS, env.GROQ_API_KEY),
-    models: list(env.GROQ_MODELS || env.GROQ_MODEL || "llama-3.3-70b-versatile,llama-3.1-8b-instant"),
+    models: list(env.GROQ_MODELS || env.GROQ_MODEL || "openai/gpt-oss-120b,qwen/qwen3.8-27b,openai/gpt-oss-20b"),
     trains: false,
   },
   cerebras: {
@@ -493,7 +494,7 @@ const pools = (env: Env): Record<string, Pool> => ({
     name: "gemini",
     url: `${env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai"}/chat/completions`,
     keys: list(env.GEMINI_API_KEYS, env.GEMINI_API_KEY),
-    models: list(env.GEMINI_MODELS || env.GEMINI_MODEL || "gemini-2.5-flash,gemini-2.5-flash-lite"),
+    models: list(env.GEMINI_MODELS || env.GEMINI_MODEL || "gemini-3.8-flash,gemini-3.5-flash-lite"),
     trains: true,
   },
   openrouter: {
@@ -537,6 +538,9 @@ async function* openAi(p: Pool, key: string, model: string, job: Job, signal: Ab
       temperature: 0.2,
       messages: [{ role: "system", content: job.system + (job.json ? " Reply with JSON only." : "") }, ...job.messages],
       ...(job.json ? { response_format: { type: "json_object" } } : {}),
+      // gpt-oss thinks before it answers, and the thinking counts against
+      // max_tokens and the free tier's tokens a day: a little is enough.
+      ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
     }),
   });
   if (!r.ok || !r.body) throw new ProviderError(`${p.name} ${model} ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`, r.status, retryAfterOf(r));
