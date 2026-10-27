@@ -11,6 +11,7 @@ import { ServiceWorker } from "@/components/ServiceWorker";
 import { ExtensionHandoff } from "@/components/ExtensionHandoff";
 import { PointerLight } from "@/components/PointerLight";
 import { AppShell } from "@/components/AppShell";
+import { Welcome } from "@/components/Welcome";
 import { PageTransition } from "@/components/PageTransition";
 import { CommandBar } from "@/components/CommandBar";
 import { InstallSheet } from "@/components/InstallGuide";
@@ -23,6 +24,8 @@ import { DEVICE_SCRIPT } from "@/lib/device";
 // Committed in src/app/fonts, so builds never reach out to a font CDN.
 const sans = localFont({ src: "../fonts/Geist-Variable.woff2", variable: "--font-geist-sans", weight: "100 900" });
 const mono = localFont({ src: "../fonts/GeistMono-Variable.woff2", variable: "--font-geist-mono", weight: "100 900" });
+// Handwriting, for the app's welcome (src/components/Welcome.tsx): fetched only there.
+const hand = localFont({ src: "../fonts/Caveat-Variable.woff2", variable: "--font-hand", weight: "400 700", preload: false });
 
 export function generateStaticParams() {
   return LOCALE_CODES.map((lang) => ({ lang }));
@@ -54,8 +57,9 @@ export const viewport: Viewport = {
   // pad themselves with the safe-area insets.
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbf9f6" },
-    { media: "(prefers-color-scheme: dark)", color: "#13111a" },
+    // Dark unless light was chosen (src/lib/theme.ts), whatever the device says.
+    { media: "(prefers-color-scheme: light)", color: "#000000" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
 };
 
@@ -64,8 +68,9 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
   return (
-    // suppressHydrationWarning: THEME_SCRIPT sets data-theme on <html> before React loads.
-    <html lang={lang} dir={isRtl(lang) ? "rtl" : "ltr"} className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+    // Dark as built; THEME_SCRIPT sets the chosen theme before the first paint
+    // (suppressHydrationWarning: so data-theme can differ from what React built).
+    <html lang={lang} dir={isRtl(lang) ? "rtl" : "ltr"} data-theme="dark" className={`${sans.variable} ${mono.variable} ${hand.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: DEVICE_SCRIPT }} />
@@ -85,6 +90,7 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
           <ServiceWorker />
           <PointerLight />
           <AppShell />
+          <Welcome />
           <CommandBar />
           <InstallSheet />
         </I18nProvider>

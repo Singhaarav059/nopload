@@ -86,8 +86,9 @@ await test("every vendored package ships its licence", () => {
     if (!p.license || !/^https:\/\//.test(p.source)) missing.push(`${name}: licence ${p.license}, source ${p.source}`);
   }
   ok(!missing.length, missing.join("; "));
-  // The site's own font is served by Next, not from /vendor.
+  // The site's own fonts are served by Next, not from /vendor.
   ok(components.some((c) => c.name === "Geist" && readFileSync(join(licDir, c.file), "utf8").includes("SIL Open Font License")), "no Geist licence");
+  ok(components.some((c) => c.name === "Caveat" && readFileSync(join(licDir, c.file), "utf8").includes("SIL Open Font License")), "no Caveat licence");
 });
 
 // A section header alone isn't a licence: each package's section must hold

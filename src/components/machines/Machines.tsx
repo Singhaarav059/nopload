@@ -333,7 +333,7 @@ function Turntable({ files, value }: Props) {
         <circle key={i} cx={C.x} cy={C.y} r={100 - i * 8} fill="none" stroke="#fff" strokeOpacity={i % 2 ? 0.14 : 0.28} />
       ))}
       <g transform={`rotate(${a} ${C.x} ${C.y})`}>
-        <circle cx={C.x} cy={C.y - 101} r="3" fill="#5a46e0" />
+        <circle cx={C.x} cy={C.y - 101} r="3" fill="#ff6a13" />
         <Sheet x={C.x - 60} y={C.y - 78} w={120} h={156} pic={pic} />
       </g>
       <circle cx={C.x} cy={C.y} r="5" fill={url("steel")} stroke="#7d848b" strokeWidth="0.6" />
@@ -491,23 +491,23 @@ function Stamp({ files, value, number }: Props & { number?: boolean }) {
     <Svg id={id}>
       <Body x={14} y={262} w={272} h={32} r={10} />
       <rect x="22" y="234" width="58" height="26" rx="6" fill={url("side")} filter={url("soft")} />
-      <rect x="27" y="238" width="48" height="16" rx="3" fill={number ? "#2b2d30" : "#3a2bb0"} />
+      <rect x="27" y="238" width="48" height="16" rx="3" fill={number ? "#2b2d30" : "#c2410c"} />
       <Sheet x={96} y={104} w={120} h={156} pic={pic} />
       {inked > 0 &&
         (number ? (
           <text x="156" y="254" textAnchor="middle" fontSize="13" fontWeight="600" fill="#222" opacity={inked} className="machine-num">1</text>
         ) : (
-          <g transform="rotate(-16 156 186)" fill="none" stroke="#5a46e0" opacity={0.78 * inked}>
+          <g transform="rotate(-16 156 186)" fill="none" stroke="#ff6a13" opacity={0.78 * inked}>
             <circle cx="156" cy="186" r="30" strokeWidth="3" />
             <circle cx="156" cy="186" r="24" strokeWidth="1.2" />
-            <path d="M156 170 L160.7 180.5 L172 181.5 L163.4 189 L166 200 L156 194.2 L146 200 L148.6 189 L140 181.5 L151.3 180.5 Z" fill="#5a46e0" stroke="none" />
+            <path d="M156 170 L160.7 180.5 L172 181.5 L163.4 189 L166 200 L156 194.2 L146 200 L148.6 189 L140 181.5 L151.3 180.5 Z" fill="#ff6a13" stroke="none" />
           </g>
         ))}
       <g transform={`translate(156 ${face})`}>
         <rect x="-7" y="-64" width="14" height="34" rx="4" fill={url("accentv")} />
         <Ball cx={0} cy={-76} r={19} />
         <rect x={-w / 2 - 8} y="-34" width={w + 16} height="26" rx="7" fill={url("body")} filter={url("soft")} />
-        <rect x={-w / 2} y="-9" width={w} height="9" rx="2" fill={number ? "#2b2d30" : "#5a46e0"} />
+        <rect x={-w / 2} y="-9" width={w} height="9" rx="2" fill={number ? "#2b2d30" : "#ff6a13"} />
       </g>
     </Svg>
   );

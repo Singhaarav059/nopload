@@ -9,6 +9,8 @@ import { HeroDrop } from "@/components/HeroDrop";
 import { HowGuide } from "@/components/HowGuide";
 import { HomeBoard } from "@/components/HomeBoard";
 import { InstallBanner } from "@/components/InstallGuide";
+import { OpenFab } from "@/components/OpenFab";
+import { Mascot } from "@/components/Logo";
 import { Friend, HeroScene, SleepyCloud, Sparkle } from "@/components/Studio";
 import { format, getDictionary } from "@/lib/i18n/dictionary";
 import { hasLocale } from "@/lib/i18n/locales";
@@ -50,20 +52,22 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
             {/* The exception, said where the claim is: AI can use the server. */}
             <Link href={`/${lang}/privacy`} className="pill text-ink-2 hover:text-ink">{t["home.aiBadge"]}</Link>
           </div>
-          <h1 data-app-title className="display hero-title mt-6 max-w-[14ch] text-[3rem] sm:text-[4.5rem] lg:text-[5.4rem]">
-            <Words text={t["home.title"]} />
+          <h1 data-app-title className="display hero-title relative mt-6 max-w-[14ch] text-[3rem] sm:text-[4.5rem] lg:text-[5.4rem]">
+            <span data-web-only><Words text={t["home.title"]} /></span>
+            <span data-app-only>{t["app.hello"]}</span>
           </h1>
           <p data-web-only className="fade-up mt-6 max-w-[540px] text-pretty text-[17px] leading-[1.6] text-ink-2 sm:text-[18px]" style={{ "--d": "450ms" } as React.CSSProperties}>
             {t["home.subtitle"]}
           </p>
-          <div className="fade-up mt-8 max-w-[600px]" style={{ "--d": "600ms" } as React.CSSProperties}>
-            <HeroDrop />
+          <div data-web-only className="fade-up relative mt-14 max-w-[600px]" style={{ "--d": "600ms" } as React.CSSProperties}>
+            <Mascot peek size={64} className="hero-peek" />
+            <div className="relative z-[1]"><HeroDrop /></div>
           </div>
           <a data-web-only href="#tools" className="fade-up link-u mt-6 inline-flex items-center gap-1.5 self-start text-[14px] font-medium text-ink-2 hover:text-ink" style={{ "--d": "750ms" } as React.CSSProperties}>
             {format(t["home.browseAll"], { n: TOOLS.length })} <ArrowDown size={14} aria-hidden />
           </a>
         </div>
-        <div data-web-only className="fade-up hidden sm:block" style={{ "--d": "200ms" } as React.CSSProperties}>
+        <div data-web-only className="fade-up relative hidden sm:block" style={{ "--d": "200ms" } as React.CSSProperties}>
           <HeroScene badge={t["home.privateBadge"]} />
         </div>
       </section>
@@ -75,10 +79,11 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
         <HowGuide />
       </div>
 
-      {/* The app has its tools in its navigation (AppShell.tsx). */}
-      <div data-web-only className="mt-24 sm:mt-32">
+      {/* Every tool, to search and filter; in the app, the rest of its home. */}
+      <div data-home-tools className="mt-24 sm:mt-32">
         <ToolGrid />
       </div>
+      <OpenFab />
 
       {/* Why the files stay put, and the promise with its proof. */}
       <section data-web-only aria-labelledby="home-cloud" className="relative mt-28 grid items-center gap-10 overflow-hidden rounded-[36px] bg-surface-2 px-6 py-12 sm:px-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">

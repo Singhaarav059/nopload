@@ -1,7 +1,7 @@
 // The installed app on a phone stays light, as a native app is: nothing is
 // animated by scrolling (each one is worked out again on every frame), the
-// tools and settings sheets are built ahead and only shown on a tap, and a
-// list of links doesn't preload every page it shows.
+// settings sheet is built ahead and only shown on a tap, and a list of links
+// doesn't preload every page it shows.
 //
 //   node tests/e2e/smooth.mjs [chromium] [firefox] [webkit]   (see kit.mjs)
 import { open, suite } from "./kit.mjs";
@@ -25,29 +25,22 @@ await suite(async ({ name, browser, test }) => {
     return "none";
   });
 
-  await test("the sheets are built ahead, and open at once", async () => {
+  await test("the settings sheet is built ahead, and opens at once", async () => {
     await page.waitForFunction(() => document.querySelectorAll(".app-sheet-wrap[hidden]").length === 2, null, { timeout: 8000 });
-    preloads.length = 0;
-    await page.locator(".app-tab[data-tab='tools']").click();
-    await page.locator(".app-sheet[data-sheet='tools']").waitFor();
-    await page.waitForTimeout(1500);
-    // Its hundred links preload on a touch, not all at once on opening.
-    if (preloads.length > 2) throw new Error(`${preloads.length} pages preloaded on opening`);
+    const before = await page.evaluate(() => (document.querySelector(".app-sheet[data-sheet='settings']").dataset.mark = "1"));
+    await page.locator("header [data-tab='settings']").click();
+    await page.locator(".app-sheet[data-sheet='settings']").waitFor();
+    if ((await page.locator(".app-sheet[data-sheet='settings']").getAttribute("data-mark")) !== before) throw new Error("settings rebuilt");
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelectorAll(".app-sheet-wrap[hidden]").length === 2);
-    // Opened again, it is the same sheet, not built anew.
-    const before = await page.evaluate(() => (document.querySelector(".app-sheet[data-sheet='settings']").dataset.mark = "1"));
-    await page.locator(".app-tab[data-tab='settings']").click();
-    if ((await page.locator(".app-sheet[data-sheet='settings']").getAttribute("data-mark")) !== before) throw new Error("settings rebuilt");
-    return `${preloads.length} preloads`;
+    return "built once";
   });
 
-  await test("a tool opens from the sheet", async () => {
-    await page.keyboard.press("Escape");
-    await page.locator(".app-tab[data-tab='tools']").click();
-    await page.locator(".app-sheet[data-sheet='tools'] a[href$='/merge-pdf']").click();
+  await test("a tool opens from the home page's cards", async () => {
+    preloads.length = 0;
+    await page.locator("[data-tool='merge']").click();
     await page.waitForURL(/\/en\/merge-pdf/);
-    await page.waitForFunction(() => document.querySelectorAll(".app-sheet-wrap[hidden]").length === 2);
+    if (preloads.length > 2) throw new Error(`${preloads.length} pages preloaded`);
     return "merge-pdf";
   });
   await ctx.close();

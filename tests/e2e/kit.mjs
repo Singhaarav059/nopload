@@ -32,7 +32,20 @@ export const languages = () => readdirSync(join(root, "src/lib/i18n/dict")).map(
 
 // Static pages are plain HTML until React hydrates. Wait for the workspace's
 // file input (inside a Suspense boundary) as well as the header.
-export async function open(page, path, options = {}) {
+// The app's welcome (src/components/Welcome.tsx) counts as seen, unless a
+// test opens with { welcome: true }.
+const welcomed = new WeakSet();
+export async function open(page, path, { welcome, ...options } = {}) {
+  if (!welcome && !welcomed.has(page)) {
+    welcomed.add(page);
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("nopload:welcomed", "1");
+      } catch {
+        // Storage blocked: nothing to skip.
+      }
+    });
+  }
   await page.goto(base + path, { waitUntil: "load", ...options });
   await page.waitForFunction(() => {
     const hydrated = (el) => Object.keys(el).some((k) => k.startsWith("__reactProps"));

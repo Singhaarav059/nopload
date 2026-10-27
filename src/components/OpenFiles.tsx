@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Upload } from "lucide-react";
-import { useI18n } from "./I18n";
+import { languageBefore, useI18n } from "./I18n";
 import { ToolIcon } from "./ToolIcon";
 import { handOffTo, markOpenedFromOutside, stashShared, takeShared, toolsFor } from "@/lib/handoff";
 import { hasLocale } from "@/lib/i18n/locales";
@@ -43,13 +43,6 @@ function fromApp(): { files: File[]; launched: boolean } | null {
 const ACCEPT = ".pdf,image/*,.heic,.docx";
 const LAUNCHED = "nopload:launched";
 
-function lastLocale() {
-  try {
-    return localStorage.getItem("locale");
-  } catch {
-    return null;
-  }
-}
 
 // /{lang}/open: files shared to the installed app (the service worker keeps
 // them, see public/sw.js) or opened with it, and the tools that take them.
@@ -59,7 +52,7 @@ export function OpenFiles() {
   const router = useRouter();
   const [files, setFiles] = useState<File[] | null>(null);
   // The language used last, read before this page remembers its own.
-  const [saved] = useState(lastLocale);
+  const [saved] = useState(languageBefore);
   // The viewer first: opening a PDF is most often to read it.
   const tools = useMemo(() => toolsFor(files ?? []).sort((a, b) => Number(b.id === "view") - Number(a.id === "view")), [files]);
 

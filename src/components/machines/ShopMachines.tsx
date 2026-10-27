@@ -114,7 +114,7 @@ export function Rollers({ files, value }: Props) {
   );
 }
 
-const RIBBONS = ["#5a46e0", "#ff7a59", "#a194ff"];
+const RIBBONS = ["#ff6a13", "#ff7a59", "#ffb38a"];
 
 // Bookmarks: the dispenser drops a ribbon into the book at each chapter,
 // and snips it, so the ends stand out of the top.
@@ -344,10 +344,10 @@ export function Iron({ files, value }: Props) {
   const ix = p < 0.48 ? 62 + pass1 * 176 : 238 - pass2 * 176;
   const iy = p < 0.48 ? 108 : 202;
   const items = [
-    { x: 92, y: 88, w: 58, h: 30, row: 0, color: "#5a46e0" },
-    { x: 162, y: 112, w: 46, h: 18, row: 0, color: "#a194ff" },
+    { x: 92, y: 88, w: 58, h: 30, row: 0, color: "#ff6a13" },
+    { x: 162, y: 112, w: 46, h: 18, row: 0, color: "#ffb38a" },
     { x: 96, y: 186, w: 80, h: 16, row: 1, color: "#ff7a59" },
-    { x: 150, y: 212, w: 52, h: 26, row: 1, color: "#5a46e0" },
+    { x: 150, y: 212, w: 52, h: 26, row: 1, color: "#ff6a13" },
   ];
   const flat = (it: (typeof items)[number]) => (it.row === 0 ? (p >= 0.48 ? 1 : ix > it.x + it.w / 2 ? 1 : 0) : p >= 0.88 ? 1 : p >= 0.48 && ix < it.x + it.w / 2 ? 1 : 0);
   const steaming = p > 0.08 && p < 0.88;
@@ -551,7 +551,7 @@ export function DyeBath({ files, value }: Props) {
         {!pic && (
           <g>
             <rect x="102" y={y + 70} width="44" height="30" rx="3" fill="#ff7a59" />
-            <rect x="152" y={y + 70} width="44" height="30" rx="3" fill="#5a46e0" />
+            <rect x="152" y={y + 70} width="44" height="30" rx="3" fill="#ff6a13" />
             <rect x="102" y={y + 106} width="94" height="14" rx="3" fill="#22a565" />
           </g>
         )}

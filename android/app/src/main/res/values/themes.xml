@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The app's web view (WebApp.java): light, so the site's light theme
-         shows; values-night has the dark one. The web view tells the site
-         which through prefers-color-scheme. -->
-    <style name="WebApp" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
-        <item name="android:windowBackground">@color/paper</item>
+    <!-- The app's web view (WebApp.java): black, as the site is unless light
+         is chosen there, so the launch screen and the site match. -->
+    <style name="WebApp" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/ink</item>
     </style>
 </resources>

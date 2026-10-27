@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Globe2, Menu, Search, X } from "lucide-react";
+import { BookOpenText, ChevronDown, ChevronLeft, Globe2, Menu, Search, Settings2, Workflow, X } from "lucide-react";
 import { Logo } from "./Logo";
 import dynamic from "next/dynamic";
 import { useI18n } from "./I18n";
@@ -39,6 +39,8 @@ function useDismiss(open: boolean, close: () => void) {
 export function Header() {
   const { t, href, locale } = useI18n();
   const pathname = usePathname();
+  const router = useRouter();
+  const home = pathname === href("/") || pathname === `${href("/")}/`;
   const [menu, setMenu] = useState<null | "tools" | "lang" | "mobile">(null);
   const close = () => setMenu(null);
   const toolsRef = useDismiss(menu === "tools", close);
@@ -67,6 +69,14 @@ export function Header() {
         {/* The frosted island is its own layer: a backdrop-filter on an
             ancestor would make it the containing block of the fixed menus below. */}
         <div aria-hidden className="header-scroll absolute inset-0 -z-10 rounded-full border border-line bg-[color-mix(in_oklab,var(--surface)_86%,transparent)] backdrop-blur-[16px] backdrop-saturate-150" />
+        {/* The app on a phone has no tab bar: Back, on every page but home. */}
+        {!home && (
+          <span data-tabs-only className="contents">
+            <button type="button" data-back className="icon-btn -ms-2 me-1" aria-label={t("app.back")} onClick={() => (history.length > 1 ? router.back() : router.push(href("/")))}>
+              <ChevronLeft size={24} className="rtl:rotate-180" />
+            </button>
+          </span>
+        )}
         <Link href={href("/")} className="me-4 rounded-full sm:me-6" aria-label={t("nav.home")} onClick={(e) => { close(); goHome(e, href("/")); }}>
           <Logo />
         </Link>
@@ -157,6 +167,13 @@ export function Header() {
           <button type="button" data-command className="icon-btn" aria-label={t("cmd.label")} title={t("cmd.label")} onClick={openCommandBar}>
             <Search size={18} strokeWidth={1.75} />
           </button>
+
+          {/* The app on a phone: Reader, Workflows and Settings, round, as the tab bar had them. */}
+          <span data-tabs-only className="contents">
+            <Link href={href("/pdf-viewer")} data-tab="reader" className="icon-btn icon-round" aria-label={t("app.reader")}><BookOpenText size={18} strokeWidth={1.75} /></Link>
+            <Link href={href("/workflows")} data-tab="flows" className="icon-btn icon-round" aria-label={t("nav.workflows")}><Workflow size={18} strokeWidth={1.75} /></Link>
+            <button type="button" data-tab="settings" className="icon-btn icon-round" aria-label={t("app.settings")} onClick={() => window.dispatchEvent(new CustomEvent("nopload:sheet", { detail: "settings" }))}><Settings2 size={18} strokeWidth={1.75} /></button>
+          </span>
 
           {/* The app has the theme in its Settings. */}
           <span data-web-only className="contents"><ThemeMenu /></span>

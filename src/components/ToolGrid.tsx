@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Cloud, Search, Server, X } from "lucide-react";
 import { ToolIcon } from "./ToolIcon";
 import { CategoryBadge } from "./Studio";
+import { Mascot } from "./Logo";
 import { useI18n } from "./I18n";
 import { CATEGORIES, TOOLS, descKey, type CategoryId } from "@/lib/tools";
 
@@ -58,7 +59,9 @@ export function ToolGrid() {
         <p className="reveal mt-4 text-pretty text-[16px] leading-relaxed text-muted">{t("home.toolsBody")}</p>
       </div>
       <div data-sticky-bar className="sticky top-16 z-20 -mx-4 mt-8 border-b border-line/60 bg-[color-mix(in_oklab,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-[14px] sm:-mx-6 sm:px-6">
-        <label className="relative block">
+        {/* The mascot peeks over the search box. */}
+        <Mascot peek size={58} className="search-peek" />
+        <label className="relative z-[1] block">
           <span className="sr-only">{t("home.searchPlaceholder")}</span>
           <Search size={18} strokeWidth={1.75} className="pointer-events-none absolute start-5 top-1/2 -translate-y-1/2 text-muted" />
           <input
@@ -67,7 +70,7 @@ export function ToolGrid() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("home.searchPlaceholder")}
-            className="field h-14 rounded-full ps-12 pe-12 text-[16px] shadow-card [&::-webkit-search-cancel-button]:hidden"
+            className="field search-field h-14 rounded-full ps-12 pe-12 text-[16px] [&::-webkit-search-cancel-button]:hidden"
           />
           {!q && (
             <kbd aria-hidden className="pointer-events-none absolute end-4 top-1/2 hidden h-7 min-w-7 -translate-y-1/2 place-items-center rounded-lg border border-line bg-surface-2 px-1.5 font-mono text-[12px] text-muted sm:grid pointer-coarse:hidden">/</kbd>
@@ -92,7 +95,7 @@ export function ToolGrid() {
               aria-pressed={cat === id}
               data-cat={id === "all" ? undefined : id}
               onClick={() => choose(id)}
-              className="flex h-9 shrink-0 items-center gap-2 rounded-full pointer-coarse:h-10 border border-line bg-surface px-3.5 text-[13px] font-medium text-ink-2 transition-[background-color,border-color,color,scale] duration-300 ease-(--ease-spring) hover:border-line-strong hover:text-ink active:scale-95 aria-pressed:border-transparent aria-pressed:bg-(--tint) aria-pressed:text-(--tint-ink) [&:not([data-cat])]:aria-pressed:bg-ink [&:not([data-cat])]:aria-pressed:text-bg"
+              className="pill-tab"
             >
               {id !== "all" && <span aria-hidden className="h-2 w-2 rounded-full bg-(--tint-ink)" />}
               {id === "all" ? t("home.filterAll") : t(`cat.${id}`)}
@@ -121,25 +124,25 @@ export function ToolGrid() {
               </div>
               <span className="pill hidden tabular sm:inline-flex">{s.tools.length}</span>
             </header>
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="tool-cards grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3">
               {s.tools.map((tool) => (
                 <li key={tool.id} className="reveal">
                   <IntentLink
                     href={href(`/${tool.slug}`)}
                     data-tool={tool.id}
-                    className="spot group flex h-full items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 transition-[border-color,box-shadow,translate] duration-500 ease-(--ease-out) hover:-translate-y-1 hover:border-(--tint-ink)/30 hover:shadow-lift"
+                    className="tool-card spot group flex h-full flex-col items-start gap-3 rounded-[22px] border border-line bg-surface p-3.5 transition-[border-color,box-shadow,translate,opacity,scale] duration-500 ease-(--ease-out) hover:-translate-y-1 hover:border-(--tint-ink)/30 hover:shadow-lift sm:flex-row sm:gap-3.5 sm:p-4"
                   >
                     <ToolIcon tool={tool} size={44} />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="text-[15px] font-semibold tracking-[-0.01em]">{t(`tool.${tool.id}.name`)}</span>
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[15px] font-semibold leading-tight tracking-[-0.01em]">{t(`tool.${tool.id}.name`)}</span>
                         {tool.isNew && <span data-cat="convertTo" className="pill h-5 px-2 text-[11px]">{t("home.new")}</span>}
                         {tool.runtime === "server" && (
                           <Server size={12} className="text-muted" aria-label={t("home.serverBadge")} />
                         )}
                         {tool.ai && <Cloud size={12} className="text-muted" aria-label={t("home.aiBadge")} />}
                       </span>
-                      <span className="mt-1 block text-pretty text-[14px] leading-snug text-muted">{t(descKey(tool))}</span>
+                      <span className="mt-1 line-clamp-2 block text-pretty text-[13px] leading-snug text-muted sm:line-clamp-none sm:text-[14px]">{t(descKey(tool))}</span>
                     </span>
                   </IntentLink>
                 </li>

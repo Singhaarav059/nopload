@@ -36,8 +36,7 @@ function apply(theme: Theme) {
   if (document.startViewTransition && !reduce) document.startViewTransition(set);
   else set();
   try {
-    if (theme === "system") localStorage.removeItem(THEME_KEY);
-    else localStorage.setItem(THEME_KEY, theme);
+    localStorage.setItem(THEME_KEY, theme);
   } catch {
     /* storage blocked: the choice lasts for this page */
   }
