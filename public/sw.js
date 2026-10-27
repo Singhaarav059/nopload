@@ -81,8 +81,8 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // AI models the visitor downloaded (src/lib/ai/store.ts) stay across deploys.
-    await Promise.all((await caches.keys()).filter((k) => k !== CACHE && k !== PAGES && k !== "nopload-models").map((k) => caches.delete(k)));
+    // Every other cache goes, the AI models earlier versions downloaded ("nopload-models") too.
+    await Promise.all((await caches.keys()).filter((k) => k !== CACHE && k !== PAGES).map((k) => caches.delete(k)));
     await self.registration.navigationPreload?.enable().catch(() => {});
     // After a deploy: drop build files this build doesn't have, and fetch
     // the pages kept from before again, since they point at those files.
@@ -229,8 +229,6 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
   // OCR language files are large and tesseract.js keeps its own IndexedDB copy.
   if (url.pathname.startsWith("/vendor/") && url.pathname.includes("/tessdata/")) return;
-  // AI model weights (hundreds of MB) are kept in their own cache by src/lib/ai/store.ts.
-  if (url.pathname.startsWith("/vendor/models/")) return;
 
   const assets = isBuildFile(url.pathname) || url.pathname.startsWith("/vendor/") || url.pathname.endsWith(".svg");
   if (assets) {

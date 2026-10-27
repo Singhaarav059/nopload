@@ -13,7 +13,7 @@ import { CATEGORIES, LIMITS, TOOLS, descKey, toolById, toolBySlug, type Tool } f
 import { LEGAL, LEGAL_UPDATED } from "@/lib/legal";
 import { BRAND, OPERATOR } from "@/lib/brand";
 import { readLicenses, LICENSES_URL } from "@/lib/licenses";
-import { AI_CLOUD, REPO_URL, STATIC } from "@/lib/mode";
+import { REPO_URL, STATIC } from "@/lib/mode";
 import { INFO, pageMetadata, pageUrl, type Info } from "@/lib/seo";
 import { englishSlug, localSlug, movedTo } from "@/lib/i18n/slugs";
 import { INTENTS, intentBySlug, type Intent } from "@/lib/intents";
@@ -113,7 +113,7 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
   const k = (s: string) => t[s as DictKey];
   const related = TOOLS.filter((x) => x.category === tool.category && x.id !== tool.id).slice(0, 4);
   // AI tools default to the cloud AI: they say so instead of "Runs on your device".
-  const cloudAi = AI_CLOUD && !!tool.ai;
+  const cloudAi = !!tool.ai;
   const Badge = cloudAi ? Cloud : tool.runtime === "browser" ? ShieldCheck : Server;
   return (
     <div data-cat={tool.category} className="mx-auto max-w-[1240px] px-4 sm:px-6">

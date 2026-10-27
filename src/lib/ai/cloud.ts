@@ -1,26 +1,21 @@
-// The cloud AI (functions/api/ai.ts), from the page's side: a large model
-// (Llama 3.3 70B on Groq's free tier, Claude by Anthropic, or Cloudflare
-// Workers AI, the first of them that answers). Only the text a task needs is
-// sent (a question and the passages that answer it, a document's text to
-// summarise, blocks to translate), never the file. Any failure is a
+// The server AI (functions/api/ai.ts), from the page's side: every AI tool
+// uses it. The endpoint asks the first of its providers that answers (Groq,
+// then Claude, then Gemini, then Cloudflare Workers AI). Only the text a task
+// needs is sent (a question and the passages that answer it, a document's
+// text to summarise, blocks to translate), never the file. Any failure is a
 // CloudUnavailable (a CloudLimited when the visitor asked too much, too
-// fast), which the tools tell the visitor about, or answer on the device.
+// fast), which the tools tell the visitor about.
 // Answers are kept on this device for a week (./answers.ts): the same
 // request again costs no request.
 
 import { AI_CLOUD } from "../mode";
 import { answerKey, keepAnswer, keptAnswer } from "./answers";
 
-export const CLOUD = "cloud";
 // Who answered, as the endpoint's X-AI-Provider header names it.
 export type Provider = "groq" | "anthropic" | "gemini" | "openrouter" | "cloudflare";
 const PROVIDERS: Provider[] = ["groq", "anthropic", "gemini", "openrouter", "cloudflare"];
 
-// fallbackToLocal: every provider, key and model is used up for now, so the
-// page should answer on the device if it has a model there.
-export class CloudUnavailable extends Error {
-  fallbackToLocal = false;
-}
+export class CloudUnavailable extends Error {}
 // The fair-use limit for chat (functions/api/ai.ts): this visitor asked too
 // many questions this minute, or today.
 export class CloudLimited extends CloudUnavailable {
@@ -60,16 +55,14 @@ async function send(body: object, signal?: AbortSignal): Promise<Response> {
   }
   if (!r.ok) {
     const text = await r.text().catch(() => "");
-    let info: { limit?: string; fallbackToLocal?: boolean } = {};
+    let info: { limit?: string } = {};
     try {
       info = JSON.parse(text);
     } catch {
       /* not JSON */
     }
     if (r.status === 429 && (info.limit === "minute" || info.limit === "day")) throw new CloudLimited(info.limit);
-    const e = new CloudUnavailable(`${r.status} ${text}`.trim());
-    e.fallbackToLocal = !!info.fallbackToLocal;
-    throw e;
+    throw new CloudUnavailable(`${r.status} ${text}`.trim());
   }
   return r;
 }

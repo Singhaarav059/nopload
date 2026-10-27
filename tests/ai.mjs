@@ -1,8 +1,9 @@
 // Chat's retrieval: how documents are tidied and cut into page-sized chunks
 // that keep statement rows whole, how the chunks for a question are found
-// (keywords, exact names, meaning; many more for "the biggest" or "the
-// total"), what the model is sent, and how an answer's citations become page
-// numbers. Then chat end to end on a real 20-page PDF, with a stand-in model.
+// (keywords and exact names; many more for "the biggest" or "the total"),
+// what the server AI is sent, and how an answer's citations become page
+// numbers. Then chat end to end on a real 20-page PDF, and Translate PDF,
+// with a stand-in server AI.
 //
 //   node tests/ai.mjs
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -15,17 +16,26 @@ const { search, fuse, tokens } = await load("../ai/retrieve");
 const { exactTerms, missingTerms, isAggregate } = await load("../ai/retrieve");
 const { cleanText, unitsOf } = await load("../ai/chunk");
 const { numberSources, citations, attribute } = await load("../ai/cite");
-const { readPages, buildIndex, askModel } = await load("../ai/chat");
+const { readPages, buildIndex, askCloud } = await load("../ai/chat");
 const { translatePdf } = await load("../ai/translate");
 const results = { failed: 0 };
 const test = check(results);
 
-// No request may leave the page. The Noto fonts translations are drawn in
-// come from /vendor, read from disk here.
+// No request may leave the page but the ones to the server AI (/api/ai),
+// which `ai` answers when set: what it was sent goes in `aiSent`. The Noto
+// fonts translations are drawn in come from /vendor, read from disk here.
 let requests = 0;
-globalThis.fetch = async (url) => {
+let ai = null;
+const aiSent = [];
+globalThis.fetch = async (url, init) => {
   const m = String(url).match(/^\/vendor\/[^/]+\/(fonts\/.+)$/);
   if (m) return new Response(readFileSync(join(vendorDir, m[1])));
+  if (url === "/api/ai" && ai && init?.method === "POST") {
+    const body = JSON.parse(init.body);
+    aiSent.push(body);
+    const reply = ai(body);
+    return typeof reply === "string" ? new Response(reply, { headers: { "X-AI-Provider": "groq" } }) : Response.json(reply, { status: reply.status ?? 200, headers: { "X-AI-Provider": "groq" } });
+  }
   requests++;
   throw new Error("network");
 };
@@ -85,12 +95,7 @@ await test("search: 'what is the invoice total' finds page 3 first", () => {
   eq(hits.every((h, i) => i === 0 || h.score <= hits[i - 1].score), true, "best first");
 });
 
-await test("search: embeddings fused with keywords (reciprocal rank fusion)", () => {
-  const chunks = chunkPages(invoice);
-  // A stand-in embedding that only knows page 2 is about staff.
-  const vec = (t) => (/engineer|staff|hire/i.test(t) ? [1, 0] : [0, 1]);
-  const hits = search(chunks, "how many staff joined", { k: 2, vectors: { query: vec("staff"), chunks: chunks.map((c) => vec(c.text)) } });
-  eq(hits[0].chunk.page, 2, "meaning wins when no keyword matches");
+await test("search: reciprocal rank fusion", () => {
   const fused = fuse([[{ id: 1 }, { id: 2 }], [{ id: 2 }, { id: 3 }]], (x) => x.id);
   eq(fused.map((x) => x.item.id).join(","), "2,1,3", "fused order");
 });
@@ -175,28 +180,32 @@ await test("aggregate questions are told apart", () => {
   for (const q of ["When was the rent paid?", "Who is the landlord?"]) eq(isAggregate(q), false, q);
 });
 
-// A stand-in model: what it was sent, and an answer citing the page given.
-const stand = (answer) => {
-  const sent = [];
-  return { sent, generate: async (messages) => (sent.push(messages), answer) };
-};
+// A stand-in server AI that answers every question with `answer`.
+const answering = (answer) => (ai = (body) => (body.task === "chat" ? answer : { status: 400, error: "unexpected" }));
 
-await test("chat: 'the biggest payment' sends every page with amounts, each row once, and the strict prompt", async () => {
-  const index = await buildIndex(statement);
-  const m = stand("The biggest payment was ₹18,500.00 to rent.landlord@oksbi on 5 October (p. 2).");
-  const a = await askModel(index, "What is the biggest payment?", { generate: m.generate });
-  const [system, user] = [m.sent[0][0].content, m.sent[0].at(-1).content];
-  for (const p of [1, 2, 3]) eq(user.includes(`(p. ${p})`), true, `page ${p} sent`);
-  eq(user.split("rent.landlord@oksbi").length - 1, 1, "each row once");
-  eq(/money going out/.test(system) && /couldn't find any mention/.test(system), true, "the strict prompt");
+await test("chat: 'the biggest payment' sends every page with amounts, each row once, never the file", async () => {
+  const index = buildIndex(statement);
+  answering("The biggest payment was ₹18,500.00 to rent.landlord@oksbi on 5 October (p. 2).");
+  const a = await askCloud(index, "What is the biggest payment?", {});
+  const sent = aiSent.at(-1);
+  eq(`${sent.task}: ${sent.question}`, "chat: What is the biggest payment?", "the question");
+  for (const p of [1, 2, 3]) eq(sent.sources.includes(`(p. ${p})`), true, `page ${p} sent`);
+  eq(sent.sources.split("rent.landlord@oksbi").length - 1, 1, "each row once");
   eq(a.pages.join(","), "2", "cites page 2");
+  eq(a.provider, "groq", "who answered");
 });
 
 await test("chat: a name that isn't in the document is named as missing", async () => {
-  const index = await buildIndex(statement);
-  const m = stand("I couldn't find any mention of Starbucks in the document.");
-  await askModel(index, "How much did I pay Starbucks?", { generate: m.generate });
-  eq(m.sent[0].at(-1).content.includes('Note: "starbucks" appears nowhere in the document.'), true, "note");
+  answering("I couldn't find any mention of Starbucks in the document.");
+  await askCloud(buildIndex(statement), "How much did I pay Starbucks?", {});
+  eq(aiSent.at(-1).sources.includes('Note: "starbucks" appears nowhere in the document.'), true, "note");
+});
+
+await test("chat: earlier turns go along, the last four", async () => {
+  answering("It was paid on 5 October (p. 2).");
+  const history = Array.from({ length: 6 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `turn ${i}` }));
+  await askCloud(buildIndex(statement), "When was the rent paid?", { history });
+  eq(aiSent.at(-1).history.map((m) => m.content).join(","), "turn 2,turn 3,turn 4,turn 5", "history");
 });
 
 // A 20-page PDF: report filler, with the invoice on page 14.
@@ -223,9 +232,10 @@ await test("twenty pages: read page by page, then chat finds page 14 for the inv
   eq(pages[13].text.includes("$1,234.50"), true, "page 14 text");
   // Lines repeated on every page count as headers and footers in the layout; they're still text.
   eq(pages[0].text.includes("project milestone 1 "), true, `page 1 text: ${pages[0].text}`);
-  const m = stand("The invoice total is $1,234.50 (p. 14).");
-  const answer = await askModel(await buildIndex(pages), "What is the invoice total?", { generate: m.generate });
-  eq(m.sent[0].at(-1).content.includes("(p. 14)\nInvoice INV-2041"), true, "page 14 sent");
+  answering("The invoice total is $1,234.50 (p. 14).");
+  const answer = await askCloud(buildIndex(pages), "What is the invoice total?", {});
+  eq(aiSent.at(-1).sources.includes("(p. 14)\nInvoice INV-2041"), true, "page 14 sent");
+  eq(JSON.stringify(aiSent.at(-1)).length < 24000, true, "text only, not the file");
   eq(answer.pages[0], 14, `cites page 14 (got ${answer.pages})`);
   eq(requests, 0, "requests");
 });
@@ -264,15 +274,27 @@ await test("translate to Markdown: the translated blocks, page by page, headings
   eq(md.split("\n\n").filter((b) => b.startsWith("ES[")).length > 2, true, "paragraphs");
 });
 
-await test("translate without a translator: a clear error, not English output", async () => {
+await test("translate with the server AI: blocks in batches, named who answered", async () => {
   const bytes = readFileSync(join(root, "tests/fixtures/report.pdf"));
+  ai = (body) => ({ texts: body.texts.map((t) => `ES ${t}`) });
+  const before = aiSent.length;
+  const [out] = await translatePdf(new File([bytes], "report.pdf"), { translateLang: "es", translateFormat: "md" });
+  const sent = aiSent.slice(before);
+  eq(sent.length > 0 && sent.every((b) => b.task === "translate" && b.language === "es"), true, "translate requests");
+  eq(out.note, "translate:cloud:groq", "note");
+  eq(/^ES /m.test(await out.blob.text()), true, "translated text");
+});
+
+await test("translate when the server AI doesn't answer: a clear error, not English output", async () => {
+  const bytes = readFileSync(join(root, "tests/fixtures/report.pdf"));
+  ai = () => ({ status: 503, error: "no AI provider answered" });
   let code = "";
   try {
-    await translatePdf(new File([bytes], "report.pdf"), { translateLang: "es", translateFormat: "pdf" });
+    await translatePdf(new File([bytes], "report.pdf"), { translateLang: "fr", translateFormat: "pdf" });
   } catch (e) {
     code = e.code;
   }
-  eq(code, "no_translator", "error code");
+  eq(code, "cloud_failed", "error code");
 });
 
 console.log(results.failed ? `\n${results.failed} failed` : "\nall passed");

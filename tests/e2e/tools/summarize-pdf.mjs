@@ -1,4 +1,5 @@
-// Summarize PDF: the summary is shown on the page (nothing downloads by
+// Summarize PDF: the summary the server AI writes (stood in for by
+// ../ai-standin.mjs) is shown on the page (nothing downloads by
 // itself), names the report's subject, a long one says more than a short one,
 // and it saves as Markdown.
 import { readFileSync } from "node:fs";

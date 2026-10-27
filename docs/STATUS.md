@@ -91,6 +91,12 @@ Naming note: the exact-size "compress PDF to N KB" pages are now called *landing
 - **Fixed:** the phone menu was squeezed into the 64 px header (the header's blur made it the frame for fixed menus); the blur is now its own layer.
 - `tests/e2e/a11y.mjs` measures contrast with reduced motion, i.e. on the settled page: with motion on, axe read text part-way through fading in as low contrast.
 
+## 2026-10-27: server AI only, Gemini as the third fallback
+
+- **No on-device AI.** Chat with PDF, Summarize PDF and Translate PDF always use the server AI (`src/lib/ai/cloud.ts`, `functions/api/ai.ts`), on every device. The model downloads (Light, Small, Large), the Transformers.js worker, the browser's built-in Summarizer and Translator, and the extractive summary as a result are gone; the service worker deletes the old `nopload-models` cache. The tools' panel (`AiNotice.tsx`) only says what is sent; where there's no server AI it says the AI tools can't run here. When the server AI doesn't answer, the tools say so (`cloud_failed`, the chat's retry).
+- **Order:** Groq (gpt-oss 120B, Qwen3.8 27B, gpt-oss 20B, every key), then Claude, then Gemini 3.5 Flash-Lite (every key), then Workers AI. Gemini is on whenever `GEMINI_API_KEYS` is set; the privacy policy says its free tier may train on the text and its reviewers may read it. OpenRouter still waits for `AI_FREE_TIERS_MAY_TRAIN`.
+- **`GET /api/ai?check`** asks every provider, key and model for one word and reports which work, keys named by number only.
+
 ## 2026-10-26: chat answers only with a model, free cloud AI, statement-proof retrieval
 
 - **No raw passages.** Chat with PDF never shows bare passages of the PDF as an answer. With no model that writes (no download, or "On this device" with none), it shows a card to turn AI on: the free cloud AI (one tap, the question is asked again) or a model download; when the cloud AI fails and no model is on the device, it says so and offers to try again (`ChatView.tsx`).

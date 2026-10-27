@@ -3,8 +3,9 @@
 // contact form are left out.
 export const STATIC = process.env.NEXT_PUBLIC_STATIC === "1";
 
-// The AI tools default to the cloud AI (src/lib/ai/cloud.ts, NOPLOAD_AI_CLOUD
-// in next.config.ts), so they aren't labelled "Runs on your device".
+// This build has the server AI that every AI tool uses (src/lib/ai/cloud.ts,
+// NOPLOAD_AI_CLOUD in next.config.ts); without it the AI tools say they
+// can't run here.
 export const AI_CLOUD = process.env.NEXT_PUBLIC_AI_CLOUD === "1";
 
 // The source code, whose issues page is where problems get reported. From

@@ -81,8 +81,8 @@ export type Tool = {
   isNew?: boolean;
   // The dictionary key of its description, when not tool.<id>.desc (see descKey).
   desc?: string;
-  // On-device AI models it can use (src/lib/ai/models.json), offered for download beside its options.
-  ai?: string[];
+  // Uses the server AI (src/lib/ai/cloud.ts).
+  ai?: true;
 };
 
 const PDF = ["pdf"];
@@ -362,18 +362,18 @@ const ALL: Tool[] = [
     options: [{ key: "pageBreaks", type: "toggle", default: false }, ...AUTO_OCR],
   },
   {
-    // src/lib/ai/summarize.ts: the browser's built-in AI when already on the device, else extractive.
+    // src/lib/ai/summarize.ts: the server AI writes the key points.
     id: "summarize", slug: "summarize-pdf", category: "convertFrom", icon: "TextQuote", mode: "files",
-    runtime: "browser", accept: PDF, multiple: true, isNew: true, ai: ["small", "large"],
+    runtime: "browser", accept: PDF, multiple: true, isNew: true, ai: true,
     options: [
       { key: "summaryLength", type: "select", choices: ["short", "medium", "long"], default: "medium" },
       { key: "summaryLang", type: "select", choices: ["same", ...LOCALE_CODES], default: "same" },
     ],
   },
   {
-    // src/lib/ai/chat.ts: answers from the PDF's own text, citing pages; better with a model.
+    // src/lib/ai/chat.ts: the server AI answers from the PDF's own text, citing pages.
     id: "chat", slug: "chat-with-pdf", category: "convertFrom", icon: "MessagesSquare", mode: "chat",
-    runtime: "browser", accept: PDF, multiple: false, isNew: true, ai: ["light", "small", "large"],
+    runtime: "browser", accept: PDF, multiple: false, isNew: true, ai: true,
     // Scanned pages are read like the PDF conversions read them.
     options: AUTO_OCR,
   },
@@ -383,9 +383,9 @@ const ALL: Tool[] = [
     runtime: "browser", accept: PDF, multiple: false, isNew: true, options: [],
   },
   {
-    // src/lib/ai/translate.ts: the browser's built-in Translator, else the large model.
+    // src/lib/ai/translate.ts: the server AI translates block by block.
     id: "translate", slug: "translate-pdf", category: "convertFrom", icon: "Languages", mode: "files",
-    runtime: "browser", accept: PDF, multiple: true, isNew: true, ai: ["large"],
+    runtime: "browser", accept: PDF, multiple: true, isNew: true, ai: true,
     options: [
       { key: "translateLang", type: "select", choices: [...LOCALE_CODES], default: "es" },
       { key: "translateFormat", type: "select", choices: ["pdf", "md"], default: "pdf" },

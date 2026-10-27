@@ -98,7 +98,6 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
   // AI"; the privacy policy names the providers.
   const providers = outputs.flatMap((o) => (/^(summary|translate):cloud:/.test(o.note ?? "") ? [o.note!.split(":")[2]] : []));
   const cloud = providers.includes("cloudflare") ? "cloudflare" : providers.length ? "anthropic" : null;
-  const cloudFailed = outputs.some((o) => o.note?.includes(":cloudFailed"));
   const pdfaLevel = outputs.find((o) => o.note?.startsWith("pdfaDowngraded:"))?.note?.split(":")[1];
   // Pages drawn at less than the chosen dpi (too big for the browser's canvas), and what failed.
   const lowerDpi = outputs.flatMap((o) => (o.note?.startsWith("lowerDpi:") ? [Number(o.note.slice(9))] : []));
@@ -181,8 +180,7 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
       )}
       {first?.note?.startsWith("translate:") && (
         <p className="mt-2 text-[15px] text-muted">
-          {cloudFailed && <>{t("res.cloudFailed")} </>}
-          {t(cloud ? "res.translateServer" : first.note.startsWith("translate:builtin") ? "res.translateBuiltin" : "res.translateModel")}
+          {t("res.translateServer")}
         </p>
       )}
       {first?.note?.startsWith("totals:") && (() => {
@@ -203,11 +201,8 @@ export function Results({ tool, outputs, onReset }: { tool: Tool; outputs: Outpu
       {pdfaLevel && <p className="mt-2 text-[15px] text-muted">{t("res.pdfaDowngraded", { level: pdfaLevel })}</p>}
       {summary && (
         <p className="mt-2 text-[15px] text-muted">
-          {cloudFailed && <>{t("res.cloudFailed")} </>}
-          {t(cloud ? "res.summaryServer" : outputs.every((o) => o.note?.startsWith("summary:model")) ? "res.summaryModel" : outputs.every((o) => o.note?.startsWith("summary:builtin")) ? "res.summaryBuiltin" : "res.summaryExtractive")}
-          {outputs.some((o) => o.note?.endsWith(":noLang")) && <> {t("res.summaryNoLang")}</>}
-          {/* What the summary rests on: the tables' figures listed under it (some left out), or part of a long document. */}
-          {outputs.some((o) => o.note?.includes(":tablesTrimmed")) ? <> {t("res.summaryTablesTrimmed")}</> : outputs.some((o) => o.note?.includes(":tables")) && <> {t("res.summaryTables")}</>}
+          {t("res.summaryServer")}
+          {/* Part of a long document: what the summary rests on. */}
           {outputs.some((o) => o.note?.includes(":truncated")) && <> {t("res.summaryTruncated")}</>}
         </p>
       )}
