@@ -1,7 +1,7 @@
 "use client";
 
 import { IntentLink } from "./IntentLink";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, ViewTransition } from "react";
 import { Cloud, Search, Server, X } from "lucide-react";
 import { ToolIcon } from "./ToolIcon";
 import { CategoryBadge } from "./Studio";
@@ -132,7 +132,10 @@ export function ToolGrid() {
                     data-tool={tool.id}
                     className="tool-card spot group flex h-full flex-col items-start gap-3 rounded-[22px] border border-line bg-surface p-3.5 transition-[border-color,box-shadow,translate,opacity,scale] duration-500 ease-(--ease-out) hover:-translate-y-1 hover:border-(--tint-ink)/30 hover:shadow-lift sm:flex-row sm:gap-3.5 sm:p-4"
                   >
-                    <ToolIcon tool={tool} size={44} />
+                    {/* Grows into the tool page's icon when opened ([slug]/page.tsx). */}
+                    <ViewTransition name={`tool-${tool.id}`} share="morph" default="none">
+                      <span className="block shrink-0"><ToolIcon tool={tool} size={44} /></span>
+                    </ViewTransition>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-[15px] font-semibold leading-tight tracking-[-0.01em]">{t(`tool.${tool.id}.name`)}</span>

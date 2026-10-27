@@ -1122,3 +1122,99 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .mascot-look, .mascot-peek svg, .fab { animation: none !important; }
 }
+
+/* ── Motion, as the reference moves: one object growing into its next
+   screen, soft light drifting behind glass, text sharpening into place. ── */
+
+/* A tool card's icon grows into the tool page's (ToolGrid.tsx, [slug]/page.tsx). */
+::view-transition-group(.morph) { animation-duration: 460ms; animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1); z-index: 50; }
+::view-transition-image-pair(.morph) { animation-name: via-blur; }
+@keyframes via-blur { 35% { filter: blur(2px); } }
+
+/* Light drifting slowly behind everything (layout.tsx): two soft glows,
+   moved, never redrawn. */
+.ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.ambient i {
+  position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--brand) 38%, transparent), transparent);
+  opacity: 0.22; will-change: translate;
+}
+.ambient i:first-child { top: -35vmax; right: -25vmax; animation: drift-a 26s var(--ease-in-out) infinite alternate; }
+.ambient i:last-child {
+  bottom: -40vmax; left: -30vmax; opacity: 0.14;
+  background: radial-gradient(closest-side, color-mix(in oklab, #ff3d7f 40%, transparent), transparent);
+  animation: drift-b 32s var(--ease-in-out) infinite alternate;
+}
+:root[data-theme="light"] .ambient i { opacity: 0.16; }
+@keyframes drift-a { to { translate: -18vmax 22vmax; } }
+@keyframes drift-b { to { translate: 24vmax -16vmax; } }
+
+/* Cards catch the light at their top edge, as glass does. */
+/* In the components layer, so a utility (shadow-lift) still wins. */
+@layer components {
+  .card, .tool-card, .pick-card { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06); }
+}
+.board-card { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), var(--shadow); }
+/* What floats is frosted glass. */
+.glass {
+  background: color-mix(in oklab, var(--surface) 62%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid color-mix(in oklab, var(--ink) 9%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 12px 32px -14px rgb(0 0 0 / 0.55);
+}
+.app-sheet { background: color-mix(in oklab, var(--surface) 86%, transparent); -webkit-backdrop-filter: blur(26px) saturate(1.6); backdrop-filter: blur(26px) saturate(1.6); }
+
+/* The reading card is the top of a stack: two more peek out below it and
+   fan out a little while it's pressed. */
+.board-read {
+  --stack: color-mix(in oklab, var(--brand) 50%, var(--bg));
+  box-shadow: 0 9px 0 -4px var(--stack), 0 18px 0 -9px color-mix(in oklab, var(--stack) 50%, var(--bg)), var(--shadow);
+  transition: translate 400ms var(--ease-spring), box-shadow 420ms var(--ease-spring), scale 200ms;
+}
+.board-read:hover { box-shadow: 0 9px 0 -4px var(--stack), 0 18px 0 -9px color-mix(in oklab, var(--stack) 50%, var(--bg)), var(--shadow-lift); }
+.board-read:active { box-shadow: 0 13px 0 -4px var(--stack), 0 26px 0 -9px color-mix(in oklab, var(--stack) 50%, var(--bg)), var(--shadow); }
+:root[data-app] .board { margin-bottom: 26px; }
+
+/* Text sharpening into place: new answers, new sheets. */
+.blur-in { animation: blur-in 520ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes blur-in { from { opacity: 0; filter: blur(6px); translate: 0 6px; } }
+
+/* Suggestions drifting past in two rows, the second the other way; a
+   touch stops them. */
+.drift { display: grid; gap: 8px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.drift-row { display: flex; gap: 8px; width: max-content; animation: drift-row 38s linear infinite; }
+.drift-row:nth-child(2) { animation-direction: reverse; animation-duration: 44s; }
+.drift:hover .drift-row, .drift:focus-within .drift-row, .drift:active .drift-row { animation-play-state: paused; }
+@keyframes drift-row { to { translate: -50% 0; } }
+[dir="rtl"] .drift-row { animation-name: drift-row-rtl; }
+@keyframes drift-row-rtl { to { translate: 50% 0; } }
+.chip {
+  flex: none; height: 38px; padding: 0 16px; border-radius: 999px; font-size: 14px; color: var(--ink-2); white-space: nowrap;
+  background: color-mix(in oklab, var(--surface-2) 80%, transparent); border: 1px solid var(--line);
+  transition: scale 220ms var(--ease-spring), color 200ms, border-color 200ms;
+}
+.chip:hover { color: var(--ink); border-color: var(--line-strong); }
+.chip:active { scale: 0.94; }
+
+/* Thinking: a sphere of dots breathing, while the AI writes. */
+.orb { position: relative; display: block; width: var(--s, 56px); height: var(--s, 56px); }
+.orb::before, .orb::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, var(--brand) 0.9px, transparent 1.3px) 0 0 / 6px 6px;
+  -webkit-mask-image: radial-gradient(circle, #000 30%, transparent 70%); mask-image: radial-gradient(circle, #000 30%, transparent 70%);
+  animation: orb-breathe 2.4s var(--ease-in-out) infinite;
+}
+.orb::after { background-size: 9px 9px; opacity: 0.6; animation-duration: 3.1s; animation-direction: reverse; rotate: 45deg; }
+.orb > i { position: absolute; inset: 34%; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, var(--brand) 70%); box-shadow: 0 0 18px 2px color-mix(in oklab, var(--brand) 60%, transparent); animation: orb-core 2.4s var(--ease-in-out) infinite; }
+@keyframes orb-breathe { 50% { scale: 1.18; opacity: 0.7; } }
+@keyframes orb-core { 50% { scale: 0.82; } }
+
+/* A line from the file to its tools, a dot running down it (OpenFab.tsx). */
+.link-line { display: block; width: 2px; height: 26px; margin: 2px auto 8px; border-radius: 2px; background: linear-gradient(var(--line-strong), transparent); position: relative; overflow: visible; }
+.link-line::after { content: ""; position: absolute; left: 50%; top: 0; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 8px var(--brand); animation: link-dot 1.6s var(--ease-in-out) infinite; }
+@keyframes link-dot { 0% { top: 0; opacity: 0; } 20% { opacity: 1; } 100% { top: 24px; opacity: 0; } }
+.file-chip { display: flex; align-items: center; gap: 10px; margin: 0 auto; max-width: 100%; width: fit-content; padding: 8px 14px 8px 8px; border-radius: 999px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient i, .drift-row, .orb::before, .orb::after, .orb > i, .link-line::after, .blur-in { animation: none !important; }
+}

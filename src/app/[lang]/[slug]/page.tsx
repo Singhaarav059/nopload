@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ShieldCheck, Server, ArrowRight, Cloud } from "lucide-react";
@@ -128,9 +128,12 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
         </nav>
         <div className="mt-4 flex items-center justify-center gap-3 sm:gap-4">
           <span className="hop shrink-0" style={{ "--d": "100ms" } as React.CSSProperties}>
-            <span className="block rounded-[18px] bg-surface p-1 shadow-lift">
-              <ToolIcon tool={tool} size={44} />
-            </span>
+            {/* The icon of the card tapped on the home page, grown into place (ToolGrid.tsx). */}
+            <ViewTransition name={`tool-${tool.id}`} share="morph" default="none">
+              <span className="block rounded-[18px] bg-surface p-1 shadow-lift">
+                <ToolIcon tool={tool} size={44} />
+              </span>
+            </ViewTransition>
           </span>
           <h1 className="display text-start text-[2.1rem] sm:text-[3rem]"><Words text={k(`tool.${tool.id}.name`)} /></h1>
         </div>

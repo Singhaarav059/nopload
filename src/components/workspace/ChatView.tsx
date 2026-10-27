@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ChevronLeft, ChevronRight, Loader2, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, ChevronLeft, ChevronRight, RotateCcw, Square } from "lucide-react";
 import { useI18n } from "../I18n";
 import { PdfThumb } from "../PdfThumb";
 import { AiNotice } from "./AiNotice";
@@ -14,6 +14,9 @@ import type { OptionDef } from "@/lib/tools";
 // answer (cloudDown), this visitor reached its fair-use limit (limited), or
 // it failed.
 type Turn = { q: string; a?: Answer; cloudDown?: boolean; limited?: "minute" | "day"; failed?: boolean };
+
+// Questions to start with (two rows of three).
+const SUGGEST = ["chat.q.about", "chat.q.points", "chat.q.figures", "chat.q.dates", "chat.q.actions", "chat.q.simple"] as const;
 
 // Loads the chat code ahead of use (src/lib/offline.ts).
 export const prepareChat = () => import("@/lib/ai/chat");
@@ -126,20 +129,28 @@ export function ChatView({ file, options, defs, onOption, onError }: {
         className="card relative flex h-[calc(100dvh-var(--tabbar-h,0px)-120px)] max-h-[900px] min-h-[420px] min-w-0 flex-col overflow-hidden lg:sticky lg:top-20">
         <div ref={log} className="relative min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5" aria-live="polite" data-chat-log>
           {!index && (
-            <div className="flex items-center gap-2 text-[14px] text-muted">
-              <Loader2 size={16} className="animate-spin" /> {t("chat.reading", { pct: Math.round(reading * 100) })}
+            <div className="flex flex-col items-center gap-3 py-10 text-[14px] text-muted">
+              <span aria-hidden className="orb" style={{ "--s": "72px" } as React.CSSProperties}><i /></span>
+              <span className="tabular">{t("chat.reading", { pct: Math.round(reading * 100) })}</span>
             </div>
           )}
           {index && !turns.length && here !== false && (
-            <div className="space-y-4">
-              <p className="text-[15px] text-muted">{t("chat.empty", { n: pages })}</p>
-              <div className="space-y-2">
-                <p className="text-[12px] font-medium uppercase tracking-wide text-muted">{t("chat.try")}</p>
-                <div className="flex flex-wrap gap-2">
-                  {(["chat.q.about", "chat.q.points", "chat.q.figures"] as const).map((k) => (
-                    <button key={k} type="button" data-suggestion className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-start text-[14px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink" disabled={busy || here === null} onClick={() => void ask(t(k))}>{t(k)}</button>
-                  ))}
-                </div>
+            <div className="flex min-h-full flex-col">
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6 text-center">
+                <span aria-hidden className="orb" style={{ "--s": "64px" } as React.CSSProperties}><i /></span>
+                <p className="blur-in max-w-[34ch] text-pretty text-[16px] text-ink-2">{t("chat.empty", { n: pages })}</p>
+              </div>
+              {/* Questions to start with, drifting past in two rows; each row is
+                  there twice so it loops, the copy hidden from screen readers. */}
+              <div role="group" aria-label={t("chat.try")} className="drift pb-1">
+                {[SUGGEST.slice(0, 3), SUGGEST.slice(3)].map((row, r) => (
+                  <div key={r} className="drift-row">
+                    {[...row, ...row].map((k, j) => (
+                      <button key={j} type="button" data-suggestion={j < row.length || undefined} aria-hidden={j >= row.length || undefined} tabIndex={j >= row.length ? -1 : undefined}
+                        className="chip" disabled={busy || here === null} onClick={() => void ask(t(k))}>{t(k)}</button>
+                    ))}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -147,7 +158,7 @@ export function ChatView({ file, options, defs, onOption, onError }: {
           {note && <p className="text-[13px] text-muted" data-ocr-note={note}>{t(`res.${note}`)}</p>}
           {turns.map((x, i) => (
             <div key={i} className={`space-y-3 ${i === turns.length - 1 ? "min-h-[calc(100%-1rem)]" : ""}`} data-turn={i}>
-              <p className="ms-auto w-fit max-w-[85%] break-words rounded-2xl rounded-ee-md bg-[color-mix(in_oklab,var(--brand)_10%,var(--surface))] px-3.5 py-2 text-[15px]">{x.q}</p>
+              <p className="blur-in ms-auto w-fit max-w-[85%] break-words rounded-2xl rounded-ee-md bg-[color-mix(in_oklab,var(--brand)_10%,var(--surface))] px-3.5 py-2 text-[15px]">{x.q}</p>
               <div className="min-w-0 text-[15px] leading-relaxed text-ink [overflow-wrap:anywhere]" data-answer={(x.a || x.cloudDown || x.limited || x.failed) && !(busy && i === turns.length - 1) ? "done" : "pending"}>
                 {x.limited ? (
                   <div className="space-y-2" data-limited={x.limited}>
@@ -168,22 +179,23 @@ export function ChatView({ file, options, defs, onOption, onError }: {
                 ) : x.a ? (
                   <p className="text-muted">{t("chat.notFound")}</p>
                 ) : (
-                  <Loader2 size={16} className="animate-spin text-muted" />
+                  <span aria-hidden className="orb" style={{ "--s": "40px" } as React.CSSProperties}><i /></span>
                 )}
                 {x.a && x.a.parts.length > 0 && !(busy && i === turns.length - 1) ? <p className="mt-2 text-[12px] text-muted" data-answered-by="cloud">{t("chat.by.server")}</p> : null}
               </div>
             </div>
           ))}
         </div>
-        <form className="flex shrink-0 gap-2 border-t border-line p-3" onSubmit={(e) => { e.preventDefault(); const question = q.trim(); if (question && index && !busy) { setQ(""); void ask(question); } }}>
+        {/* The question box: a glass pill, a round button at its end. */}
+        <form className="glass m-3 mt-0 flex shrink-0 items-center gap-1.5 rounded-full p-1.5 ps-4 focus-within:border-(--brand)" onSubmit={(e) => { e.preventDefault(); const question = q.trim(); if (question && index && !busy) { setQ(""); void ask(question); } }}>
           <label className="sr-only" htmlFor="chat-q">{t("chat.ask")}</label>
-          <input id="chat-q" className="field h-11 flex-1 text-[15px]" placeholder={t("chat.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!index || here === false} autoComplete="off" />
+          <input id="chat-q" className="h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted" placeholder={t("chat.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!index || here === false} autoComplete="off" />
           {busy ? (
-            <button type="button" className="btn btn-quiet" onClick={() => stop.current?.abort()} aria-label={t("chat.stop")}>
-              <Square size={16} />
+            <button type="button" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-2 text-ink transition-[scale] active:scale-90" onClick={() => stop.current?.abort()} aria-label={t("chat.stop")}>
+              <Square size={15} />
             </button>
           ) : (
-            <button className="btn btn-primary" disabled={!index || here === false || !q.trim()} aria-label={t("chat.send")}><ArrowUp size={18} /></button>
+            <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-(--brand) text-[#000] transition-[scale,opacity] active:scale-90 disabled:opacity-40" disabled={!index || here === false || !q.trim()} aria-label={t("chat.send")}><ArrowUp size={18} /></button>
           )}
         </form>
       </section>

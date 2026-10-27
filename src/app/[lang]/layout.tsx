@@ -76,6 +76,8 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
         <script dangerouslySetInnerHTML={{ __html: DEVICE_SCRIPT }} />
       </head>
       <body className="flex min-h-dvh flex-col">
+        {/* Soft light drifting behind the page (globals.css .ambient). */}
+        <div aria-hidden className="ambient"><i /><i /></div>
         <I18nProvider locale={lang} dict={clientDict(dict)}>
           <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2">
             {dict["nav.skip"]}

@@ -11,6 +11,7 @@ import { HomeBoard } from "@/components/HomeBoard";
 import { InstallBanner } from "@/components/InstallGuide";
 import { OpenFab } from "@/components/OpenFab";
 import { Mascot } from "@/components/Logo";
+import { Greeting } from "@/components/Greeting";
 import { Friend, HeroScene, SleepyCloud, Sparkle } from "@/components/Studio";
 import { format, getDictionary } from "@/lib/i18n/dictionary";
 import { hasLocale } from "@/lib/i18n/locales";
@@ -52,6 +53,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
             {/* The exception, said where the claim is: AI can use the server. */}
             <Link href={`/${lang}/privacy`} className="pill text-ink-2 hover:text-ink">{t["home.aiBadge"]}</Link>
           </div>
+          <p data-app-only className="mb-1"><Greeting /></p>
           <h1 data-app-title className="display hero-title relative mt-6 max-w-[14ch] text-[3rem] sm:text-[4.5rem] lg:text-[5.4rem]">
             <span data-web-only><Words text={t["home.title"]} /></span>
             <span data-app-only>{t["app.hello"]}</span>
