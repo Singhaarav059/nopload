@@ -13,9 +13,30 @@ import { toolById, type Tool } from "@/lib/tools";
 // What Chrome hands an installed app opened from a file ("Open with"), per
 // the manifest's file_handlers.
 type LaunchParams = { files: readonly FileSystemHandle[] };
+// The Android app's own web view (android/app/src/main/java/dev/pages/nopload/WebApp.java),
+// which has no launchQueue, hands over the files Android opened or shared with
+// it once, as base64: { launched, files: [{ name, type, data }] }.
+type AppFiles = { launched: boolean; files: { name: string; type: string; data: string }[] };
 declare global {
   interface Window {
     launchQueue?: { setConsumer(consumer: (params: LaunchParams) => void): void };
+    NoploadApp?: { takeFiles(): string };
+  }
+}
+
+function fromApp(): { files: File[]; launched: boolean } | null {
+  try {
+    const got = window.NoploadApp ? (JSON.parse(window.NoploadApp.takeFiles()) as AppFiles) : null;
+    if (!got?.files?.length) return null;
+    const files = got.files.map((f) => {
+      const bin = atob(f.data);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new File([bytes], f.name, { type: f.type === "null" ? "" : f.type });
+    });
+    return { files, launched: !!got.launched };
+  } catch {
+    return null;
   }
 }
 
@@ -81,6 +102,8 @@ export function OpenFiles() {
       }
       return shared.length ? arrive(shared, launched) : live && setFiles((f) => f ?? []);
     });
+    const app = fromApp();
+    if (app) void arrive(app.files, app.launched);
     window.launchQueue?.setConsumer((params) => {
       const handles = params.files.filter((h): h is FileSystemFileHandle => h.kind === "file");
       void Promise.all(handles.map((h) => h.getFile())).then((f) => arrive(f, true));

@@ -11,4 +11,6 @@
     <string name="crash_copied">Copied</string>
     <string name="crash_share">Share</string>
     <string name="crash_open">Open</string>
+    <string name="saved">%1$s saved to Downloads</string>
+    <string name="save_failed">The file couldn\'t be saved.</string>
 </resources>

@@ -11,16 +11,33 @@ It exists only for what an installed web app can't declare on Android:
   `share_target`, handled by the service worker as for the installed web app.
 - **Links** to nopload.pages.dev open in the app.
 
-There is no app code: the whole app is `LauncherActivity` from Google's
+The app is `LauncherActivity` from Google's
 [android-browser-helper](https://github.com/GoogleChrome/android-browser-helper),
-configured in `app/src/main/AndroidManifest.xml`. PDF work stays in the site;
-every deploy of the site updates the app.
+configured in `app/src/main/AndroidManifest.xml`, with a little code of its
+own. PDF work stays in the site; every deploy of the site updates the app.
+
+## No browser bar, ever
+
+Chrome shows the site with a browser bar on top until it has confirmed that
+the site and the app belong together (Digital Asset Links, below): on a first
+launch, on a slow or missing connection, after a Chrome update. So the app
+never hands over before that (`Launcher.java`): it shows its launch screen
+and asks Chrome to confirm, in the background. Confirmed, the site opens full
+screen in Chrome. Not confirmed, no answer within 4 seconds, or no browser
+that can show it full screen, it opens in the app's own web view
+(`WebApp.java`) instead, with the launch screen kept until the first page has
+drawn. The web view does what Chrome would: picking files, saving results to
+Downloads/Nopload, the camera for the scanner, other sites in the browser, and
+"Open with" and the share sheet, whose files `/en/open` takes through
+`window.NoploadApp` (`src/components/OpenFiles.tsx`). Read aloud uses the
+browser's voices, which a web view doesn't have.
 
 ## Full screen needs Digital Asset Links
 
 `public/.well-known/assetlinks.json` names this package and the SHA-256 of the
 key it's signed with. If they don't match (a different key, or the site on
-another domain), Chrome still opens the app but with a browser bar on top.
+another domain), Chrome can't confirm the app, and the site always opens in the
+app's web view.
 
 Moving to a custom domain: add it to `launch_url`, `file_url`,
 `asset_statements` and the https intent filter, serve the same
