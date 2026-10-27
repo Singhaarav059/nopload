@@ -9,7 +9,6 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -73,7 +72,6 @@ public class WebApp extends Activity {
     private FrameLayout root;
     private View offline;
     private int bg;
-    private boolean dark;
     private ValueCallback<Uri[]> picking;
     private PermissionRequest asking;
     // Files Android handed over, given to the page once, and whether they
@@ -98,8 +96,8 @@ public class WebApp extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        bg = getResources().getColor(dark ? R.color.ink : R.color.paper, getTheme());
+        // Black, as the site is unless light is chosen there.
+        bg = getResources().getColor(R.color.ink, getTheme());
         getWindow().setStatusBarColor(bg);
         getWindow().setNavigationBarColor(bg);
 
@@ -261,7 +259,7 @@ public class WebApp extends Activity {
         logo.setImageResource(R.drawable.splash);
         int size = (int) (96 * getResources().getDisplayMetrics().density);
         box.addView(logo, new LinearLayout.LayoutParams(size, size));
-        int ink = getResources().getColor(dark ? R.color.paper : R.color.ink, getTheme());
+        int ink = getResources().getColor(R.color.paper, getTheme());
         TextView title = new TextView(this);
         title.setText(R.string.offline_title);
         title.setTextSize(20);

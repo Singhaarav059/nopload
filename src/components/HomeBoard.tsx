@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BookOpenText, LayoutGrid } from "lucide-react";
+import { ArrowRight, BookOpenText } from "lucide-react";
 import { useI18n } from "./I18n";
 import { IntentLink } from "./IntentLink";
 import { ToolIcon } from "./ToolIcon";
@@ -12,14 +12,11 @@ import { handOffTo } from "@/lib/handoff";
 import { TOOLS, toolById, type ToolId } from "@/lib/tools";
 
 const QUICK: ToolId[] = ["merge", "compress", "edit", "sign", "pdfToWord", "split"];
-// The app shows one more, then a tile for all the tools (its Tools sheet).
-const APP_MORE: ToolId = "jpgToPdf";
 
 // The home page as a desk of cards: the document being read, to go on with
 // it; the tools most used, a tap away; and two figures that say what this
 // is: how many tools run on the device, and what it costs (nothing). The
-// app leaves the figures out and ends the tools with one for all of them,
-// so its home fits on a screen.
+// app keeps only the reading card: its tools follow (ToolGrid.tsx).
 export function HomeBoard() {
   const { t, href } = useI18n();
   const router = useRouter();
@@ -77,7 +74,7 @@ export function HomeBoard() {
         <span className="mt-auto pt-4 text-pretty text-[14px] font-medium text-ink-2">{t("home.promise1")}</span>
       </div>
 
-      <nav aria-label={t("home.popular")} className="board-card board-quick">
+      <nav data-web-only aria-label={t("home.popular")} className="board-card board-quick">
         <span className="board-eyebrow text-muted">{t("home.popular")}</span>
         <ul>
           {QUICK.map((id) => {
@@ -91,18 +88,6 @@ export function HomeBoard() {
               </li>
             );
           })}
-          <li data-app-only>
-            <IntentLink href={href(`/${toolById(APP_MORE).slug}`)} className="board-tool">
-              <ToolIcon tool={toolById(APP_MORE)} size={44} />
-              <span className="line-clamp-2 text-center text-[12.5px] font-medium leading-tight">{t(`tool.${APP_MORE}.name`)}</span>
-            </IntentLink>
-          </li>
-          <li data-app-only>
-            <button type="button" className="board-tool w-full" onClick={() => window.dispatchEvent(new CustomEvent("nopload:sheet", { detail: "tools" }))}>
-              <span className="board-all" aria-hidden><LayoutGrid size={20} strokeWidth={1.75} /></span>
-              <span className="line-clamp-2 text-center text-[12.5px] font-medium leading-tight">{t("app.tools")}</span>
-            </button>
-          </li>
         </ul>
       </nav>
     </section>

@@ -27,7 +27,7 @@ export function Shuffler({ files, value }: Props) {
   const page = (k: number, side: number, x: number, y: number, r: number) => (
     <g key={k} transform={`rotate(${r} ${x + W / 2} ${y + H / 2})`}>
       <Sheet x={x} y={y} w={W} h={H} pic={pics[side] ?? pics[0]} />
-      <rect x={x + W - 24} y={y + 6} width="18" height="5" rx="2.5" fill={side ? "#a194ff" : url("accentv")} />
+      <rect x={x + W - 24} y={y + 6} width="18" height="5" rx="2.5" fill={side ? "#ffb38a" : url("accentv")} />
     </g>
   );
   return (
@@ -259,11 +259,11 @@ export function Patcher({ files, value }: Props) {
       <g transform={`translate(${24 * (1 - m)} ${-14 * (1 - m)}) rotate(${14 * (1 - m)} 200 80)`}>
         <g clipPath={`url(#${id}-piece)`}>{sheet}</g>
       </g>
-      {tape > 0 && <line x1={a.x} y1={a.y} x2={end.x} y2={end.y} stroke="#b9adff" strokeOpacity="0.5" strokeWidth="20" strokeLinecap="square" />}
+      {tape > 0 && <line x1={a.x} y1={a.y} x2={end.x} y2={end.y} stroke="#ffc9a6" strokeOpacity="0.5" strokeWidth="20" strokeLinecap="square" />}
       {tape > 0 && tape < 1 && (
         <g transform={`translate(${end.x} ${end.y})`}>
           <circle r="17" fill={url("body")} filter={url("soft")} />
-          <circle r="11" fill="#b9adff" />
+          <circle r="11" fill="#ffc9a6" />
           <circle r="4.5" fill={url("steel")} />
         </g>
       )}
@@ -300,7 +300,7 @@ export function Cabinet({ files, value }: Props) {
       </defs>
       <Body x={70} y={26} w={160} h={268} r={14} />
       <rect x="84" y="36" width="132" height={Math.max(4, front - 36)} rx="4" style={fill("--m-cavity")} />
-      {[0, 1, 2, 3, 4].map((i) => <rect key={i} x={92 + i * 24} y={front - 12} width="18" height="10" rx="2" fill={["#5a46e0", "#a194ff", "#ff7a59", "#8a9099", "#c3bfcd"][i]} opacity={open > 0.1 ? 0.8 : 0} />)}
+      {[0, 1, 2, 3, 4].map((i) => <rect key={i} x={92 + i * 24} y={front - 12} width="18" height="10" rx="2" fill={["#ff6a13", "#ffb38a", "#ff7a59", "#8a9099", "#c4c1bc"][i]} opacity={open > 0.1 ? 0.8 : 0} />)}
       <g clipPath={`url(#${id}-in)`}>
         <Sheet x={90} y={-160 + drop * 200} w={120} h={156} pic={pic} />
       </g>

@@ -9,10 +9,23 @@ import { localizePath } from "@/lib/i18n/slugs";
 type Ctx = { locale: Locale; dict: Dict };
 const I18nContext = createContext<Ctx | null>(null);
 
+// The language remembered before this page remembered its own: what
+// /{lang}/open follows (OpenFiles.tsx), which can start after this has run.
+let before: string | null | undefined;
+export const languageBefore = () => {
+  if (before !== undefined) return before;
+  try {
+    return localStorage.getItem("locale");
+  } catch {
+    return null;
+  }
+};
+
 export function I18nProvider({ locale, dict, children }: Ctx & { children: React.ReactNode }) {
   // Remembered for the static build's start page; the server proxy uses a cookie.
   useEffect(() => {
     try {
+      before = localStorage.getItem("locale");
       localStorage.setItem("locale", locale);
     } catch {
       /* storage blocked */

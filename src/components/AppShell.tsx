@@ -20,8 +20,9 @@ import { haptic, subscribeDevice, type Form, type Nav, type Os } from "@/lib/dev
 
 // The installed app's frame (data-app on <html>, src/lib/device.ts). Each
 // system gets the navigation its own apps have:
-//   iPhone        a frosted tab bar, icons over small labels
-//   Android phone a navigation bar, a pill behind the chosen icon
+//   phones        no bar: the home page is the hub (its tools, search and
+//                 the orange Open button, OpenFab.tsx), the header has Back,
+//                 Reader and Settings (Header.tsx)
 //   iPad, Mac     a sidebar of the tools by family
 //   Android tablet, ChromeOS  a navigation rail
 //   Windows       a navigation pane, the chosen item marked at its edge
@@ -76,13 +77,11 @@ export function AppShell() {
   }
   useRipple(os === "android");
   useHeaderOnScroll(app && form === "phone");
-  // Until the app has started (and in the page as built), the tab bar is
-  // there anyway, hidden unless the page turns out to be the app on a phone
-  // (app.css): the app's first frame already has it, instead of it arriving.
-  if (!app) return <TabBar os={null} open={setSheet} sheet={null} pre />;
+  useMascotGaze();
+  if (!app) return null;
   return (
     <>
-      {nav === "tabs" ? <TabBar os={os} open={setSheet} sheet={sheet} /> : <Side nav={nav} open={setSheet} />}
+      {nav !== "tabs" && <Side nav={nav} open={setSheet} />}
       {(["tools", "settings"] as const).map((kind) =>
         warm || sheet === kind ? <BottomSheet key={kind} os={os} phone={form === "phone"} kind={kind} open={sheet === kind} close={() => setSheet(null)} /> : null,
       )}
@@ -103,38 +102,6 @@ function useTabs() {
     { id: "flows", label: t("nav.workflows"), icon: Workflow, href: href("/workflows"), current: at(href("/workflows")) },
     { id: "settings", label: t("app.settings"), icon: Settings2, sheet: "settings" as const, current: false },
   ];
-}
-
-function TabBar({ os, open, sheet, pre }: { os: Os | null; open: (s: Sheet) => void; sheet: Sheet; pre?: boolean }) {
-  const { t } = useI18n();
-  const tabs = useTabs();
-  const material = os === "android";
-  // The highlight slides to the chosen tab (app.css, phones).
-  const at = tabs.findIndex((tab) => (sheet ? sheet === tab.sheet : !!tab.current));
-  return (
-    <nav aria-label={t("app.nav")} data-tabbar={pre ? "pre" : material ? "material" : "ios"} className="app-tabbar">
-      <span aria-hidden className="app-tab-slide" data-none={at < 0 || undefined} style={{ "--at": Math.max(0, at) } as React.CSSProperties} />
-      {tabs.map((tab) => {
-        // A sheet tab is lit while its sheet is open, or while on one of its pages (Tools on a tool page).
-        const on = sheet ? sheet === tab.sheet : !!tab.current;
-        const body = (
-          <>
-            <span className="app-tab-icon"><tab.icon size={24} strokeWidth={on ? 2.1 : 1.75} /></span>
-            <span className="app-tab-label">{tab.label}</span>
-          </>
-        );
-        return tab.href ? (
-          <Link key={tab.id} href={tab.href} data-tab={tab.id} aria-current={on ? "page" : undefined} className="app-tab" onClick={(e) => { haptic(); open(null); if (tab.id === "home") goHome(e, tab.href); }}>
-            {body}
-          </Link>
-        ) : (
-          <button key={tab.id} type="button" data-tab={tab.id} aria-expanded={on} aria-current={on ? "page" : undefined} className="app-tab" onClick={() => { haptic(); open(on ? null : tab.sheet!); }}>
-            {body}
-          </button>
-        );
-      })}
-    </nav>
-  );
 }
 
 // Phones: the header is clear over the top of the page and glass once it
@@ -168,12 +135,42 @@ function useHeaderOnScroll(on: boolean) {
   }, [on]);
 }
 
+// The mascots' eyes (Logo.tsx) follow the finger or the pointer, and go
+// back to looking around a moment after it stops.
+function useMascotGaze() {
+  useEffect(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let idle = 0;
+    const move = (e: PointerEvent) => {
+      for (const m of document.querySelectorAll<HTMLElement>(".mascot")) {
+        const r = m.getBoundingClientRect();
+        if (!r.width) continue;
+        const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height * 0.45);
+        const d = Math.hypot(dx, dy) || 1;
+        const k = Math.min(1, d / 160);
+        m.style.setProperty("--gx", `${((dx / d) * 1.1 * k).toFixed(2)}px`);
+        m.style.setProperty("--gy", `${((dy / d) * 1.1 * k).toFixed(2)}px`);
+        m.dataset.gaze = "";
+      }
+      clearTimeout(idle);
+      idle = window.setTimeout(() => document.querySelectorAll<HTMLElement>(".mascot").forEach((m) => delete m.dataset.gaze), 2200);
+    };
+    addEventListener("pointermove", move, { passive: true });
+    addEventListener("pointerdown", move, { passive: true });
+    return () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerdown", move);
+      clearTimeout(idle);
+    };
+  }, []);
+}
+
 // Android's ripple: where the finger lands on a control, for the CSS in app.css.
 function useRipple(on: boolean) {
   useEffect(() => {
     if (!on) return;
     const down = (e: PointerEvent) => {
-      const el = (e.target as Element).closest?.<HTMLElement>(".btn, .icon-btn, .app-tab, .app-row");
+      const el = (e.target as Element).closest?.<HTMLElement>(".btn, .icon-btn, .app-tab, .app-row, .fab");
       if (!el) return;
       const r = el.getBoundingClientRect();
       el.style.setProperty("--rx", `${e.clientX - r.left}px`);

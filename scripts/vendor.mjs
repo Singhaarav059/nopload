@@ -354,6 +354,8 @@ const licOut = join(licRoot, "staging");
   // The site's own font, which Next serves from /_next.
   writeFileSync(join(licOut, "geist.txt"), section("Geist (OFL-1.1), https://github.com/vercel/geist-font", readFileSync(join(process.cwd(), "src/app/fonts/LICENSE-Geist.txt"), "utf8").trim()));
   json.components.push({ name: "Geist", file: "geist.txt", packages: [], includes: [{ name: "Geist", license: "OFL-1.1", source: "https://github.com/vercel/geist-font" }] });
+  writeFileSync(join(licOut, "caveat.txt"), section("Caveat (OFL-1.1), https://github.com/googlefonts/caveat", readFileSync(join(process.cwd(), "src/app/fonts/LICENSE-Caveat.txt"), "utf8").trim()));
+  json.components.push({ name: "Caveat", file: "caveat.txt", packages: [], includes: [{ name: "Caveat", license: "OFL-1.1", source: "https://github.com/googlefonts/caveat" }] });
 
   // Libraries in the page code: the dependency tree of every runtime
   // dependency except server-only ones, less the packages listed above.

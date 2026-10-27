@@ -2,9 +2,9 @@
 
 // The parts the tool machines share (src/components/machines/Machines.tsx):
 // the job's progress as a smooth drive, the pictures of the user's pages,
-// and what they are built from: a body in the theme's colours (a cool
-// violet-grey in light, graphite in dark; globals.css --m-*), brushed metal,
-// steel, a display, a knurled knob in the site's violet. Drawn in SVG, in a
+// and what they are built from: a body in the theme's colours (a
+// warm grey in light, graphite in dark; globals.css --m-*), brushed metal,
+// steel, a display, a knurled knob in the site's orange. Drawn in SVG, in a
 // 300 by 300 box.
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -87,11 +87,11 @@ export function usePictures(files: File[] | undefined, n = 1) {
   return pics;
 }
 
-// The machines' one accent, the site's own violet: knobs, handles and lamps.
+// The machines' one accent, the site's own orange: knobs, handles and lamps.
 // Three shades, light to deep. Other colours only where they mean something:
 // green for done, red for stop or ink, a file format's own colour.
 type Accent = readonly [string, string, string];
-const BRAND: Accent = ["#b9adff", "#5a46e0", "#3a2bb0"];
+const BRAND: Accent = ["#ffc9a6", "#ff6a13", "#c2410c"];
 
 // A machine's id for its gradients and filters, unique on the page.
 export const useSvgId = () => "mc" + useId().replace(/[^a-zA-Z0-9]/g, "");

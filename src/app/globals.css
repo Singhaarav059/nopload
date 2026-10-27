@@ -1,29 +1,29 @@
 @import "tailwindcss";
 
-/* Soft studio. A warm white room, one violet for actions, and a pastel per
-   family of tools, so a colour always means the same kind of job:
+/* Black and orange. A black room (or a warm white one in light), one
+   orange for actions and for the mascot, and a pastel per family of tools, so a colour always means the same kind of job:
    mint organises, butter optimises, peach converts to PDF, sky converts
    from it, lilac edits, rose protects. */
 :root {
-  --bg: #fbf9f6;
+  --bg: #f5f4f1;
   --surface: #ffffff;
-  --surface-2: #f4f1ec;
-  --ink: #211d2e;
-  --ink-2: #4b4658;
-  --muted: #6b6577;
-  --line: #ece7e0;
-  --line-strong: #dad3c9;
-  --brand: #5a46e0;
-  --brand-ink: #ffffff;
-  --brand-hover: #4935cf;
-  --accent: #5a46e0;
-  --coral: #ff7a59;
-  --blush: #ffb4a8;
+  --surface-2: #ecebe7;
+  --ink: #0d0d0d;
+  --ink-2: #3a3a3a;
+  --muted: #666462;
+  --line: #e4e2dd;
+  --line-strong: #d0cdc6;
+  --brand: #ff6a13;
+  --brand-ink: #000000;
+  --brand-hover: #ff7f33;
+  --accent: #c2410c;
+  --coral: #ff6a13;
+  --blush: #ffb38a;
   --danger: #cf3838;
   --success: #1d8656;
-  --focus: #5a46e0;
-  --shadow: 0 1px 2px rgb(33 29 46 / 0.04), 0 10px 28px -12px rgb(64 48 140 / 0.16);
-  --shadow-lift: 0 2px 4px rgb(33 29 46 / 0.05), 0 28px 56px -20px rgb(64 48 140 / 0.28);
+  --focus: #ea580c;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 10px 28px -12px rgb(0 0 0 / 0.14);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.06), 0 28px 56px -20px rgb(0 0 0 / 0.24);
   --radius: 20px;
 
   --organize-tint: #dcf3e6;
@@ -56,23 +56,23 @@
    pastels become glows: a faint tint behind a brighter glyph. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #13111a;
-    --surface: #1c1925;
-    --surface-2: #26222f;
-    --ink: #f2eff8;
-    --ink-2: #cbc5d8;
-    --muted: #9b94aa;
-    --line: #2b2737;
-    --line-strong: #3c364b;
-    --brand: #9c8cff;
-    --brand-ink: #14111d;
-    --brand-hover: #b3a7ff;
-    --accent: #ab9dff;
-    --coral: #ff9677;
-    --blush: #b46a62;
+    --bg: #000000;
+    --surface: #121212;
+    --surface-2: #1c1c1c;
+    --ink: #f7f7f7;
+    --ink-2: #c9c9c9;
+    --muted: #8e8e8e;
+    --line: #232323;
+    --line-strong: #353535;
+    --brand: #ff6a13;
+    --brand-ink: #000000;
+    --brand-hover: #ff8540;
+    --accent: #ff8540;
+    --coral: #ff6a13;
+    --blush: #a85a35;
     --danger: #f27272;
     --success: #55c891;
-    --focus: #ab9dff;
+    --focus: #ff8540;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 14px 36px -14px rgb(0 0 0 / 0.7);
     --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 60px -20px rgb(0 0 0 / 0.8);
     --organize-tint: rgb(85 200 145 / 0.14);
@@ -90,23 +90,23 @@
   }
 }
 :root[data-theme="dark"] {
-  --bg: #13111a;
-  --surface: #1c1925;
-  --surface-2: #26222f;
-  --ink: #f2eff8;
-  --ink-2: #cbc5d8;
-  --muted: #9b94aa;
-  --line: #2b2737;
-  --line-strong: #3c364b;
-  --brand: #9c8cff;
-  --brand-ink: #14111d;
-  --brand-hover: #b3a7ff;
-  --accent: #ab9dff;
-  --coral: #ff9677;
-  --blush: #b46a62;
+  --bg: #000000;
+  --surface: #121212;
+  --surface-2: #1c1c1c;
+  --ink: #f7f7f7;
+  --ink-2: #c9c9c9;
+  --muted: #8e8e8e;
+  --line: #232323;
+  --line-strong: #353535;
+  --brand: #ff6a13;
+  --brand-ink: #000000;
+  --brand-hover: #ff8540;
+  --accent: #ff8540;
+  --coral: #ff6a13;
+  --blush: #a85a35;
   --danger: #f27272;
   --success: #55c891;
-  --focus: #ab9dff;
+  --focus: #ff8540;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 14px 36px -14px rgb(0 0 0 / 0.7);
   --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 60px -20px rgb(0 0 0 / 0.8);
   --organize-tint: rgb(85 200 145 / 0.14);
@@ -926,37 +926,26 @@ select.field {
   }
 }
 
-/* ── The signature: one burst of colour (src/app/[lang]/page.tsx, the home
-   board, the install banner). Magenta, violet, blue and a warm orange,
-   layered as still gradients: drawn once, nothing animated, nothing blurred
-   live, so it costs nothing while scrolling. */
+/* ── The signature: the orange, flat, as a card (the home board, the
+   install banner). The wash behind the hero is a faint orange glow. */
 .aurora, .board-card.aurora {
-  color: #fff;
+  color: #000;
   border-color: transparent;
-  background:
-    radial-gradient(120% 95% at 0% 0%, #ff4fc4 0%, transparent 58%),
-    radial-gradient(110% 100% at 100% 0%, #6b5cff 0%, transparent 62%),
-    radial-gradient(120% 120% at 100% 100%, #2d7bff 0%, transparent 60%),
-    radial-gradient(100% 100% at 0% 100%, #ff8b47 0%, transparent 56%),
-    #1d1534;
+  background: radial-gradient(120% 90% at 100% 0%, #ff8a3d 0%, transparent 60%), var(--brand);
 }
 /* Edge to edge and up behind the header, so it has no edges of its own: it
    only fades out downwards. (body clips the sideways overflow 100vw makes
    where a scrollbar takes room.) */
 .aurora-wash {
-  position: absolute; top: -120px; left: calc(50% - 50vw); width: 100vw; height: 880px; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(42% 46% at 12% 18%, #ff4fc4 0%, transparent 70%),
-    radial-gradient(40% 48% at 58% 6%, #6b5cff 0%, transparent 72%),
-    radial-gradient(38% 44% at 96% 30%, #2d7bff 0%, transparent 70%),
-    radial-gradient(30% 34% at 30% 62%, #ff8b47 0%, transparent 70%);
-  opacity: 0.2;
+  position: absolute; top: -120px; left: calc(50% - 50vw); width: 100vw; height: 760px; z-index: 0; pointer-events: none;
+  background: radial-gradient(40% 50% at 80% 10%, var(--brand) 0%, transparent 70%);
+  opacity: 0.1;
   -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 96%);
   mask-image: linear-gradient(to bottom, #000 35%, transparent 96%);
 }
 body { overflow-x: clip; }
-:root[data-theme="dark"] .aurora-wash { opacity: 0.32; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .aurora-wash { opacity: 0.32; } }
+:root[data-theme="dark"] .aurora-wash { opacity: 0.18; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .aurora-wash { opacity: 0.18; } }
 :root[data-app] .aurora-wash { height: 640px; }
 [data-app-hero] { z-index: 1; }
 .hero-title { letter-spacing: calc(var(--display-track) - 0.01em); }
@@ -986,41 +975,41 @@ body { overflow-x: clip; }
 }
 .board-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; opacity: 0.9; }
 .board-title { display: block; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 650; letter-spacing: -0.035em; line-height: 1.05; }
-.board-bar { display: block; height: 4px; margin-top: 14px; border-radius: 4px; background: rgb(255 255 255 / 0.25); overflow: hidden; }
-.board-bar > span { display: block; height: 100%; border-radius: 4px; background: #fff; }
-.board-go { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: #fff; color: #1d1534; }
+.board-bar { display: block; height: 4px; margin-top: 14px; border-radius: 4px; background: rgb(0 0 0 / 0.18); overflow: hidden; }
+.board-bar > span { display: block; height: 100%; border-radius: 4px; background: #000; }
+.board-go { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: #000; color: #fff; }
 .board-tool { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px; border-radius: 18px; color: var(--ink); transition: background 200ms, scale 200ms; }
 .board-tool:hover { background: var(--surface-2); }
 .board-tool:active { scale: 0.96; }
 
 /* The install banner wears the signature colour. */
 .install-banner.aurora { border: 0; }
-.install-banner.aurora .text-ink-2 { color: rgb(255 255 255 / 0.85); }
-.install-banner.aurora .btn-primary { background: #fff; color: #1d1534; }
-.install-banner.aurora .icon-btn { color: #fff; }
+.install-banner.aurora .text-ink-2 { color: rgb(0 0 0 / 0.75); }
+.install-banner.aurora .btn-primary { background: #000; color: #fff; }
+.install-banner.aurora .icon-btn { color: #000; }
 
 /* The editor's handles on a touch screen: the dot stays small, the finger's target doesn't. */
 @media (pointer: coarse) {
   [data-handle]::after { content: ""; position: absolute; inset: -8px; }
 }
 
-/* The tool machines' colours (src/components/machines): a cool violet-grey
-   body in light, a violet graphite in dark, both a step off the page so the
-   white paper on them stands out; the site's violet for knobs and handles. */
+/* The tool machines' colours (src/components/machines): a warm grey body in
+   light, a graphite in dark, both a step off the page so the white paper on
+   them stands out; the site's orange for knobs and handles. */
 .machine, .sealer {
-  --m-body-1: #f4f3f8; --m-body-2: #e4e2ea; --m-body-3: #d2cfda; --m-side-1: #dcd9e3; --m-side-2: #c3bfcd;
-  --m-edge: rgb(255 255 255 / 0.9); --m-line: rgb(33 29 46 / 0.14); --m-slot: #2a2733; --m-cavity: #2b2834; --m-mat: #36323f; --m-pad: #ebe9f0;
-  --m-shadow: #211d2e; --m-shadow-o: 0.2;
+  --m-body-1: #f5f4f2; --m-body-2: #e5e3e0; --m-body-3: #d3d0cc; --m-side-1: #dcdad6; --m-side-2: #c4c1bc;
+  --m-edge: rgb(255 255 255 / 0.9); --m-line: rgb(0 0 0 / 0.14); --m-slot: #262626; --m-cavity: #282828; --m-mat: #333333; --m-pad: #ecebe9;
+  --m-shadow: #000; --m-shadow-o: 0.2;
 }
 :root[data-theme="dark"] :is(.machine, .sealer) {
-  --m-body-1: #48445a; --m-body-2: #363345; --m-body-3: #282633; --m-side-1: #312e3d; --m-side-2: #22202b;
-  --m-edge: rgb(255 255 255 / 0.12); --m-line: rgb(0 0 0 / 0.5); --m-slot: #0d0c11; --m-cavity: #15131b; --m-mat: #1b1922; --m-pad: #2c2938;
+  --m-body-1: #3f3f3f; --m-body-2: #303030; --m-body-3: #232323; --m-side-1: #2b2b2b; --m-side-2: #1d1d1d;
+  --m-edge: rgb(255 255 255 / 0.12); --m-line: rgb(0 0 0 / 0.5); --m-slot: #0b0b0b; --m-cavity: #131313; --m-mat: #191919; --m-pad: #2a2a2a;
   --m-shadow: #000; --m-shadow-o: 0.6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) :is(.machine, .sealer) {
-    --m-body-1: #48445a; --m-body-2: #363345; --m-body-3: #282633; --m-side-1: #312e3d; --m-side-2: #22202b;
-    --m-edge: rgb(255 255 255 / 0.12); --m-line: rgb(0 0 0 / 0.5); --m-slot: #0d0c11; --m-cavity: #15131b; --m-mat: #1b1922; --m-pad: #2c2938;
+    --m-body-1: #3f3f3f; --m-body-2: #303030; --m-body-3: #232323; --m-side-1: #2b2b2b; --m-side-2: #1d1d1d;
+    --m-edge: rgb(255 255 255 / 0.12); --m-line: rgb(0 0 0 / 0.5); --m-slot: #0b0b0b; --m-cavity: #131313; --m-mat: #191919; --m-pad: #2a2a2a;
     --m-shadow: #000; --m-shadow-o: 0.6;
   }
 }
@@ -1043,11 +1032,11 @@ body { overflow-x: clip; }
 .sealer-lcd-air::after { content: ""; position: absolute; inset: 0; border-radius: 2px; background: repeating-linear-gradient(90deg, #d4ccff 0 7px, transparent 7px 9px); clip-path: inset(0 calc((1 - var(--air)) * 100%) 0 0); box-shadow: 0 0 6px rgb(170 155 255 / 0.4); }
 .sealer-controls { display: flex; flex-direction: column; align-items: center; gap: 9px; flex: none; }
 .sealer-knob { position: relative; width: 44px; height: 44px; border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, #7a68ee 0 44%, transparent 45%), repeating-conic-gradient(#5a46e0 0 6deg, #a194ff 6deg 12deg);
-  box-shadow: 0 3px 6px rgb(40 25 120 / 0.4), 0 1px 0 rgb(255 255 255 / 0.4) inset; }
-.sealer-knob::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #b9adff, #5a46e0 70%); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
+  background: radial-gradient(circle at 50% 50%, #ff8540 0 44%, transparent 45%), repeating-conic-gradient(#ff6a13 0 6deg, #ffb38a 6deg 12deg);
+  box-shadow: 0 3px 6px rgb(120 40 0 / 0.4), 0 1px 0 rgb(255 255 255 / 0.4) inset; }
+.sealer-knob::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffc9a6, #ff6a13 70%); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
 .sealer-knob i { position: absolute; left: 50%; top: 11px; width: 3px; height: 8px; margin-left: -1.5px; border-radius: 2px; background: #fff; opacity: 0.9; }
-.sealer-button { width: 26px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, #b9adff, #5a46e0 55%, #3a2bb0); box-shadow: 0 2px 3px rgb(40 25 120 / 0.4), 0 1px 0 rgb(255 255 255 / 0.45) inset; }
+.sealer-button { width: 26px; height: 14px; border-radius: 7px; background: linear-gradient(180deg, #ffc9a6, #ff6a13 55%, #c2410c); box-shadow: 0 2px 3px rgb(120 40 0 / 0.4), 0 1px 0 rgb(255 255 255 / 0.45) inset; }
 .sealer-slot { position: absolute; left: 34px; right: 34px; bottom: 8px; height: 6px; border-radius: 3px; background: var(--m-slot); box-shadow: 0 1px 0 var(--m-edge); }
 .sealer-bag { position: relative; z-index: 0; margin-top: -14px; flex: none; filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.14)); }
 
@@ -1057,3 +1046,79 @@ body { overflow-x: clip; }
 .machine-lcd { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; fill: #d4ccff; }
 .machine-badge { font-family: var(--font-sans); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; fill: #fff; }
 .machine-num { font-family: var(--font-sans); }
+
+/* ── The mascot (src/components/Logo.tsx): it looks around on its own and
+   at the finger or pointer once it moves (--gx/--gy, AppShell.tsx). Peeking,
+   only its top shows, as if from behind what is under it. */
+.mascot { display: inline-block; line-height: 0; pointer-events: none; }
+.mascot-peek { height: calc(var(--m) * 0.9); overflow: hidden; }
+.mascot-peek svg { animation: mascot-up 900ms var(--ease-spring) 300ms both; }
+.mascot-look { transform-box: view-box; animation: mascot-look 7s var(--ease-in-out) infinite; }
+.mascot[data-gaze] .mascot-look { animation: none; translate: var(--gx, 0) var(--gy, 0); transition: translate 160ms var(--ease-out); }
+@keyframes mascot-up { from { translate: 0 60%; } }
+@keyframes mascot-look {
+  0%, 12% { translate: 0 0; }
+  18%, 30% { translate: -1px -0.5px; }
+  36%, 50% { translate: 1.05px -0.7px; }
+  56%, 68% { translate: 0.7px 0.8px; }
+  74%, 88% { translate: -0.8px 0.6px; }
+  100% { translate: 0 0; }
+}
+.search-peek { position: absolute; top: calc(var(--m) * -0.82 + 14px); left: 50%; translate: -50% 0; z-index: 0; }
+.hero-peek { position: absolute; top: calc(var(--m) * -0.82); inset-inline-end: 44px; z-index: 0; }
+[data-sticky-bar] { isolation: isolate; }
+
+/* The search box: a dark well, ringed in orange while typing. */
+.search-field { background: var(--surface-2); border-color: transparent; box-shadow: none; }
+.search-field:hover { border-color: var(--line-strong); }
+.search-field:focus { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 22%, transparent); background: var(--surface); }
+
+/* Tabs as pills: the chosen one white on black (black on white in light). */
+.pill-tab {
+  display: flex; flex-shrink: 0; align-items: center; gap: 0.5rem; height: 2.25rem; padding: 0 0.95rem;
+  border-radius: 999px; border: 1px solid transparent; background: var(--surface-2); color: var(--ink-2);
+  font-size: 13px; font-weight: 550; transition: background-color 260ms var(--ease-out), color 200ms, scale 260ms var(--ease-spring);
+}
+.pill-tab:hover { color: var(--ink); }
+.pill-tab:active { scale: 0.94; }
+.pill-tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+@media (pointer: coarse) { .pill-tab { height: 2.5rem; } }
+
+/* Round buttons in the app's header. */
+.icon-round { background: var(--surface-2); border-radius: 999px !important; }
+
+/* A card being pressed is ringed in orange; the others step back. */
+.tool-card:active { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); scale: 0.98; transition-duration: 120ms; }
+.tool-cards:has(.tool-card:active) .tool-card:not(:active) { opacity: 0.45; }
+
+/* The orange Open button (src/components/OpenFab.tsx): phones only. */
+.fab, .fab-room { display: none; }
+@media (max-width: 767px) {
+  .fab-room { display: block; height: 88px; }
+  .fab {
+    position: fixed; z-index: 44; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); translate: -50% 0;
+    display: grid; place-items: center; width: 96px; height: 54px; border-radius: 999px;
+    background: var(--brand); color: #fff;
+    box-shadow: 0 10px 26px -8px color-mix(in oklab, var(--brand) 80%, transparent), 0 2px 6px rgb(0 0 0 / 0.3);
+    animation: fab-in 620ms var(--ease-spring) 200ms both;
+    transition: scale 240ms var(--ease-spring), box-shadow 240ms;
+  }
+  .fab:active { scale: 0.92; transition-duration: 90ms; }
+  .fab::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 0 var(--brand); opacity: 0.6; }
+  .fab:active::after { animation: fab-ring 520ms var(--ease-out); }
+}
+:root[data-sheet] .fab { display: none; }
+@keyframes fab-in { from { translate: -50% 140%; } }
+@keyframes fab-ring { to { box-shadow: 0 0 0 18px transparent; opacity: 0; } }
+
+/* What to do with the opened files: tools as cards, two to a row. */
+.pick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pick-card {
+  display: flex; align-items: center; gap: 10px; height: 100%; padding: 10px 12px; border-radius: 18px;
+  border: 1px solid var(--line); background: var(--bg); transition: border-color 160ms, scale 200ms var(--ease-spring);
+}
+.pick-card:active { border-color: var(--brand); scale: 0.97; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-look, .mascot-peek svg, .fab { animation: none !important; }
+}

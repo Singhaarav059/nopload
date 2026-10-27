@@ -20,10 +20,7 @@
   --side-w: 0px;
   overscroll-behavior: none;
 }
-:root[data-app][data-nav="tabs"] { --tabbar-h: 54px; }
-:root[data-app][data-nav="tabs"][data-os="android"] { --tabbar-h: 80px; }
-/* Phones: the tab bar floats above the page (see "Phones: a floating tab bar" below). */
-:root[data-app][data-nav="tabs"][data-form="phone"] { --tabbar-h: 78px; }
+:root[data-app][data-nav="tabs"] { --tabbar-h: 0px; }
 :root[data-app][data-nav="rail"] { --side-w: 80px; }
 :root[data-app][data-nav="sidebar"] { --side-w: 264px; }
 :root[data-app][data-nav="fluent"] { --side-w: 280px; }
@@ -33,8 +30,8 @@
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-inline-start: var(--side-w);
 }
-/* With the tab bar, a little room above it, so the last thing on the page doesn't touch it. */
-:root[data-app][data-nav="tabs"] body { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
+/* Phones have no tab bar (src/components/AppShell.tsx): a little room at the bottom. */
+:root[data-app][data-nav="tabs"] body { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 :root[data-app][data-sheet] body { overflow: hidden; }
 
 /* An app's controls aren't text to select or links to preview. */
@@ -767,56 +764,11 @@ html[data-app] .install-pill { display: none; }
 
 /* ---------- The app's home: one screen, not a long page ---------- */
 :root[data-app] .board { margin-bottom: 8px; }
-:root[data-app] .board-read { min-height: 168px; }
-:root[data-app] .board-quick ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.board-all {
-  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px;
-  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line);
-}
+:root[data-app] .board-read { min-height: 168px; grid-column: 1 / -1; grid-row: auto; }
 /* The drop area as a row: the app opens files from its picker and Open with. */
 :root[data-app] .dropzone { border-width: 1px; border-style: solid; border-radius: 22px; padding: 12px 14px; gap: 12px; }
 :root[data-app] .dropzone > div:first-child { width: 44px; }
 :root[data-app][data-form="phone"] .dropzone p + p { display: none; }
-
-/* ---------- Phones: a floating tab bar ---------- */
-/* A glass bar off the edges, rounded, with the chosen tab's highlight
-   sliding to it (--at, set by AppShell.tsx) and its icon popping. */
-:root[data-app][data-form="phone"] .app-tabbar {
-  inset-inline: 12px;
-  bottom: calc(10px + env(safe-area-inset-bottom));
-  height: calc(var(--tabbar-h) - 10px);
-  padding: 0 6px;
-  border-radius: 26px;
-  border: 1px solid color-mix(in oklab, var(--line-strong) 70%, transparent);
-  background: color-mix(in oklab, var(--surface) 78%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
-  box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.45), 0 2px 8px -4px rgb(0 0 0 / 0.2);
-  animation: app-bar-in 520ms var(--ease-spring) both;
-}
-:root[data-app][data-form="phone"] .app-tabbar .app-tab { position: relative; z-index: 1; justify-content: center; padding-top: 0; gap: 3px; }
-:root[data-app][data-form="phone"] .app-tabbar .app-tab-icon { width: 52px; height: 30px; border-radius: 15px; background: none !important; animation: none; }
-:root[data-app][data-form="phone"] .app-tabbar .app-tab-label { font-size: 11px; font-weight: 600; }
-:root[data-app][data-form="phone"] .app-tabbar .app-tab[aria-current] { color: var(--ink); }
-:root[data-app][data-form="phone"] .app-tabbar .app-tab[aria-current] .app-tab-icon { color: var(--brand); animation: app-tab-pop 420ms var(--ease-spring); }
-.app-tab-slide { display: none; }
-:root[data-app][data-form="phone"] .app-tab-slide {
-  display: block;
-  position: absolute;
-  top: 50%;
-  inset-inline-start: calc(6px + (100% - 12px) / 5 * (var(--at) + 0.5));
-  width: 60px;
-  height: 52px;
-  margin-top: -26px;
-  translate: -50% 0;
-  border-radius: 18px;
-  background: color-mix(in oklab, var(--brand) 18%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand) 22%, transparent);
-  transition: inset-inline-start 460ms var(--ease-spring), opacity 200ms;
-}
-:root[dir="rtl"][data-app][data-form="phone"] .app-tab-slide { translate: 50% 0; }
-:root[data-app][data-form="phone"] .app-tab-slide[data-none] { opacity: 0; }
-@keyframes app-tab-pop { 0% { scale: 1; } 40% { scale: 1.18; translate: 0 -2px; } 100% { scale: 1; } }
-@keyframes app-bar-in { from { translate: 0 calc(100% + 24px); opacity: 0; } }
 
 /* ---------- Phones: the header gets out of the way ---------- */
 /* Clear over the page at the top, glass with a shadow once it scrolls, and
@@ -839,8 +791,7 @@ html[data-app] .install-pill { display: none; }
 :root[data-app][data-form="phone"] header[data-site-header] .icon-btn:active { scale: 0.9; }
 
 @media (prefers-reduced-motion: reduce) {
-  :root[data-app] :is(.app-tab-slide, header[data-site-header]) { transition: none !important; }
-  :root[data-app] .app-tab-icon { animation: none !important; }
+  :root[data-app] header[data-site-header] { transition: none !important; }
 }
 
 /* ---------- While a page loads ---------- */
@@ -853,3 +804,72 @@ html[data-app] .install-pill { display: none; }
 }
 @keyframes skeleton-shine { to { translate: 100% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
+
+/* ---------- Only in the app on a phone (no tab bar: AppShell.tsx) ---------- */
+:root:not([data-app][data-nav="tabs"]) [data-tabs-only] { display: none !important; }
+/* The home: the title, the reading card, then every tool. */
+:root[data-app] [data-home-tools] { margin-top: 8px; }
+:root[data-app][data-nav="tabs"] [data-app-hero] { padding-top: 14px; padding-bottom: 12px; }
+:root[data-app][data-nav="tabs"] [data-app-title] { margin-top: 0; font-size: 2.1rem; }
+
+/* ---------- The app's welcome, once (src/components/Welcome.tsx) ---------- */
+/* Two stickers slapped on, a line of handwriting, the mascot rising from the
+   bottom with its eyes looking around, and Get started. On Get started the
+   mascot rolls up into a ball and the app is there. */
+:root[data-welcome] body { overflow: hidden; }
+.welcome {
+  position: fixed; inset: 0; z-index: 100; overflow: hidden; display: flex; flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 14px) 24px 0; background: #000; color: #fff;
+  animation: app-fade 300ms var(--ease-out) both;
+}
+.welcome-lang { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: rgb(255 255 255 / 0.5); }
+.welcome-pen { position: absolute; top: calc(env(safe-area-inset-top) + 54px); inset-inline-end: 34px; color: rgb(255 255 255 / 0.35); rotate: -18deg; animation: welcome-draw 900ms var(--ease-out) 900ms both; }
+.welcome-title { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin-top: 9vh; font-size: clamp(2.4rem, 11vw, 4.4rem); font-weight: 750; letter-spacing: -0.035em; line-height: 1; }
+.welcome-tape {
+  position: relative; display: inline-block; padding: 0.06em 0.22em 0.1em; color: #fff7ea;
+  text-shadow: 0 2px 0 rgb(120 40 0 / 0.35);
+  box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.6);
+}
+.welcome-tape::before, .welcome-tape::after { content: ""; position: absolute; width: 14px; height: 14px; border: 1.5px dashed rgb(255 255 255 / 0.4); }
+.welcome-tape::before { top: -8px; inset-inline-start: -8px; border-right: 0; border-bottom: 0; }
+.welcome-tape::after { bottom: -8px; inset-inline-end: -8px; border-left: 0; border-top: 0; }
+.welcome-tape-1 { background: linear-gradient(100deg, #ffb21e, #ff8a1e); rotate: -3deg; animation: welcome-slap 560ms var(--ease-spring) 150ms both; }
+.welcome-tape-2 { background: linear-gradient(100deg, #ff7a1a, #ff5a0a); rotate: 2.5deg; margin-top: 0.12em; margin-inline-start: 0.9em; animation: welcome-slap 560ms var(--ease-spring) 420ms both; --r: 2.5deg; }
+.welcome-sub {
+  max-width: 30ch; margin-top: 22px; margin-inline-start: 0.3em; font-family: var(--font-hand), "Segoe Print", "Bradley Hand", cursive;
+  font-size: clamp(1.25rem, 5.4vw, 1.6rem); line-height: 1.25; color: rgb(255 255 255 / 0.62); rotate: -1.5deg;
+  animation: welcome-write 1100ms var(--ease-out) 800ms both;
+}
+.welcome-blob { position: absolute; inset-inline: 0; bottom: 0; height: 56%; animation: welcome-rise 900ms var(--ease-spring) 250ms both; }
+.welcome-blob-shape { position: absolute; inset: 0; width: 100%; height: 100%; }
+.welcome-face { position: absolute; left: 50%; top: 18%; width: min(62%, 300px); translate: -50% 0; overflow: visible; }
+.welcome-face ellipse:not(.welcome-pupils ellipse) { transform-box: fill-box; transform-origin: center; animation: blink 5.2s infinite 2s; }
+.welcome-pupils { animation: welcome-look 6s var(--ease-in-out) 1.2s infinite; }
+.welcome-start {
+  position: absolute; z-index: 1; inset-inline: 24px; bottom: calc(env(safe-area-inset-bottom) + 34px); height: 56px; border-radius: 999px;
+  background: #fff; color: #000; font-size: 16px; font-weight: 650;
+  box-shadow: 0 12px 30px -10px rgb(0 0 0 / 0.5); animation: welcome-up 600ms var(--ease-spring) 1100ms both;
+  transition: scale 200ms var(--ease-spring);
+}
+.welcome-start:active { scale: 0.96; }
+@media (min-width: 768px) {
+  .welcome { padding-inline: max(48px, calc(50vw - 340px)); }
+  .welcome-start { inset-inline: auto; left: 50%; translate: -50% 0; width: 340px; }
+}
+/* Get started: the mascot rolls up into a ball, the rest fades. */
+.welcome[data-leaving] { animation: welcome-out 700ms var(--ease-in-out) both; }
+.welcome[data-leaving] .welcome-blob { animation: welcome-ball 640ms var(--ease-in-out) both; }
+.welcome[data-leaving] :is(.welcome-title, .welcome-sub, .welcome-start, .welcome-pen, .welcome-lang) { opacity: 0; transition: opacity 220ms; }
+@keyframes welcome-slap { from { opacity: 0; scale: 1.5; rotate: calc(var(--r, -3deg) * -4); } }
+@keyframes welcome-write { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes welcome-draw { from { opacity: 0; translate: -12px 10px; } }
+@keyframes welcome-rise { from { translate: 0 100%; } }
+@keyframes welcome-up { from { opacity: 0; translate: 0 24px; } }
+@keyframes welcome-look { 0%, 15% { translate: 0 0; } 25%, 40% { translate: -10px -4px; } 50%, 65% { translate: 12px -6px; } 75%, 90% { translate: 6px 8px; } 100% { translate: 0 0; } }
+@keyframes welcome-ball { from { clip-path: circle(150% at 50% 34%); } to { clip-path: circle(70px at 50% 34%); translate: 0 -22vh; } }
+@keyframes welcome-out { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+@media (min-width: 768px) { .welcome-start:active { scale: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .welcome, .welcome *, .welcome[data-leaving] .welcome-blob { animation: none !important; }
+}
+:root[data-app][data-nav="tabs"] header [data-command] { background: var(--surface-2); }
