@@ -131,7 +131,8 @@ await test("Groq's free tier answers first, streamed, with the chat prompt", asy
   eq(await res.text(), "The lease ends in May (p. 2).", "text");
   eq(seen.length, before, "Claude wasn't called");
   const sent = freeSeen.at(-1);
-  eq([sent.url, sent.auth, sent.body.model, sent.body.stream], ["/groq/chat/completions", "Bearer gsk_test", "llama-3.3-70b-versatile", true], "request");
+  eq([sent.url, sent.auth, sent.body.model, sent.body.stream], ["/groq/chat/completions", "Bearer gsk_test", "openai/gpt-oss-120b", true], "request");
+  eq(sent.body.reasoning_effort, "low", "gpt-oss thinks briefly");
   eq(sent.body.messages[0], { role: "system", content: CHAT_SYSTEM }, "system prompt");
   if (!sent.body.messages.at(-1).content.includes("The lease ends in May")) throw new Error("excerpts missing");
 });
@@ -152,12 +153,12 @@ await test("Gemini and OpenRouter free tiers only when allowed to train, in AI_O
   eq([freeSeen.at(-1).url, freeSeen.at(-1).body.model], ["/openrouter/chat/completions", "meta-llama/llama-3.3-70b-instruct:free"], "OpenRouter's free Llama");
 });
 
-// A pool of two Groq keys, each with both models, and the tries it made.
+// A pool of Groq keys, each with all three models, and the tries it made.
 const pool = (keys = "kA,kB", extra = {}) => ({ GROQ_API_KEYS: keys, GROQ_BASE_URL: `${freeBase}/groq`, ...quick, ...extra });
 const tried = (from) => freeSeen.slice(from).map((x) => `${x.auth.slice(7)}|${x.body.model}`);
 
 await test("pool: a rate-limited key moves on to the next key at once, and rests a minute", async () => {
-  free = { reply: "From the pool (p. 2).", status: 200, limited: new Set(["Bearer kA1|llama-3.3-70b-versatile"]) };
+  free = { reply: "From the pool (p. 2).", status: 200, limited: new Set(["Bearer kA1|openai/gpt-oss-120b"]) };
   const keys = "kA1,kB1";
   let from = freeSeen.length;
   for (let i = 0; i < 2; i++) {
@@ -165,11 +166,11 @@ await test("pool: a rate-limited key moves on to the next key at once, and rests
     eq([res.status, res.headers.get("x-ai-provider"), await res.text()], [200, "groq", "From the pool (p. 2)."], `answer ${i + 1}`);
   }
   // Whichever key went first, the limited one was asked at most once: then it rested.
-  eq(tried(from).filter((x) => x === "kA1|llama-3.3-70b-versatile").length, 1, `tries: ${tried(from)}`);
-  eq(tried(from).filter((x) => x.endsWith("llama-3.3-70b-versatile")).length >= 2, true, "the 70B model answered, from the other key");
+  eq(tried(from).filter((x) => x === "kA1|openai/gpt-oss-120b").length, 1, `tries: ${tried(from)}`);
+  eq(tried(from).filter((x) => x.endsWith("openai/gpt-oss-120b")).length >= 2, true, "the 120B model answered, from the other key");
   from = freeSeen.length;
   await post(chat, pool(keys));
-  eq(tried(from).includes("kA1|llama-3.3-70b-versatile"), false, "still resting");
+  eq(tried(from).includes("kA1|openai/gpt-oss-120b"), false, "still resting");
 });
 
 await test("pool: the keys take turns going first (round robin)", async () => {
@@ -180,16 +181,16 @@ await test("pool: the keys take turns going first (round robin)", async () => {
   eq(new Set(firsts).size, 2, `both keys used first: ${firsts}`);
 });
 
-await test("pool: when every key's 70B is limited, the 8B model answers (its own bucket)", async () => {
-  free = { reply: "From 8B (p. 2).", status: 200, limited: new Set(["Bearer kC1|llama-3.3-70b-versatile", "Bearer kC2|llama-3.3-70b-versatile"]) };
+await test("pool: when every key's 120B is limited, the next model answers (its own bucket)", async () => {
+  free = { reply: "From Qwen (p. 2).", status: 200, limited: new Set(["Bearer kC1|openai/gpt-oss-120b", "Bearer kC2|openai/gpt-oss-120b"]) };
   const from = freeSeen.length;
   const res = await post(chat, pool("kC1,kC2"));
-  eq(await res.text(), "From 8B (p. 2).", "answered");
-  eq(tried(from).at(-1).split("|")[1], "llama-3.1-8b-instant", `last try: ${tried(from)}`);
+  eq(await res.text(), "From Qwen (p. 2).", "answered");
+  eq(tried(from).at(-1).split("|")[1], "qwen/qwen3.8-27b", `last try: ${tried(from)}`);
 });
 
 await test("pool: Cerebras takes over when every Groq key and model is limited", async () => {
-  free = { reply: "From Cerebras (p. 2).", status: 200, limited: new Set(["Bearer kD1|llama-3.3-70b-versatile", "Bearer kD1|llama-3.1-8b-instant"]) };
+  free = { reply: "From Cerebras (p. 2).", status: 200, limited: new Set(["Bearer kD1|openai/gpt-oss-120b", "Bearer kD1|qwen/qwen3.8-27b", "Bearer kD1|openai/gpt-oss-20b"]) };
   const env = pool("kD1", { CEREBRAS_API_KEYS: "cE1", CEREBRAS_BASE_URL: `${freeBase}/cerebras` });
   const res = await post(chat, env);
   eq([res.headers.get("x-ai-provider"), await res.text()], ["cerebras", "From Cerebras (p. 2)."], "reply");
@@ -198,16 +199,16 @@ await test("pool: Cerebras takes over when every Groq key and model is limited",
 
 await test("pool: a burst that finds everyone busy waits a moment and tries again", async () => {
   free = { reply: "After the wait (p. 2).", status: 200, busy: 1 };
-  const res = await post(chat, pool("kE1", { GROQ_MODELS: "llama-3.3-70b-versatile" }));
+  const res = await post(chat, pool("kE1", { GROQ_MODELS: "openai/gpt-oss-120b" }));
   eq([res.status, await res.text()], [200, "After the wait (p. 2)."], "answered on the second round");
 });
 
 await test("pool: all of it used up: 503 with fallbackToLocal, after one more round", async () => {
-  free = { reply: "", status: 200, limited: new Set(["Bearer kF1|llama-3.3-70b-versatile", "Bearer kF1|llama-3.1-8b-instant"]) };
+  free = { reply: "", status: 200, limited: new Set(["Bearer kF1|openai/gpt-oss-120b", "Bearer kF1|qwen/qwen3.8-27b", "Bearer kF1|openai/gpt-oss-20b"]) };
   const from = freeSeen.length;
   const res = await post(chat, pool("kF1"));
   eq([res.status, (await res.json()).fallbackToLocal], [503, true], "fall back to the device");
-  eq(tried(from).length, 4, `two models, tried twice: ${tried(from)}`);
+  eq(tried(from).length, 6, `three models, tried twice: ${tried(from)}`);
 });
 
 await test("pool: one GROQ_API_KEY still works, and keys never reach the logs", async () => {
@@ -216,9 +217,9 @@ await test("pool: one GROQ_API_KEY still works, and keys never reach the logs", 
   const warn = console.warn;
   console.warn = (...a) => logged.push(a.join(" "));
   try {
-    free.limited = new Set(["Bearer gsk_secret_one|llama-3.3-70b-versatile"]);
+    free.limited = new Set(["Bearer gsk_secret_one|openai/gpt-oss-120b"]);
     const res = await post(chat, { GROQ_API_KEY: "gsk_secret_one", GROQ_BASE_URL: `${freeBase}/groq`, ...quick });
-    eq(await res.text(), "Single key (p. 2).", "answered by the 8B model");
+    eq(await res.text(), "Single key (p. 2).", "answered by the next model");
   } finally {
     console.warn = warn;
   }
