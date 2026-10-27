@@ -1,59 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The app is Google's LauncherActivity (android-browser-helper) with a
-     launch screen and a crash report added (Launcher.java, CrashActivity.java):
-     it opens the site in Chrome full screen once Chrome confirms it by Digital
-     Asset Links, and hands it the files Android opens or shares with Nopload.
-     When Chrome can't confirm it, the site opens in the app's own web view
-     (WebApp.java) instead of with a browser bar. -->
+<!-- The app is the site in its own web view (WebApp.java), so it never shows
+     a browser bar, with a launch screen until the first page has drawn.
+     Launcher.java takes the icon, "Open with", the share sheet and links to
+     the site, and shows the last crash (CrashActivity.java) when there was one. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Scan to PDF in the app's own web view (WebApp.java); asked for only when the scanner starts. -->
+    <!-- Scan to PDF (WebApp.java); asked for only when the scanner starts. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- Chrome (and other browsers that can show the site full screen) must be visible to the app. -->
+    <!-- Read aloud's voices (Native.java). -->
     <queries>
         <intent>
-            <action android:name="android.support.customtabs.action.CustomTabsService" />
+            <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
 
     <application
         android:name=".App"
-        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Translucent.NoTitleBar">
-
-        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+        android:theme="@style/WebApp">
 
         <activity
             android:name=".Launcher"
             android:exported="true"
             android:label="@string/app_name"
-            android:alwaysRetainTaskState="true">
-
-            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="@string/launch_url" />
-            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/paper" />
-            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK" android:resource="@color/ink" />
-            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/paper" />
-            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK" android:resource="@color/ink" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE" android:resource="@drawable/splash" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR" android:resource="@color/paper" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION" android:value="300" />
-            <meta-data android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY" android:value="dev.pages.nopload.fileprovider" />
-            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="webview" />
-            <meta-data android:name="android.support.customtabs.trusted.LAUNCH_HANDLER_CLIENT_MODE" android:value="navigate-existing" />
-            <!-- A file opened with Nopload goes to /en/open through launchQueue,
-                 as on a computer; one PDF opens straight in the viewer. -->
-            <meta-data android:name="android.support.customtabs.trusted.FILE_HANDLING_ACTION_URL" android:value="@string/file_url" />
-            <!-- Files shared to Nopload are posted to /share, as the manifest's share_target. -->
-            <meta-data android:name="android.support.customtabs.trusted.METADATA_SHARE_TARGET" android:resource="@string/share_target" />
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -73,7 +52,6 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
@@ -90,15 +68,13 @@
             </intent-filter>
         </activity>
 
-        <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
-
-        <!-- "Manage storage" in Android's app settings opens Chrome's settings for the site.
-             The launcher turns this on at every launch, so it must be declared. -->
+        <!-- The site, with no browser bar. -->
         <activity
-            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
-            android:exported="false">
-            <meta-data android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL" android:value="@string/launch_url" />
-        </activity>
+            android:name=".WebApp"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/WebApp"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
         <!-- The last crash, in its own process so it shows even if the launch crashes again. -->
         <activity
@@ -107,20 +83,7 @@
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
 
-        <!-- The site in the app's own web view, with no browser bar. -->
-        <activity
-            android:name=".WebApp"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:theme="@style/WebApp"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
-
-        <activity
-            android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
-            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
-            android:configChanges="orientation|screenSize" />
-
-        <!-- Shares the splash image with Chrome, so the launch looks seamless. -->
+        <!-- Results saved before Android 10, opened from the app's folder (WebApp.java). -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="dev.pages.nopload.fileprovider"
@@ -128,15 +91,5 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths" />
         </provider>
-
-        <service
-            android:name="com.google.androidbrowserhelper.trusted.DelegationService"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </service>
     </application>
 </manifest>

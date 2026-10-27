@@ -41,7 +41,7 @@ jobs:
             echo "NOPLOAD_KEYSTORE=$RUNNER_TEMP/nopload.jks" >> "$GITHUB_ENV"
           fi
       # The app launching as a phone launches it (from its icon, Open with,
-      # the share sheet; with Chrome, another browser or none; after a crash),
+      # the share sheet, a link; after a crash), always in its own web view,
       # on Android 7 to 16: app/src/test (Robolectric).
       - name: Launch tests
         run: gradle --no-daemon testReleaseUnitTest

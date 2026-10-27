@@ -1,47 +1,31 @@
 # Nopload for Android
 
-A Trusted Web Activity: the app *is* the website, shown full screen by Chrome.
-It exists only for what an installed web app can't declare on Android:
+The website in the app's own web view (`WebApp.java`): full screen, with a
+launch screen until the first page has drawn, and never a browser bar.
+(Chrome, which earlier versions handed the site to, shows a bar whenever it
+hasn't confirmed the site belongs to the app, so the app no longer uses it.)
+PDF work stays in the site; every deploy of the site updates the app.
+
+What a browser would do for the site, the app does:
 
 - **Open with**: PDFs, pictures and Word files from any app (Files, Gmail,
-  WhatsApp, Drive…) open in Nopload. Android hands the file to Chrome, which
-  gives it to the site through `launchQueue` at `/en/open`, the same route
-  "Open with" uses on a computer. One PDF goes straight to the viewer.
-- **Share**: files shared to Nopload are posted to `/share`, the manifest's
-  `share_target`, handled by the service worker as for the installed web app.
-- **Links** to nopload.pages.dev open in the app.
+  WhatsApp, Drive…) open in Nopload, on `/en/open`, which takes them through
+  `window.NoploadApp` (`src/components/OpenFiles.tsx`). One PDF goes straight
+  to the viewer.
+- **Share**: files shared to Nopload arrive the same way.
+- **Links** to nopload.pages.dev open in the app; links to other sites open in
+  the browser.
+- **Files**: picking files, and saving results to Downloads/Nopload.
+- **Camera** for Scan to PDF, asked for when the scanner starts.
+- **Read aloud** with Android's voices, and **printing** (and Save as PDF)
+  through Android's print dialog (`Native.java`, which stands in for the
+  browser's `speechSynthesis` and `print()`).
 
-The app is `LauncherActivity` from Google's
-[android-browser-helper](https://github.com/GoogleChrome/android-browser-helper),
-configured in `app/src/main/AndroidManifest.xml`, with a little code of its
-own. PDF work stays in the site; every deploy of the site updates the app.
-
-## No browser bar, ever
-
-Chrome shows the site with a browser bar on top until it has confirmed that
-the site and the app belong together (Digital Asset Links, below): on a first
-launch, on a slow or missing connection, after a Chrome update. So the app
-never hands over before that (`Launcher.java`): it shows its launch screen
-and asks Chrome to confirm, in the background. Confirmed, the site opens full
-screen in Chrome. Not confirmed, no answer within 4 seconds, or no browser
-that can show it full screen, it opens in the app's own web view
-(`WebApp.java`) instead, with the launch screen kept until the first page has
-drawn. The web view does what Chrome would: picking files, saving results to
-Downloads/Nopload, the camera for the scanner, other sites in the browser, and
-"Open with" and the share sheet, whose files `/en/open` takes through
-`window.NoploadApp` (`src/components/OpenFiles.tsx`). Read aloud uses the
-browser's voices, which a web view doesn't have.
-
-## Full screen needs Digital Asset Links
+`Launcher.java` takes the icon, Open with, the share sheet and links, and
+after a crash shows what went wrong (`CrashActivity.java`) with Copy and Share.
 
 `public/.well-known/assetlinks.json` names this package and the SHA-256 of the
-key it's signed with. If they don't match (a different key, or the site on
-another domain), Chrome can't confirm the app, and the site always opens in the
-app's web view.
-
-Moving to a custom domain: add it to `launch_url`, `file_url`,
-`asset_statements` and the https intent filter, serve the same
-`assetlinks.json` there, and publish a new version.
+key it's signed with, which verifies the app for links to the site.
 
 ## Build
 

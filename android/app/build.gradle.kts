@@ -5,8 +5,7 @@ plugins {
 // The signing key stays out of the repository: its path and passwords come
 // from the environment (NOPLOAD_KEYSTORE, NOPLOAD_KEYSTORE_PASSWORD,
 // NOPLOAD_KEY_ALIAS). Its SHA-256 fingerprint is in
-// public/.well-known/assetlinks.json, which is what lets the site open
-// full screen, without a browser bar.
+// public/.well-known/assetlinks.json, which verifies the app for links to the site.
 val keystore = System.getenv("NOPLOAD_KEYSTORE")
 
 android {
@@ -17,8 +16,8 @@ android {
         applicationId = "dev.pages.nopload"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
     }
 
     signingConfigs {
@@ -54,7 +53,7 @@ android {
 }
 
 dependencies {
-    implementation("com.google.androidbrowserhelper:androidbrowserhelper:2.7.4")
+    implementation("androidx.core:core:1.17.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16")
     testImplementation("androidx.test:core:1.6.1")

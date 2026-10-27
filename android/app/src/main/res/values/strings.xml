@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Nopload</string>
-    <string name="launch_url">https://nopload.pages.dev/?source=android</string>
-    <string name="file_url">https://nopload.pages.dev/en/open</string>
-    <string name="share_target" translatable="false">{\"action\":\"/share\",\"method\":\"POST\",\"enctype\":\"multipart/form-data\",\"params\":{\"title\":\"title\",\"files\":[{\"name\":\"files\",\"accept\":[\"application/pdf\",\"image/*\",\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\"]}]}}</string>
-    <string name="asset_statements" translatable="false">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://nopload.pages.dev\"}}]</string>
     <string name="crash_title">Nopload closed unexpectedly</string>
     <string name="crash_body">Copy this and send it to the developer, so it can be fixed.</string>
     <string name="crash_copy">Copy</string>
