@@ -745,7 +745,47 @@ function originAllowed(request: Request, env: Env) {
   return origin === new URL(request.url).origin || allowed.includes(origin);
 }
 
-export async function onRequestGet({ env }: Context) {
+// GET /api/ai?check: asks every provider, key and model for one word, at
+// once, and says which answered and why the others didn't: the way to see
+// that the keys set in the dashboard work. Keys are named by their place in
+// *_API_KEYS (key 1, key 2…), never shown. One check per ten minutes per
+// instance; later ones get the same report, so it can't be used to burn quota.
+let lastCheck: { at: number; report: unknown } | null = null;
+async function check(env: Env) {
+  if (lastCheck && Date.now() - lastCheck.at < 10 * 60_000) return lastCheck.report;
+  const free = pools(env);
+  const job: Job = { system: "Reply with the single word: ok", messages: [{ role: "user", content: "Say ok." }], maxTokens: 64 };
+  // Free tiers that are off because they may train are tried too: the check
+  // sends them only "Say ok.", never anyone's text.
+  const off = Object.values(free)
+    .filter((p) => p.keys.length && p.trains && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
+    .flatMap((p) => p.models.flatMap((model) => p.keys.map((key) => ({ provider: p.name, id: `${p.name}#${fingerprint(key)}#${model}`, run: (j: Job, signal: AbortSignal) => withoutThinking(openAi(p, key, model, j, signal)) }))));
+  const all = [...slots(env), ...off];
+  const results = await Promise.all(
+    all.map(async (s) => {
+      const [, fp, model] = s.id.split("#");
+      const keys = free[s.provider]?.keys ?? [];
+      const n = keys.findIndex((k) => fingerprint(k) === fp);
+      const signal = AbortSignal.timeout(20_000);
+      try {
+        let text = "";
+        for await (const piece of s.run(job, signal)) text += piece;
+        return { provider: s.provider, key: n >= 0 ? n + 1 : undefined, model, ok: true, reply: text.trim().slice(0, 20) };
+      } catch (e) {
+        return { provider: s.provider, key: n >= 0 ? n + 1 : undefined, model, ok: false, error: String((e as Error)?.message ?? e).slice(0, 200) };
+      }
+    }),
+  );
+  const ignored = Object.values(free)
+    .filter((p) => p.keys.length && p.trains && env.AI_FREE_TIERS_MAY_TRAIN !== "1")
+    .map((p) => `${p.name}: keys set but off for visitors (its free tier may train on what it's sent); tested above with "Say ok." only`);
+  const report = { order: providers(env), AI_ORDER: env.AI_ORDER ?? null, working: results.filter((r) => r.ok).length, of: results.length, results, ignored };
+  lastCheck = { at: Date.now(), report };
+  return report;
+}
+
+export async function onRequestGet({ request, env }: Context) {
+  if (request && new URL(request.url).searchParams.has("check")) return json(await check(env));
   const set = new Set(providers(env));
   return json(Object.fromEntries(ORDER.map((name) => [name, set.has(name)])));
 }
