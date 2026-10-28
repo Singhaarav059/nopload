@@ -119,7 +119,7 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
   const Badge = cloudAi ? Cloud : tool.runtime === "browser" ? ShieldCheck : Server;
   return (
     <div data-cat={tool.category} className="mx-auto max-w-[1240px] px-4 sm:px-6">
-      <header data-app-toolhead className="relative isolate mx-auto flex max-w-[760px] flex-col items-center pb-5 pt-6 text-center sm:pt-8">
+      <header data-app-toolhead className="relative isolate mx-auto flex max-w-[760px] flex-col items-center pb-4 pt-4 text-center sm:pt-6">
         <div aria-hidden className="pointer-events-none absolute start-1/2 -top-10 -z-10 h-[360px] w-[min(760px,100%)] -translate-x-1/2 bg-[radial-gradient(closest-side,var(--tint),transparent)] rtl:translate-x-1/2" />
         <Sparkle className="absolute start-[8%] top-16 hidden w-5 text-coral md:block" delay="-0.5s" />
         <Sparkle className="absolute end-[10%] top-28 hidden w-3.5 text-(--tint-ink) md:block" delay="-1.4s" />
@@ -137,7 +137,7 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
               </span>
             </ViewTransition>
           </span>
-          <h1 className="display text-start text-[2.1rem] sm:text-[3rem]"><Words text={k(`tool.${tool.id}.name`)} /></h1>
+          <h1 className="display text-start text-[2rem] sm:text-[2.6rem]"><Words text={k(`tool.${tool.id}.name`)} /></h1>
         </div>
         <p data-web-only className="fade-up mt-3 max-w-[540px] text-pretty text-[17px] leading-relaxed text-ink-2">{k(descKey(tool))}</p>
         <div data-web-only className="fade-up mt-4 flex flex-wrap items-center justify-center gap-2" style={{ "--d": "420ms" } as React.CSSProperties}>

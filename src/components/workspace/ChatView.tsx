@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ChevronLeft, ChevronRight, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, ChevronLeft, ChevronRight, FileText, RotateCcw, Square } from "lucide-react";
 import { useI18n } from "../I18n";
 import { PdfThumb } from "../PdfThumb";
 import { AiNotice } from "./AiNotice";
 import { Options } from "./Options";
 import { Blocks, Inline } from "./AnswerBlocks";
+import { humanSize } from "@/lib/pdf/common";
 import type { Answer, DocIndex, Message } from "@/lib/ai/chat";
 import type { OptionDef } from "@/lib/tools";
 
@@ -25,12 +26,13 @@ export const prepareChat = () => import("@/lib/ai/chat");
 // answer citing its pages; a citation shows that page beside the chat
 // (src/lib/ai/chat.ts). Where this copy of the site has no server AI, the
 // chat says so and takes no questions.
-export function ChatView({ file, options, defs, onOption, onError }: {
+export function ChatView({ file, options, defs, onOption, onError, onClose }: {
   file: File;
   options: Record<string, unknown>;
   defs: OptionDef[];
   onOption: (key: string, value: unknown) => void;
   onError: (e: unknown) => void;
+  onClose?: () => void;
 }) {
   const { t } = useI18n();
   // The index of the file as read with these OCR options; others read it again.
@@ -77,6 +79,14 @@ export function ChatView({ file, options, defs, onOption, onError }: {
   }, []);
 
   const box = useRef<HTMLElement>(null);
+  // With the file in, the chat takes the screen: its top under the header.
+  const layout = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = layout.current;
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + scrollY - 76;
+    if (Math.abs(scrollY - y) > 40) scrollTo({ top: y, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, []);
   // A new question goes to the top of the chat, its answer filling in below
   // it; the chat itself is kept in view, its box at the bottom.
   useEffect(() => {
@@ -121,7 +131,16 @@ export function ChatView({ file, options, defs, onOption, onError }: {
 
   const pages = index?.pages.length ?? 0;
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
+    <div ref={layout} className="chat-layout">
+      {/* The file being asked about: one slim bar, not a board. */}
+      <div className="chat-file">
+        <span className="chat-file-icon"><FileText size={17} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14.5px] font-medium">{file.name}</span>
+          <span className="block text-[12.5px] text-muted tabular">{pages ? `${t("ws.pages", { n: pages })} · ` : ""}{humanSize(file.size)}</span>
+        </span>
+        {onClose && <button type="button" className="btn btn-quiet btn-sm" onClick={onClose}><RotateCcw size={14} /> {t("res.startOver")}</button>}
+      </div>
       {/* As tall as the screen, never taller: questions and answers scroll
           inside it, the question box stays at its bottom. */}
       <section ref={box} aria-label={t("chat.title")} data-chat
@@ -199,7 +218,7 @@ export function ChatView({ file, options, defs, onOption, onError }: {
           )}
         </form>
       </section>
-      <aside className="space-y-4 lg:sticky lg:top-20">
+      <aside className="chat-side">
         <div className="card p-4" data-chat-page={page}>
           <div className="mb-3 flex items-center justify-between text-[13px] text-ink-2">
             <button className="btn btn-quiet btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label={t("chat.prevPage")}><ChevronLeft size={16} className="rtl:rotate-180" /></button>
@@ -208,8 +227,12 @@ export function ChatView({ file, options, defs, onOption, onError }: {
           </div>
           <PdfThumb key={page} file={file} page={page - 1} width={300} className="mx-auto rounded-sm border border-line" alt={t("chat.pageOf", { n: page, total: pages })} />
         </div>
-        <div className="card p-5">
-          <Options defs={defs} values={options} onChange={onOption} />
+        <div className="card p-4">
+          {/* How the PDF is read: folded, it's rarely changed. */}
+          <details className="chat-options">
+            <summary>{t("ws.options")}</summary>
+            <div className="pt-3"><Options defs={defs} values={options} onChange={onOption} /></div>
+          </details>
           <AiNotice task="chat" />
         </div>
       </aside>

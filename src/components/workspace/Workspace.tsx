@@ -615,11 +615,10 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
       <div>
         {dropHint}
         {errorBox}
-        <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
-        <div className="mt-6">
-          <ChatView key={items[0].id} file={files[0]} options={options} defs={tool.options}
-            onOption={(k, v) => setOptions((o) => ({ ...o, [k]: v }))} onError={(e) => void drop(items[0].id, files[0], e)} />
-        </div>
+        {/* No file board: the chat names its file in a slim bar of its own. */}
+        <ChatView key={items[0].id} file={files[0]} options={options} defs={tool.options}
+          onOption={(k, v) => setOptions((o) => ({ ...o, [k]: v }))} onError={(e) => void drop(items[0].id, files[0], e)}
+          onClose={() => { setItems([]); reset(); }} />
       </div>
     );
   }
