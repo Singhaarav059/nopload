@@ -873,3 +873,35 @@ html[data-app] .install-pill { display: none; }
   .welcome, .welcome *, .welcome[data-leaving] .welcome-blob { animation: none !important; }
 }
 :root[data-app][data-nav="tabs"] header [data-command] { background: var(--surface-2); }
+
+/* ── The viewer's controls: each its own piece of glass floating over the
+   pages, as in the reference: round buttons, a pill for the title and one
+   for the page, the main action in orange. They spring in one by one when
+   the controls come back. ── */
+.vw-bar, .vw-dock { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+.vw-bar { gap: 8px; padding: 0; height: 46px; left: 10px; right: 10px; }
+.vw-dock { gap: 8px; padding: 0; }
+/* Tinted, not blurred: a live blur on each piece stalls Safari's drawing. */
+.vw-bar > :is(.vw-btn, p), .vw-dock > :is(.vw-btn, .vw-count, .vw-zoom) {
+  background: color-mix(in oklab, var(--vw-glass), var(--vw-bg) 30%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 0 0 1px color-mix(in oklab, currentColor 10%, transparent), 0 10px 26px -10px rgb(0 0 0 / 0.45);
+}
+.vw-bar > .vw-btn, .vw-dock > .vw-btn { width: 46px; min-width: 46px; height: 46px; padding: 0; border-radius: 999px; }
+.vw-bar > p { height: 46px; line-height: 46px; padding: 0 18px; border-radius: 999px; }
+.vw-bar > .vw-more { width: auto; padding: 0 16px; background: var(--brand); color: #000; font-weight: 600; box-shadow: 0 10px 24px -10px color-mix(in oklab, var(--brand) 80%, transparent); }
+.vw-bar > .vw-more:hover { background: var(--brand-hover); }
+.vw-bar > .vw-more[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.vw-dock > .vw-sep { display: none; }
+.vw-dock > .vw-count, .vw-dock > .vw-zoom { height: 46px; padding: 0 18px; }
+.vw-bar > .vw-btn:hover, .vw-dock > :is(.vw-btn, .vw-count, .vw-zoom):hover { background: color-mix(in oklab, var(--vw-glass) 80%, currentColor); }
+.vw-bar > .vw-btn[aria-pressed="true"], .vw-dock > .vw-count[aria-pressed="true"] { background: color-mix(in oklab, var(--accent) 22%, var(--vw-glass)); color: var(--accent); }
+.vw[data-chrome] :is(.vw-bar, .vw-dock) > * { animation: vw-piece 460ms var(--ease-spring) both; }
+.vw[data-chrome] :is(.vw-bar, .vw-dock) > :nth-child(2) { animation-delay: 30ms; }
+.vw[data-chrome] :is(.vw-bar, .vw-dock) > :nth-child(3) { animation-delay: 60ms; }
+.vw[data-chrome] :is(.vw-bar, .vw-dock) > :nth-child(4) { animation-delay: 90ms; }
+.vw[data-chrome] :is(.vw-bar, .vw-dock) > :nth-child(5) { animation-delay: 120ms; }
+.vw[data-chrome] :is(.vw-bar, .vw-dock) > :nth-child(n + 6) { animation-delay: 150ms; }
+@keyframes vw-piece { from { opacity: 0; scale: 0.8; } }
+@media (max-width: 480px) { .vw-bar > p { padding: 0 14px; } .vw-bar { gap: 6px; } .vw-bar > .vw-btn { width: 42px; min-width: 42px; height: 42px; } .vw-bar > p { height: 42px; line-height: 42px; } }
+
+@media (prefers-reduced-motion: reduce) { .vw[data-chrome] :is(.vw-bar, .vw-dock) > * { animation: none !important; } }

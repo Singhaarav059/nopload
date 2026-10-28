@@ -516,7 +516,7 @@ export function Radio({ files, value }: Props) {
       <circle cx="100" cy="198" r="56" fill={url("side")} />
       <rect x="44" y="142" width="112" height="112" fill={`url(#${id}-holes)`} clipPath={`url(#${id}-grille)`} />
       <rect x="174" y="146" width="86" height="46" rx="8" fill={url("lcd")} />
-      {Array.from({ length: 9 }, (_, i) => <rect key={i} x={182 + i * 9} y={i % 2 ? 158 : 154} width="1.5" height={i % 2 ? 8 : 12} fill="#d4ccff" opacity="0.6" />)}
+      {Array.from({ length: 9 }, (_, i) => <rect key={i} x={182 + i * 9} y={i % 2 ? 158 : 154} width="1.5" height={i % 2 ? 8 : 12} fill="#ffc496" opacity="0.6" />)}
       <rect x={182 + q * 70} y="150" width="2.5" height="36" rx="1" fill="#ff5a4e" />
       <Knob cx={196} cy={236} r={17} angle={q * 300} />
       <Knob cx={242} cy={236} r={17} angle={-40 + q * 80} />

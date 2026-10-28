@@ -9,6 +9,7 @@ import {
   SlidersHorizontal, Maximize2, Minimize2, Share2, Printer, Download, Highlighter, Copy, Trash2,
 } from "lucide-react";
 import { useI18n } from "../I18n";
+import { LoadingOrb } from "../LoadingOrb";
 import { ToolIcon } from "../ToolIcon";
 import { docFor, thumbUrl } from "@/lib/pdf/thumbs";
 import { clearOpenedFromOutside, handOffTo, openedFromOutside } from "@/lib/handoff";
@@ -859,7 +860,7 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
       )}
 
       <div ref={scroller} className="vw-scroll" data-zoomed={zoom > 1 || undefined} tabIndex={-1} onScroll={onScroll} onWheel={touched} onTouchMove={touched} onKeyDown={touched} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
-        {!doc && <p className="vw-loading"><Loader2 size={22} className="animate-spin" /> {t("viewer.loading")}</p>}
+        {!doc && <div className="vw-loading"><LoadingOrb small label={t("viewer.loading")} /></div>}
         {reading ? (
           <article className="vw-read" style={{ fontSize: readSize }}>
             {reading === "loading" ? <p className="opacity-70"><Loader2 size={18} className="inline animate-spin" /></p>
