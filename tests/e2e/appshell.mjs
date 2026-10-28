@@ -1,8 +1,7 @@
 // The installed app's frame on each kind of device (src/components/AppShell.tsx,
 // src/app/app.css). Playwright can't install a web app, so ?app=1 shows the
-// installed look in a tab. Phones get no bar (the home page is the hub, with
-// the orange Open button; the header has Back, Reader, Workflows and
-// Settings), bigger screens their own navigation; the website's footer and
+// installed look in a tab. Phones get a floating tab bar (and Open a file on
+// the home page), bigger screens their own navigation; the website's footer and
 // introduction are gone, nothing scrolls sideways, and everything takes you
 // where it says. Without ?app=1 the site is unchanged.
 //
@@ -49,10 +48,13 @@ await suite(async ({ name, browser, test }) => {
         const phone = html.nav === "tabs";
         const nav = page.getByRole("navigation", { name: t["app.nav"] });
         if (phone) {
-          // No bar: the Open button, and every tool on the home page.
+          // The floating tab bar, the Open button, and every tool on the home page.
+          await nav.waitFor();
+          await page.waitForFunction(() => document.querySelector('[aria-label="App navigation"]')?.dataset.tabbar === "pill");
           await page.locator("[data-fab]").waitFor();
-          if (await nav.count()) throw new Error("a navigation bar on a phone");
           if (!(await page.locator("[data-tool='compress']").isVisible())) throw new Error("no tools on the home page");
+          const lit = await nav.locator("[aria-current=page]").getAttribute("data-tab");
+          if (lit !== "home") throw new Error(`lit tab: ${lit}`);
         } else {
           await nav.waitFor();
           const kind = await nav.evaluate((n) => n.dataset.side);
@@ -63,7 +65,7 @@ await suite(async ({ name, browser, test }) => {
         const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
         if (wide > 1) throw new Error(`${wide}px of sideways scroll`);
         // The page's content isn't hidden under the navigation.
-        const under = !phone && await page.evaluate(() => {
+        const under = await page.evaluate(() => {
           const n = document.querySelector('[aria-label="App navigation"]').getBoundingClientRect();
           const m = document.querySelector("main h1").getBoundingClientRect();
           return n.width > n.height ? m.bottom > n.top && m.top < n.bottom : m.left < n.right && document.dir !== "rtl";
@@ -91,16 +93,16 @@ await suite(async ({ name, browser, test }) => {
       // The file came along: the tool has it, not an empty drop area.
       await page.getByText("report.pdf").first().waitFor();
       if (!(await page.evaluate(() => document.documentElement.dataset.app))) throw new Error("left app mode");
-      await page.locator("header [data-tab='settings']").click();
+      await page.getByRole("navigation", { name: t["app.nav"] }).locator("[data-tab='settings']").click();
       const settings = page.getByRole("dialog", { name: t["app.settings"] });
       await settings.getByText(t["theme.label"], { exact: true }).waitFor();
       await settings.getByRole("button", { name: t["nav.close"] }).last().click();
       await settings.waitFor({ state: "detached" });
-      await page.locator("header [data-tab='flows']").click();
+      await page.getByRole("navigation", { name: t["app.nav"] }).locator("[data-tab='flows']").click();
       await page.waitForURL(/\/en\/workflows/);
       await page.locator("header [data-back]").click();
       await page.waitForURL(/\/en\/compress-pdf/);
-      await page.locator("header [data-tab='reader']").click();
+      await page.getByRole("navigation", { name: t["app.nav"] }).locator("[data-tab='reader']").click();
       await page.waitForURL(/\/en\/pdf-viewer/);
       return "open → compress with the file, settings, workflows, back, reader";
     } finally {
@@ -211,15 +213,14 @@ await suite(async ({ name, browser, test }) => {
       // The page as built, with none of its scripts: what shows while they load.
       await page.route(/\/_next\/static\/chunks\/.*\.js$/, (r) => r.abort());
       await page.goto(`${base}/en?app=1`, { waitUntil: "load" });
-      // There, rising in (its one entrance), not arriving later.
-      const fab = await page.evaluate(() => { const f = document.querySelector("[data-fab]"); return !!f && getComputedStyle(f).display !== "none"; });
-      if (!fab) throw new Error("no Open button until the app starts");
+      const bar = page.getByRole("navigation", { name: t["app.nav"] });
+      if (!(await bar.isVisible())) throw new Error("no tab bar until the app starts");
       if ((await page.locator("[data-tool]").count()) < 40) throw new Error("no tools until the app starts");
-      // Nothing fading or lifting in but the mascot and the Open button: the
-      // title and the tools are there, still (loops, like blinking, are no entrance).
-      const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity && a.effect?.target?.closest?.("main") && !a.effect.target.closest(".mascot, .fab")).length);
+      // Nothing fading or lifting in but the mascot: the title and the tools
+      // are there, still (loops, like blinking, are no entrance).
+      const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity && a.effect?.target?.closest?.("main") && !a.effect.target.closest(".mascot")).length);
       if (moving) throw new Error(`${moving} entrance animations running`);
-      return "Open button and tools there, nothing else animating in";
+      return "tab bar and tools there, nothing else animating in";
     } finally {
       await ctx.close();
     }

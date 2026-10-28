@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { BookOpenText, ChevronDown, ChevronLeft, Globe2, Menu, Search, Settings2, Workflow, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, Globe2, Menu, Search, X } from "lucide-react";
 import { Logo } from "./Logo";
 import dynamic from "next/dynamic";
 import { useI18n } from "./I18n";
@@ -167,13 +167,6 @@ export function Header() {
           <button type="button" data-command className="icon-btn" aria-label={t("cmd.label")} title={t("cmd.label")} onClick={openCommandBar}>
             <Search size={18} strokeWidth={1.75} />
           </button>
-
-          {/* The app on a phone: Reader, Workflows and Settings, round, as the tab bar had them. */}
-          <span data-tabs-only className="contents">
-            <Link href={href("/pdf-viewer")} data-tab="reader" className="icon-btn icon-round" aria-label={t("app.reader")}><BookOpenText size={18} strokeWidth={1.75} /></Link>
-            <Link href={href("/workflows")} data-tab="flows" className="icon-btn icon-round" aria-label={t("nav.workflows")}><Workflow size={18} strokeWidth={1.75} /></Link>
-            <button type="button" data-tab="settings" className="icon-btn icon-round" aria-label={t("app.settings")} onClick={() => window.dispatchEvent(new CustomEvent("nopload:sheet", { detail: "settings" }))}><Settings2 size={18} strokeWidth={1.75} /></button>
-          </span>
 
           {/* The app has the theme in its Settings. */}
           <span data-web-only className="contents"><ThemeMenu /></span>

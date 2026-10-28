@@ -58,6 +58,8 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
             <span data-web-only><Words text={t["home.title"]} /></span>
             <span data-app-only>{t["app.hello"]}</span>
           </h1>
+          {/* The app: open a file, then choose what to do with it. */}
+          <div data-app-only className="mt-4"><OpenFab /></div>
           <p data-web-only className="fade-up mt-6 max-w-[540px] text-pretty text-[17px] leading-[1.6] text-ink-2 sm:text-[18px]" style={{ "--d": "450ms" } as React.CSSProperties}>
             {t["home.subtitle"]}
           </p>
@@ -85,7 +87,6 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       <div data-home-tools className="mt-16 sm:mt-20">
         <ToolGrid />
       </div>
-      <OpenFab />
 
       {/* Why the files stay put, and the promise with its proof. */}
       <section data-web-only aria-labelledby="home-cloud" className="relative mt-20 grid items-center gap-10 overflow-hidden rounded-[36px] bg-surface-2 px-6 py-12 sm:px-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">

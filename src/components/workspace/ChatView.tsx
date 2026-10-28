@@ -195,7 +195,7 @@ export function ChatView({ file, options, defs, onOption, onError }: {
               <Square size={15} />
             </button>
           ) : (
-            <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-(--brand) text-[#000] transition-[scale,opacity] active:scale-90 disabled:opacity-40" disabled={!index || here === false || !q.trim()} aria-label={t("chat.send")}><ArrowUp size={18} /></button>
+            <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-(--brand) text-white transition-[scale,opacity] active:scale-90 disabled:opacity-40" disabled={!index || here === false || !q.trim()} aria-label={t("chat.send")}><ArrowUp size={18} /></button>
           )}
         </form>
       </section>

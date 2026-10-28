@@ -28,7 +28,7 @@ await suite(async ({ name, browser, test }) => {
   await test("the settings sheet is built ahead, and opens at once", async () => {
     await page.waitForFunction(() => document.querySelectorAll(".app-sheet-wrap[hidden]").length === 2, null, { timeout: 8000 });
     const before = await page.evaluate(() => (document.querySelector(".app-sheet[data-sheet='settings']").dataset.mark = "1"));
-    await page.locator("header [data-tab='settings']").click();
+    await page.locator(".app-tabbar [data-tab='settings']").click();
     await page.locator(".app-sheet[data-sheet='settings']").waitFor();
     if ((await page.locator(".app-sheet[data-sheet='settings']").getAttribute("data-mark")) !== before) throw new Error("settings rebuilt");
     await page.keyboard.press("Escape");

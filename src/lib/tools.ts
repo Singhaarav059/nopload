@@ -663,3 +663,20 @@ export function optionVisible(o: OptionDef, values: Record<string, unknown>, def
 // have no cap: past the device's memory budget (src/lib/budget.ts) the
 // workspace only warns.
 export const LIMITS = { files: 100, mb: 200 };
+
+// How much each tool is used, most first: the order tools are shown in,
+// within the top cards and within each family. Tools not listed follow.
+export const RANK: ToolId[] = [
+  "compress", "merge", "edit", "sign", "pdfToWord", "split", "jpgToPdf", "chat",
+  "protect", "pdfToJpg", "rotate", "organize", "wordToPdf", "unlock", "summarize", "ocr",
+  "pdfToExcel", "watermark", "pageNumbers", "extract", "remove", "redact", "translate", "excelToPdf",
+  "pptToPdf", "pdfToPpt", "crop", "forms", "examKit", "scan", "compare", "listen", "htmlToPdf",
+  "resize", "flatten", "metadata", "headerFooter", "removeBlank", "grayscale", "repair", "cleanScans",
+  "pdfToPdfa", "pdfToMarkdown", "bookmarks", "attachments", "nUp", "booklet", "mix", "linearize",
+  "accessible", "sanitize", "verify",
+];
+const rankOf = (id: ToolId) => {
+  const i = RANK.indexOf(id);
+  return i < 0 ? RANK.length : i;
+};
+export const byRank = <T extends { id: ToolId }>(list: T[]) => [...list].sort((a, b) => rankOf(a.id) - rankOf(b.id));

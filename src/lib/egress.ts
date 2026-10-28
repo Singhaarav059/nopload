@@ -12,6 +12,11 @@
 //   securitypolicyviolation event in the page, counted as "blocked".
 // blob: and data: addresses never leave the device and aren't counted.
 
+// Runs in <head> before anything else (src/app/[lang]/layout.tsx): keeps
+// the addresses the policy stops before this module has loaded, which would
+// otherwise be missed (the event isn't buffered, unlike Resource Timing).
+export const EGRESS_SCRIPT = `window.__noploadBlocked=[];document.addEventListener("securitypolicyviolation",function(e){window.__noploadBlocked.push(e.blockedURI)})`;
+
 export type Egress = {
   /** Bytes in request bodies (uploads), measured by the service worker. */
   sent: number;
@@ -68,13 +73,16 @@ function start() {
   } catch {
     /* no Resource Timing: the service worker still counts */
   }
-  document.addEventListener("securitypolicyviolation", (e) => {
-    // Only stopped requests; "eval" and "inline" checks aren't traffic. The
-    // header and the meta copy of the policy each report the same request.
-    if (!/^(?:https?|wss?):/i.test(e.blockedURI) || blocked.has(e.blockedURI)) return;
-    blocked.add(e.blockedURI);
+  // Only stopped requests; "eval" and "inline" checks aren't traffic. The
+  // header and the meta copy of the policy each report the same request.
+  const stopped = (uri: string) => {
+    if (!/^(?:https?|wss?):/i.test(uri) || blocked.has(uri)) return;
+    blocked.add(uri);
     update(counts());
-  });
+  };
+  const early = (window as { __noploadBlocked?: string[] }).__noploadBlocked;
+  early?.forEach(stopped);
+  document.addEventListener("securitypolicyviolation", (e) => stopped(e.blockedURI));
   const sw = navigator.serviceWorker;
   if (!sw) return;
   sw.addEventListener("message", (e: MessageEvent<EgressMessage>) => {

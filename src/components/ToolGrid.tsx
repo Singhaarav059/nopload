@@ -7,24 +7,8 @@ import { ToolIcon } from "./ToolIcon";
 import { CategoryBadge } from "./Studio";
 import { Mascot } from "./Logo";
 import { useI18n } from "./I18n";
-import { CATEGORIES, TOOLS, descKey, type CategoryId, type Tool, type ToolId } from "@/lib/tools";
+import { CATEGORIES, RANK, TOOLS, byRank, descKey, type CategoryId, type Tool, type ToolId } from "@/lib/tools";
 
-// How much each tool is used, most first: the order tools are shown in,
-// within the top cards and within each family. Tools not listed follow.
-const RANK: ToolId[] = [
-  "compress", "merge", "edit", "sign", "pdfToWord", "split", "jpgToPdf", "chat",
-  "protect", "pdfToJpg", "rotate", "organize", "wordToPdf", "unlock", "summarize", "ocr",
-  "pdfToExcel", "watermark", "pageNumbers", "extract", "remove", "redact", "translate", "excelToPdf",
-  "pptToPdf", "pdfToPpt", "crop", "forms", "examKit", "scan", "compare", "listen", "htmlToPdf",
-  "resize", "flatten", "metadata", "headerFooter", "removeBlank", "grayscale", "repair", "cleanScans",
-  "pdfToPdfa", "pdfToMarkdown", "bookmarks", "attachments", "nUp", "booklet", "mix", "linearize",
-  "accessible", "sanitize", "verify",
-];
-const rankOf = (id: ToolId) => {
-  const i = RANK.indexOf(id);
-  return i < 0 ? RANK.length : i;
-};
-const byRank = <T extends { id: ToolId }>(list: T[]) => [...list].sort((a, b) => rankOf(a.id) - rankOf(b.id));
 // The eight shown first, large.
 const TOP = new Set<ToolId>(RANK.slice(0, 8));
 
