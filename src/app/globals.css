@@ -926,12 +926,16 @@ select.field {
   }
 }
 
-/* ── The signature: the orange, flat, as a card (the home board, the
-   install banner). The wash behind the hero is a faint orange glow. */
+/* ── The signature: a black card lit orange from its corner (the home
+   board, the install banner), white text on it in both themes. The wash
+   behind the hero is a faint orange glow. */
 .aurora, .board-card.aurora {
-  color: #000;
-  border-color: transparent;
-  background: radial-gradient(120% 90% at 100% 0%, #ff8a3d 0%, transparent 60%), var(--brand);
+  color: #fff;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background:
+    radial-gradient(70% 90% at 100% 0%, color-mix(in oklab, var(--brand) 55%, transparent) 0%, transparent 60%),
+    radial-gradient(60% 70% at 0% 100%, color-mix(in oklab, #ff3d7f 22%, transparent) 0%, transparent 70%),
+    #111;
 }
 /* Edge to edge and up behind the header, so it has no edges of its own: it
    only fades out downwards. (body clips the sideways overflow 100vw makes
@@ -975,18 +979,19 @@ body { overflow-x: clip; }
 }
 .board-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; opacity: 0.9; }
 .board-title { display: block; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 650; letter-spacing: -0.035em; line-height: 1.05; }
-.board-bar { display: block; height: 4px; margin-top: 14px; border-radius: 4px; background: rgb(0 0 0 / 0.18); overflow: hidden; }
-.board-bar > span { display: block; height: 100%; border-radius: 4px; background: #000; }
-.board-go { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: #000; color: #fff; }
+.board-bar { display: block; height: 4px; margin-top: 14px; border-radius: 4px; background: rgb(255 255 255 / 0.18); overflow: hidden; }
+.board-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--brand); }
+.board-go { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: var(--brand); color: #000; transition: scale 300ms var(--ease-spring); }
+.board-read:hover .board-go { scale: 1.08; }
 .board-tool { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px; border-radius: 18px; color: var(--ink); transition: background 200ms, scale 200ms; }
 .board-tool:hover { background: var(--surface-2); }
 .board-tool:active { scale: 0.96; }
 
 /* The install banner wears the signature colour. */
 .install-banner.aurora { border: 0; }
-.install-banner.aurora .text-ink-2 { color: rgb(0 0 0 / 0.75); }
-.install-banner.aurora .btn-primary { background: #000; color: #fff; }
-.install-banner.aurora .icon-btn { color: #000; }
+.install-banner.aurora .text-ink-2 { color: rgb(255 255 255 / 0.72); }
+.install-banner.aurora .btn-primary { background: #fff; color: #000; box-shadow: none; }
+.install-banner.aurora .icon-btn { color: #fff; }
 
 /* The editor's handles on a touch screen: the dot stays small, the finger's target doesn't. */
 @media (pointer: coarse) {
@@ -1167,7 +1172,7 @@ body { overflow-x: clip; }
 /* The reading card is the top of a stack: two more peek out below it and
    fan out a little while it's pressed. */
 .board-read {
-  --stack: color-mix(in oklab, var(--brand) 50%, var(--bg));
+  --stack: color-mix(in oklab, #111 70%, var(--brand));
   box-shadow: 0 9px 0 -4px var(--stack), 0 18px 0 -9px color-mix(in oklab, var(--stack) 50%, var(--bg)), var(--shadow);
   transition: translate 400ms var(--ease-spring), box-shadow 420ms var(--ease-spring), scale 200ms;
 }
@@ -1278,3 +1283,58 @@ body { overflow-x: clip; }
   box-shadow: 0 0 14px color-mix(in oklab, var(--brand) 60%, transparent);
 }
 @media (prefers-reduced-motion: reduce) { .machine-stage::before { animation: none; } }
+
+/* The reading card's picture: three pages fanned out, lines of text on
+   them, the mascot peeking over the back one; they spread on hover. */
+.board-read { position: relative; isolation: isolate; overflow: hidden; }
+.board-chip { height: 26px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 550; background: rgb(255 255 255 / 0.1); color: rgb(255 255 255 / 0.85); border: 1px solid rgb(255 255 255 / 0.1); }
+.board-pages { position: absolute; inset-inline-end: 5%; bottom: -10%; width: min(32%, 200px); aspect-ratio: 3 / 4; pointer-events: none; }
+.board-pages > i {
+  position: absolute; inset: 0; border-radius: 12px; background:
+    linear-gradient(var(--brand), var(--brand)) 14% 14% / 40% 6px no-repeat,
+    repeating-linear-gradient(#0000 0 14px, #d9d6d1 14px 17px) 14% 30% / 72% 46% no-repeat,
+    linear-gradient(#ffe6d6, #ffe6d6) 14% 84% / 72% 14% no-repeat,
+    #fff;
+  box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.7);
+  transition: rotate 600ms var(--ease-spring), translate 600ms var(--ease-spring);
+}
+.board-pages > i:nth-of-type(1) { rotate: -14deg; translate: -26% 8%; opacity: 0.8; }
+.board-pages > i:nth-of-type(2) { rotate: -5deg; translate: -10% 2%; opacity: 0.92; }
+.board-pages > i:nth-of-type(3) { rotate: 5deg; }
+.board-read:hover .board-pages > i:nth-of-type(1) { rotate: -20deg; translate: -38% 6%; }
+.board-read:hover .board-pages > i:nth-of-type(2) { rotate: -8deg; translate: -16% 0; }
+.board-read:hover .board-pages > i:nth-of-type(3) { rotate: 8deg; translate: 6% -2%; }
+.board-pages-mascot { position: absolute; z-index: 0; left: 8%; top: -26%; rotate: -10deg; }
+.board-pages > i { z-index: 1; }
+@media (max-width: 520px) { .board-pages { width: 30%; bottom: -16%; inset-inline-end: 3%; } .board-chip { display: none; } }
+
+/* The tools (ToolGrid.tsx): the most used as large cards in their family's
+   colour, an arrow that slides up on hover; every family a compact panel. */
+.top-card {
+  position: relative; display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 148px; padding: 14px;
+  border-radius: 24px; border: 1px solid color-mix(in oklab, var(--tint-ink) 16%, transparent);
+  background: radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--tint-ink) 16%, transparent), transparent 60%), var(--tint);
+  transition: translate 420ms var(--ease-spring), box-shadow 300ms, border-color 300ms, opacity 300ms, scale 200ms;
+}
+.top-card:hover { translate: 0 -3px; box-shadow: var(--shadow-lift); border-color: color-mix(in oklab, var(--tint-ink) 35%, transparent); }
+.top-card-go { position: absolute; top: 16px; inset-inline-end: 16px; color: var(--tint-ink); opacity: 0.55; transition: translate 300ms var(--ease-spring), opacity 200ms; }
+.top-card:hover .top-card-go { opacity: 1; translate: 3px -3px; }
+[dir="rtl"] .top-card:hover .top-card-go { translate: -3px -3px; }
+.family-panel {
+  padding: 12px; border-radius: 26px; border: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 55%, var(--surface)), var(--surface) 42%);
+}
+.tool-row {
+  display: flex; align-items: center; gap: 12px; min-width: 0; padding: 8px 10px; border-radius: 16px; border: 1px solid transparent;
+  transition: background-color 200ms, border-color 200ms, opacity 300ms, scale 200ms;
+}
+.tool-row:hover { background: color-mix(in oklab, var(--tint) 60%, transparent); }
+@media (min-width: 768px) { .top-card { min-height: 160px; padding: 16px; } }
+.top-card-icon { display: block; width: fit-content; padding: 3px; border-radius: 17px; background: var(--surface); box-shadow: 0 6px 16px -8px color-mix(in oklab, var(--tint-ink) 45%, transparent); transition: rotate 400ms var(--ease-spring), scale 400ms var(--ease-spring); }
+.top-card:hover .top-card-icon { rotate: -6deg; scale: 1.06; }
+
+/* "Three easy steps" as one panel, not a page of air. */
+.how-box { padding: 22px; border-radius: 36px; border: 1px solid var(--line); background: radial-gradient(60% 80% at 100% 0%, color-mix(in oklab, var(--brand) 8%, transparent), transparent 70%), color-mix(in oklab, var(--surface) 60%, transparent); }
+@media (min-width: 640px) { .how-box { padding: 32px; } }
+.board-read > :not(.board-pages) { position: relative; z-index: 2; max-width: 56%; }
+@media (max-width: 520px) { .board-read > :not(.board-pages) { max-width: 64%; } .board-pages-mascot { display: none; } }

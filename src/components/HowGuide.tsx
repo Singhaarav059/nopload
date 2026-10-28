@@ -48,15 +48,15 @@ export function HowGuide() {
     <section
       ref={box}
       aria-labelledby="how-title"
-      className="relative"
+      className="how-box relative"
       onPointerEnter={() => setPaused(true)}
       onPointerLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
-      <h2 id="how-title" className="reveal display max-w-[20ch] text-[2rem] sm:text-[2.75rem]">{t("home.howTitle")}</h2>
-      <div className="mt-10 grid items-center gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
-        <div role="tablist" aria-label={t("ws.steps")} aria-orientation="vertical" className="flex flex-col gap-2">
+      <h2 id="how-title" className="reveal display max-w-[20ch] text-[1.9rem] sm:text-[2.5rem]">{t("home.howTitle")}</h2>
+      <div className="mt-6 grid items-stretch gap-5 lg:grid-cols-[0.95fr_1.05fr] lg:gap-8">
+        <div role="tablist" aria-label={t("ws.steps")} aria-orientation="vertical" className="flex flex-col justify-center gap-2">
           {STEPS.map((s, i) => {
             const on = i === step;
             return (
@@ -77,8 +77,8 @@ export function HowGuide() {
                   choose(next);
                   document.getElementById(`how-tab-${next}`)?.focus();
                 }}
-                className={`relative overflow-hidden rounded-[24px] border p-5 text-start transition-[background-color,border-color,box-shadow] duration-500 ease-(--ease-out) ${
-                  on ? "border-line bg-surface shadow-card" : "border-transparent hover:bg-surface/60"
+                className={`relative overflow-hidden rounded-[22px] border px-5 py-4 text-start transition-[background-color,border-color,box-shadow] duration-500 ease-(--ease-out) ${
+                  on ? "border-line bg-surface shadow-card" : "border-line/60 bg-surface/40 hover:bg-surface/80"
                 }`}
               >
                 <span className="flex items-center gap-3">
@@ -114,7 +114,7 @@ export function HowGuide() {
           role="tabpanel"
           aria-labelledby={`how-tab-${step}`}
           data-cat={STEPS[step].cat}
-          className="relative aspect-[4/3] max-h-[420px] w-full overflow-hidden rounded-[32px] lg:aspect-[5/4] lg:max-h-none bg-(--tint) transition-colors duration-700"
+          className="dropzone relative aspect-[16/11] max-h-[360px] w-full overflow-hidden rounded-[28px] lg:aspect-auto lg:h-full lg:min-h-[300px] lg:max-h-none bg-(--tint) transition-colors duration-700"
         >
           <div aria-hidden className="absolute inset-0">
             <AddScene on={step === 0} />

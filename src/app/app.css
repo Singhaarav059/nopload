@@ -681,12 +681,14 @@ html[data-viewer] body { overflow: hidden; }
 /* Install: the header's pill, the home banner and the sheet (InstallGuide.tsx). */
 .install-pill {
   display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px;
-  font-size: 13.5px; font-weight: 600; color: var(--brand-ink); background: var(--accent);
-  box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 35%, transparent);
+  font-size: 13.5px; font-weight: 600; color: var(--bg); background: var(--ink);
+  box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.35);
   transition: translate 300ms var(--ease-spring), box-shadow 300ms; position: relative; overflow: hidden;
 }
 .install-pill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%); translate: -120% 0; animation: install-shine 4.5s 2s ease-in-out infinite; }
-.install-pill:hover { translate: 0 -1px; box-shadow: 0 10px 24px color-mix(in oklab, var(--accent) 45%, transparent); }
+.install-pill:hover { translate: 0 -1px; box-shadow: 0 10px 24px -6px color-mix(in oklab, var(--brand) 55%, transparent); }
+/* Black (white in dark) with the orange download arrow. */
+.install-pill svg { color: var(--brand); }
 @keyframes install-shine { 0%, 70% { translate: -120% 0; } 100% { translate: 120% 0; } }
 @media (max-width: 420px) { .install-pill { padding: 0 11px; } .install-pill span { display: none; } }
 html[data-app] .install-pill { display: none; }

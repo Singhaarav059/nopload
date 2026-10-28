@@ -7,6 +7,7 @@ import { useI18n } from "./I18n";
 import { IntentLink } from "./IntentLink";
 import { ToolIcon } from "./ToolIcon";
 import { DotNumber } from "./DotNumber";
+import { Mascot } from "./Logo";
 import { forget, openRecent, recentFiles, subscribeLibrary, type Recent } from "@/lib/library";
 import { handOffTo } from "@/lib/handoff";
 import { TOOLS, toolById, type ToolId } from "@/lib/tools";
@@ -57,10 +58,20 @@ export function HomeBoard() {
         ) : (
           <>
             <span className="board-title mt-auto">{t("tool.view.name")}</span>
-            <span className="mt-2 block max-w-[34ch] text-pretty text-[14.5px] opacity-85">{t("tool.view.desc")}</span>
+            <span className="mt-2 block max-w-[30ch] text-pretty text-[14.5px] opacity-80">{t("tool.view.desc")}</span>
+            <span className="mt-4 flex max-w-[60%] flex-wrap gap-1.5">
+              {(["viewer.reading", "viewer.night", "viewer.search", "viewer.contents"] as const).map((k) => (
+                <span key={k} className="board-chip">{t(k)}</span>
+              ))}
+            </span>
             <span className="board-go mt-5"><ArrowRight size={18} className="rtl:rotate-180" aria-hidden /></span>
           </>
         )}
+        {/* Pages fanned out at the side, the mascot reading behind them. */}
+        <span aria-hidden className="board-pages">
+          <Mascot size={54} className="board-pages-mascot" />
+          <i /><i /><i />
+        </span>
       </button>
 
       <div data-web-only className="board-card board-figure">

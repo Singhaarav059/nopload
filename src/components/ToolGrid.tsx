@@ -2,15 +2,36 @@
 
 import { IntentLink } from "./IntentLink";
 import { useEffect, useRef, useState, ViewTransition } from "react";
-import { Cloud, Search, Server, X } from "lucide-react";
+import { ArrowUpRight, Cloud, Search, Server, X } from "lucide-react";
 import { ToolIcon } from "./ToolIcon";
 import { CategoryBadge } from "./Studio";
 import { Mascot } from "./Logo";
 import { useI18n } from "./I18n";
-import { CATEGORIES, TOOLS, descKey, type CategoryId } from "@/lib/tools";
+import { CATEGORIES, TOOLS, descKey, type CategoryId, type Tool, type ToolId } from "@/lib/tools";
 
-// The tools by family, each in its own colour, with a search field and
-// family chips that stay at the top while the list scrolls.
+// How much each tool is used, most first: the order tools are shown in,
+// within the top cards and within each family. Tools not listed follow.
+const RANK: ToolId[] = [
+  "compress", "merge", "edit", "sign", "pdfToWord", "split", "jpgToPdf", "chat",
+  "protect", "pdfToJpg", "rotate", "organize", "wordToPdf", "unlock", "summarize", "ocr",
+  "pdfToExcel", "watermark", "pageNumbers", "extract", "remove", "redact", "translate", "excelToPdf",
+  "pptToPdf", "pdfToPpt", "crop", "forms", "examKit", "scan", "compare", "listen", "htmlToPdf",
+  "resize", "flatten", "metadata", "headerFooter", "removeBlank", "grayscale", "repair", "cleanScans",
+  "pdfToPdfa", "pdfToMarkdown", "bookmarks", "attachments", "nUp", "booklet", "mix", "linearize",
+  "accessible", "sanitize", "verify",
+];
+const rankOf = (id: ToolId) => {
+  const i = RANK.indexOf(id);
+  return i < 0 ? RANK.length : i;
+};
+const byRank = <T extends { id: ToolId }>(list: T[]) => [...list].sort((a, b) => rankOf(a.id) - rankOf(b.id));
+// The eight shown first, large.
+const TOP = new Set<ToolId>(RANK.slice(0, 8));
+
+// The tools: the most used first, as large cards, then every family in its
+// own colour as a compact panel, its tools by how much they're used. A search
+// or a family chip shows the matching tools as cards instead. The search
+// field and the chips stay at the top while the list scrolls.
 export function ToolGrid() {
   const { t, href } = useI18n();
   const [q, setQ] = useState("");
@@ -42,7 +63,7 @@ export function ToolGrid() {
     const needle = q.trim().toLowerCase();
     return CATEGORIES.map((c) => ({
       id: c.id,
-      tools: TOOLS.filter((tool) => {
+      tools: byRank(TOOLS).filter((tool) => {
         if (tool.category !== c.id) return false;
         if (!needle) return true;
         return `${t(`tool.${tool.id}.name`)} ${t(descKey(tool))} ${tool.slug} ${tool.accept.join(" ")}`
@@ -104,7 +125,9 @@ export function ToolGrid() {
         </div>
       </div>
 
-      {sections.length === 0 ? (
+      {!q.trim() && cat === "all" ? (
+        <Browse />
+      ) : sections.length === 0 ? (
         <div className="rise flex flex-col items-center py-24 text-center">
           <p className="text-[1.4rem] font-medium tracking-[-0.02em] text-muted">{t("home.noResults")}</p>
         </div>
@@ -155,5 +178,110 @@ export function ToolGrid() {
         ))
       )}
     </section>
+  );
+}
+
+// Browsing, with no search: the most used tools large, then each family.
+function Browse() {
+  const { t } = useI18n();
+  return (
+    <>
+      <section aria-labelledby="tools-top" className="pt-8">
+        <h3 id="tools-top" className="mb-3 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-(--brand)" /> {t("home.popular")}
+        </h3>
+        <ul className="tool-cards grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+          {RANK.slice(0, 8).map((id) => {
+            const tool = TOOLS.find((x) => x.id === id)!;
+            return (
+              <li key={id} data-cat={tool.category}>
+                <TopCard tool={tool} />
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+      <section aria-labelledby="tools-all" className="pt-10">
+        <h3 id="tools-all" className="mb-3 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-ink-2" /> {t("nav.allTools")}
+        </h3>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {CATEGORIES.map((c) => {
+            const list = byRank(TOOLS.filter((x) => x.category === c.id));
+            return (
+              <section key={c.id} data-cat={c.id} aria-labelledby={`cat-${c.id}`} className="family-panel">
+                <header className="flex items-center gap-3 px-1 pb-2">
+                  <CategoryBadge id={c.id} size={38} />
+                  <div className="min-w-0 flex-1">
+                    <h4 id={`cat-${c.id}`} className="text-[16px] font-semibold tracking-[-0.015em]">{t(`cat.${c.id}`)}</h4>
+                    <p className="truncate text-[12.5px] text-muted">{t(`cat.${c.id}.blurb`)}</p>
+                  </div>
+                  <span className="pill h-6 px-2 tabular text-[12px]">{list.length}</span>
+                </header>
+                <ul className="tool-cards">
+                  {list.map((tool) => (
+                    <li key={tool.id}>
+                      <ToolRow tool={tool} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function Badges({ tool }: { tool: Tool }) {
+  const { t } = useI18n();
+  return (
+    <>
+      {tool.isNew && <span data-cat="convertTo" className="pill h-5 px-2 text-[11px]">{t("home.new")}</span>}
+      {tool.runtime === "server" && <Server size={12} className="shrink-0 text-muted" aria-label={t("home.serverBadge")} />}
+      {tool.ai && <Cloud size={12} className="shrink-0 text-muted" aria-label={t("home.aiBadge")} />}
+    </>
+  );
+}
+
+// A most-used tool: a large card in its family's colour.
+function TopCard({ tool }: { tool: Tool }) {
+  const { t, href } = useI18n();
+  return (
+    <IntentLink href={href(`/${tool.slug}`)} data-tool={tool.id} className="tool-card top-card group">
+      <ViewTransition name={`tool-${tool.id}`} share="morph" default="none">
+        <span className="top-card-icon shrink-0"><ToolIcon tool={tool} size={44} /></span>
+      </ViewTransition>
+      <span className="mt-auto block min-w-0">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-[16px] font-semibold leading-tight tracking-[-0.015em]">{t(`tool.${tool.id}.name`)}</span>
+          <Badges tool={tool} />
+        </span>
+        <span className="mt-1 line-clamp-2 block text-pretty text-[13px] leading-snug text-ink-2">{t(descKey(tool))}</span>
+      </span>
+      <ArrowUpRight aria-hidden size={18} className="top-card-go rtl:-scale-x-100" />
+    </IntentLink>
+  );
+}
+
+// A tool in its family's panel: one compact row. The most-used ones are
+// already a card above, so the card is the one that carries their name for
+// the morph and for tests (data-tool).
+function ToolRow({ tool }: { tool: Tool }) {
+  const { t, href } = useI18n();
+  const top = TOP.has(tool.id);
+  const icon = <span className="block shrink-0"><ToolIcon tool={tool} size={34} /></span>;
+  return (
+    <IntentLink href={href(`/${tool.slug}`)} data-tool={top ? undefined : tool.id} className="tool-card tool-row">
+      {top ? icon : <ViewTransition name={`tool-${tool.id}`} share="morph" default="none">{icon}</ViewTransition>}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-[14.5px] font-medium tracking-[-0.01em]">{t(`tool.${tool.id}.name`)}</span>
+          <Badges tool={tool} />
+        </span>
+        <span className="block truncate text-[12.5px] text-muted">{t(descKey(tool))}</span>
+      </span>
+    </IntentLink>
   );
 }
