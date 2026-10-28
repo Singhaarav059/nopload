@@ -34,7 +34,7 @@ export function Inline({
           data-citation={n}
           onClick={() => onPage?.(n)}
           aria-label={t("chat.showPage", { n })}
-          className="mx-0.5 inline-flex h-5 items-center rounded-md border border-line bg-surface px-1.5 align-[1px] text-[11.5px] font-medium tabular text-ink-2 hover:border-line-strong hover:text-ink"
+          className="cite tabular"
         >
           {t("chat.pageShort", { n })}
         </button>

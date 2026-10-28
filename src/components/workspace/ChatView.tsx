@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ChevronLeft, ChevronRight, FileText, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronLeft, ChevronRight, Copy, FileText, RotateCcw, Square } from "lucide-react";
 import { useI18n } from "../I18n";
 import { PdfThumb } from "../PdfThumb";
 import { AiNotice } from "./AiNotice";
@@ -44,6 +44,7 @@ export function ChatView({ file, options, defs, onOption, onError, onClose }: {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
+  const [copied, setCopied] = useState<number | null>(null);
   const stop = useRef<AbortController | null>(null);
   // Whether this copy of the site has the server AI.
   const [here, setHere] = useState<boolean | null>(null);
@@ -132,33 +133,40 @@ export function ChatView({ file, options, defs, onOption, onError, onClose }: {
   };
 
   const pages = index?.pages.length ?? 0;
+  const copy = (x: Turn, i: number) => {
+    if (!x.a) return;
+    void navigator.clipboard?.writeText(x.a.text ?? x.a.parts.map((p) => p.text).join(" ")).then(() => {
+      setCopied(i);
+      setTimeout(() => setCopied((c) => (c === i ? null : c)), 1600);
+    });
+  };
   return (
     <div ref={layout} className="chat-layout">
-      {/* The file being asked about: one slim bar, not a board. */}
-      <div className="chat-file">
-        <span className="chat-file-icon"><FileText size={17} /></span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14.5px] font-medium">{file.name}</span>
-          <span className="block text-[12.5px] text-muted tabular">{pages ? `${t("ws.pages", { n: pages })} · ` : ""}{humanSize(file.size)}</span>
-        </span>
-        {onClose && <button type="button" className="btn btn-quiet btn-sm" onClick={onClose}><RotateCcw size={14} /> {t("res.startOver")}</button>}
-      </div>
-      {/* As tall as the screen, never taller: questions and answers scroll
+      {/* One surface: the file at its top, the conversation, the question box.
+          As tall as the screen, never taller: questions and answers scroll
           inside it, the question box stays at its bottom. */}
       <section ref={box} aria-label={t("chat.title")} data-chat
         style={{ scrollMarginBottom: "calc(var(--tabbar-h, 0px) + 16px)" }}
-        className="card relative flex h-[calc(100dvh-var(--tabbar-h,0px)-120px)] max-h-[900px] min-h-[420px] min-w-0 flex-col overflow-hidden lg:sticky lg:top-20">
-        <div ref={log} className="relative min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5" aria-live="polite" data-chat-log>
+        className="chat-card h-[calc(100dvh-var(--tabbar-h,0px)-104px)] max-h-[900px] min-h-[460px] lg:sticky lg:top-20">
+        <header className="chat-file">
+          <span className="chat-file-icon"><FileText size={16} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-medium">{file.name}</span>
+            <span className="block text-[12px] text-muted tabular">{pages ? `${t("ws.pages", { n: pages })} · ` : ""}{humanSize(file.size)}</span>
+          </span>
+          {onClose && <button type="button" className="chat-ghost" onClick={onClose}><RotateCcw size={14} /> {t("res.startOver")}</button>}
+        </header>
+        <div ref={log} className="relative min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6" aria-live="polite" data-chat-log>
           {!index && (
-            <div className="py-10">
+            <div className="grid min-h-full place-items-center py-10">
               <LoadingOrb small value={reading} label={t("chat.reading", { pct: Math.round(reading * 100) })} />
             </div>
           )}
           {index && !turns.length && here !== false && (
             <div className="flex min-h-full flex-col">
-              <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6 text-center">
-                <Mascot size={52} />
-                <p className="blur-in max-w-[34ch] text-pretty text-[16px] text-ink-2">{t("chat.empty", { n: pages })}</p>
+              <div className="flex flex-1 flex-col items-center justify-center gap-5 py-6 text-center">
+                <span className="chat-hello"><Mascot size={44} /></span>
+                <p className="blur-in max-w-[30ch] text-pretty text-[17px] leading-snug tracking-[-0.01em] text-ink">{t("chat.empty", { n: pages })}</p>
               </div>
               {/* Questions to start with, drifting past in two rows; each row is
                   there twice so it loops, the copy hidden from screen readers. */}
@@ -176,59 +184,73 @@ export function ChatView({ file, options, defs, onOption, onError, onClose }: {
           )}
           {here === false && <p className="rounded-xl border border-line bg-surface p-4 text-[15px]" data-ai-unavailable>{t("ai.unavailable")}</p>}
           {note && <p className="text-[13px] text-muted" data-ocr-note={note}>{t(`res.${note}`)}</p>}
-          {turns.map((x, i) => (
-            <div key={i} className={`space-y-3 ${i === turns.length - 1 ? "min-h-[calc(100%-1rem)]" : ""}`} data-turn={i}>
-              <p className="blur-in ms-auto w-fit max-w-[85%] break-words rounded-2xl rounded-ee-md bg-[color-mix(in_oklab,var(--brand)_10%,var(--surface))] px-3.5 py-2 text-[15px]">{x.q}</p>
-              <div className="min-w-0 text-[15px] leading-relaxed text-ink [overflow-wrap:anywhere]" data-answer={(x.a || x.cloudDown || x.limited || x.failed) && !(busy && i === turns.length - 1) ? "done" : "pending"}>
-                {x.limited ? (
-                  <div className="space-y-2" data-limited={x.limited}>
-                    <p className="text-ink-2">{t(x.limited === "minute" ? "chat.limitMinute" : "chat.limitDay")}</p>
-                    {x.limited === "minute" && (
-                      <button className="btn btn-quiet btn-sm" onClick={() => void ask(x.q, i)} disabled={busy}><RotateCcw size={14} /> {t("chat.retry")}</button>
+          {turns.map((x, i) => {
+            const writing = busy && i === turns.length - 1;
+            return (
+              <div key={i} className={`space-y-4 ${i === turns.length - 1 ? "min-h-[calc(100%-1rem)]" : ""}`} data-turn={i}>
+                <p className="chat-q blur-in">{x.q}</p>
+                <div className="flex gap-3">
+                  <span aria-hidden className={`chat-avatar ${writing ? "is-writing" : ""}`}><Mascot size={18} /></span>
+                  <div className="min-w-0 flex-1 pt-0.5 text-[15.5px] leading-[1.65] text-ink [overflow-wrap:anywhere]" data-answer={(x.a || x.cloudDown || x.limited || x.failed) && !writing ? "done" : "pending"}>
+                    {x.limited ? (
+                      <div className="space-y-2" data-limited={x.limited}>
+                        <p className="text-ink-2">{t(x.limited === "minute" ? "chat.limitMinute" : "chat.limitDay")}</p>
+                        {x.limited === "minute" && (
+                          <button className="chat-ghost" onClick={() => void ask(x.q, i)} disabled={busy}><RotateCcw size={14} /> {t("chat.retry")}</button>
+                        )}
+                      </div>
+                    ) : x.cloudDown ? (
+                      <div className="flex flex-wrap items-center gap-2" data-cloud-down>
+                        <p className="text-ink-2">{t("chat.cloudDown")}</p>
+                        <button className="chat-ghost" onClick={() => void ask(x.q, i)} disabled={busy}><RotateCcw size={14} /> {t("chat.retry")}</button>
+                      </div>
+                    ) : x.failed ? (
+                      <p className="text-danger">{t("chat.failed")}</p>
+                    ) : x.a && x.a.parts.length ? (
+                      x.a.blocks?.length ? <Blocks blocks={x.a.blocks} onPage={setPage} /> : <p><Inline parts={x.a.parts} onPage={setPage} /></p>
+                    ) : x.a ? (
+                      <p className="text-muted">{t("chat.notFound")}</p>
+                    ) : (
+                      <Typing />
                     )}
+                    {x.a && x.a.parts.length > 0 && !writing ? (
+                      <div className="chat-meta blur-in">
+                        <button type="button" className="chat-ghost" onClick={() => copy(x, i)}>
+                          {copied === i ? <Check size={14} /> : <Copy size={14} />} {t(copied === i ? "res.copied" : "res.copy")}
+                        </button>
+                        <p className="text-[12px] leading-snug text-muted" data-answered-by="cloud">{t("chat.by.server")}</p>
+                      </div>
+                    ) : null}
                   </div>
-                ) : x.cloudDown ? (
-                  <div className="flex flex-wrap items-center gap-2" data-cloud-down>
-                    <p className="text-ink-2">{t("chat.cloudDown")}</p>
-                    <button className="btn btn-quiet btn-sm" onClick={() => void ask(x.q, i)} disabled={busy}><RotateCcw size={14} /> {t("chat.retry")}</button>
-                  </div>
-                ) : x.failed ? (
-                  <p className="text-danger">{t("chat.failed")}</p>
-                ) : x.a && x.a.parts.length ? (
-                  x.a.blocks?.length ? <Blocks blocks={x.a.blocks} onPage={setPage} /> : <p><Inline parts={x.a.parts} onPage={setPage} /></p>
-                ) : x.a ? (
-                  <p className="text-muted">{t("chat.notFound")}</p>
-                ) : (
-                  <Typing />
-                )}
-                {x.a && x.a.parts.length > 0 && !(busy && i === turns.length - 1) ? <p className="mt-2 text-[12px] text-muted" data-answered-by="cloud">{t("chat.by.server")}</p> : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        {/* The question box: a glass pill, a round button at its end. */}
-        <form className="glass m-3 mt-0 flex shrink-0 items-center gap-1.5 rounded-full p-1.5 ps-4 focus-within:border-(--brand)" onSubmit={(e) => { e.preventDefault(); const question = q.trim(); if (question && index && !busy) { setQ(""); void ask(question); } }}>
+        {/* The question box: a soft well, lit in orange while typing; the send
+            button turns orange once there's something to send. */}
+        <form className="chat-box" onSubmit={(e) => { e.preventDefault(); const question = q.trim(); if (question && index && !busy) { setQ(""); void ask(question); } }}>
           <label className="sr-only" htmlFor="chat-q">{t("chat.ask")}</label>
-          <input id="chat-q" className="h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted" placeholder={t("chat.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!index || here === false} autoComplete="off" />
+          <input id="chat-q" className="h-11 min-w-0 flex-1 bg-transparent text-[15.5px] placeholder:text-muted" placeholder={t("chat.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!index || here === false} autoComplete="off" />
           {busy ? (
-            <button type="button" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-2 text-ink transition-[scale] active:scale-90" onClick={() => stop.current?.abort()} aria-label={t("chat.stop")}>
-              <Square size={15} />
+            <button type="button" className="chat-send is-stop" onClick={() => stop.current?.abort()} aria-label={t("chat.stop")}>
+              <Square size={13} fill="currentColor" />
             </button>
           ) : (
-            <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-(--brand) text-white transition-[scale,opacity] active:scale-90 disabled:opacity-40" disabled={!index || here === false || !q.trim()} aria-label={t("chat.send")}><ArrowUp size={18} /></button>
+            <button className="chat-send" disabled={!index || here === false || !q.trim()} aria-label={t("chat.send")}><ArrowUp size={18} strokeWidth={2.4} /></button>
           )}
         </form>
       </section>
       <aside className="chat-side">
-        <div className="card p-4" data-chat-page={page}>
-          <div className="mb-3 flex items-center justify-between text-[13px] text-ink-2">
-            <button className="btn btn-quiet btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label={t("chat.prevPage")}><ChevronLeft size={16} className="rtl:rotate-180" /></button>
+        <div className="chat-page" data-chat-page={page}>
+          <PdfThumb key={page} file={file} page={page - 1} width={300} className="chat-page-img blur-in" alt={t("chat.pageOf", { n: page, total: pages })} />
+          <div className="chat-pager">
+            <button className="chat-round" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label={t("chat.prevPage")}><ChevronLeft size={16} className="rtl:rotate-180" /></button>
             <span className="tabular">{pages ? t("chat.pageOf", { n: page, total: pages }) : ""}</span>
-            <button className="btn btn-quiet btn-sm" disabled={!pages || page >= pages} onClick={() => setPage((p) => p + 1)} aria-label={t("chat.nextPage")}><ChevronRight size={16} className="rtl:rotate-180" /></button>
+            <button className="chat-round" disabled={!pages || page >= pages} onClick={() => setPage((p) => p + 1)} aria-label={t("chat.nextPage")}><ChevronRight size={16} className="rtl:rotate-180" /></button>
           </div>
-          <PdfThumb key={page} file={file} page={page - 1} width={300} className="mx-auto rounded-sm border border-line" alt={t("chat.pageOf", { n: page, total: pages })} />
         </div>
-        <div className="card p-4">
+        <div className="chat-panel">
           {/* How the PDF is read: folded, it's rarely changed. */}
           <details className="chat-options">
             <summary>{t("ws.options")}</summary>
