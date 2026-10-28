@@ -11,6 +11,7 @@ import { FileBoard, type Item } from "./FileBoard";
 import { Options } from "./Options";
 import { StepTrail } from "./StepTrail";
 import { Processing } from "./Processing";
+import { LoadingOrb } from "../LoadingOrb";
 import { useSplitHints } from "./splitHints";
 import type { PageItem } from "./PageBoard";
 import { AiNotice } from "./AiNotice";
@@ -56,10 +57,10 @@ const load = {
 // While a view's code loads, its place is held: the viewer's backdrop full
 // screen at once, the editor's room on the page, so nothing jumps when it arrives.
 function ViewerShell() {
-  return <div className="vw vw-shell" aria-busy="true"><p className="vw-loading"><Loader2 size={22} className="animate-spin" /></p></div>;
+  return <div className="vw vw-shell" aria-busy="true"><div className="vw-loading"><LoadingOrb small /></div></div>;
 }
 function EditorShell() {
-  return <div className="flex min-h-[70vh] items-center justify-center rounded-2xl border border-line bg-surface" aria-busy="true"><Loader2 size={22} className="animate-spin text-muted" /></div>;
+  return <div className="flex min-h-[70vh] items-center justify-center rounded-2xl border border-line bg-surface" aria-busy="true"><LoadingOrb small /></div>;
 }
 const Editor = dynamic(() => load.Editor().then((m) => m.Editor), { ssr: false, loading: EditorShell });
 const PageBoard = dynamic(() => load.PageBoard().then((m) => m.PageBoard), { ssr: false });

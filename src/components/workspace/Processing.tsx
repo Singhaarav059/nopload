@@ -4,12 +4,15 @@ import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { useI18n } from "../I18n";
 import { Machine } from "../machines/Machines";
+import { LoadingOrb } from "../LoadingOrb";
+import { toolById } from "@/lib/tools";
 import { reducedMotion } from "@/lib/paper";
 import type { ToolId } from "@/lib/tools";
 
 // While a tool works: its machine does the tool's work to the user's own
 // page (src/components/machines), and the bar and
-// percentage glide to each new value instead of jumping.
+// percentage glide to each new value instead of jumping. The AI tools,
+// whose work happens on the server, show the orb working instead (LoadingOrb.tsx).
 export function Processing({ tool, value, label, files }: { tool: ToolId; value: number; label?: string; files?: File[] }) {
   const { t } = useI18n();
   const bar = useRef<HTMLDivElement>(null);
@@ -33,13 +36,15 @@ export function Processing({ tool, value, label, files }: { tool: ToolId; value:
     };
   }, [value]);
 
+  if (toolById(tool).ai)
+    return <LoadingOrb value={Math.max(0.04, value)} label={label ? `${t("ws.processing")} · ${label}` : t("ws.processing")} />;
   return (
     <>
       <Machine tool={tool} files={files} value={value} />
       <p className="mt-4 text-[17px] font-medium tracking-[-0.01em]">{t("ws.processing")}</p>
       {label && <p className="mt-1 text-[14px] text-muted">{label}</p>}
       <div className="relative mt-6 h-1.5 w-full overflow-hidden rounded-full bg-line">
-        <div ref={bar} className="progress-fill absolute inset-0 origin-left rounded-full bg-ink rtl:origin-right" style={{ transform: "scaleX(0.04)" }} />
+        <div ref={bar} className="progress-fill absolute inset-0 origin-left rounded-full rtl:origin-right" style={{ transform: "scaleX(0.04)" }} />
       </div>
       <p ref={pct} className="eyebrow mt-2.5 tabular">{Math.round(value * 100)}%</p>
     </>
