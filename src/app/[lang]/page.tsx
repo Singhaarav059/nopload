@@ -77,18 +77,18 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       <HomeBoard />
       <InstallBanner />
 
-      <div data-web-only className="mt-20 sm:mt-28">
+      <div data-web-only className="mt-14 sm:mt-20">
         <HowGuide />
       </div>
 
       {/* Every tool, to search and filter; in the app, the rest of its home. */}
-      <div data-home-tools className="mt-24 sm:mt-32">
+      <div data-home-tools className="mt-16 sm:mt-20">
         <ToolGrid />
       </div>
       <OpenFab />
 
       {/* Why the files stay put, and the promise with its proof. */}
-      <section data-web-only aria-labelledby="home-cloud" className="relative mt-28 grid items-center gap-10 overflow-hidden rounded-[36px] bg-surface-2 px-6 py-12 sm:px-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+      <section data-web-only aria-labelledby="home-cloud" className="relative mt-20 grid items-center gap-10 overflow-hidden rounded-[36px] bg-surface-2 px-6 py-12 sm:px-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
         <div aria-hidden className="relative mx-auto aspect-[5/4] w-full max-w-[440px]">
           <div data-cat="organize" className="blob inset-[8%] bg-(--tint)" />
           <div className="absolute end-[6%] top-[0%] w-[34%]">
@@ -135,7 +135,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       </section>
 
       {/* Workflows: a few tools in a row, run as one. */}
-      <section data-web-only aria-labelledby="home-workflows" className="mt-28 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+      <section data-web-only aria-labelledby="home-workflows" className="mt-20 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
         <div className="min-w-0">
           <p className="reveal eyebrow">{t["nav.workflows"]}</p>
           <h2 id="home-workflows" className="reveal display mt-3 max-w-[18ch] text-[2rem] sm:text-[2.75rem]">{t["home.workflowsTitle"]}</h2>
@@ -163,7 +163,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       </section>
 
       {/* What makes it different, in three soft cards. */}
-      <section data-web-only aria-labelledby="home-why" className="mt-28">
+      <section data-web-only aria-labelledby="home-why" className="mt-20">
         <h2 id="home-why" className="reveal display text-[2rem] sm:text-[2.75rem]">{t["home.whyTitle"]}</h2>
         <dl className="mt-10 grid gap-4 md:grid-cols-3">
           {([
