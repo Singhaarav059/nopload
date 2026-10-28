@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { Suspense, ViewTransition } from "react";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
-import { ShieldCheck, Server, ArrowRight, Cloud } from "lucide-react";
+import { ShieldCheck, Server, ArrowRight, ArrowUpRight, Cloud } from "lucide-react";
 import { Workspace } from "@/components/workspace/LazyWorkspace";
 import { PrivacyChip } from "@/components/workspace/PrivacyChip";
 import { ToolIcon } from "@/components/ToolIcon";
 import { ToolContent, toolText } from "@/components/ToolContent";
 import { getDictionary, format, type Dict, type DictKey } from "@/lib/i18n/dictionary";
 import { hasLocale, LOCALE_CODES, type Locale } from "@/lib/i18n/locales";
-import { CATEGORIES, LIMITS, TOOLS, descKey, toolById, toolBySlug, type Tool } from "@/lib/tools";
+import { CATEGORIES, LIMITS, RANK, TOOLS, byRank, descKey, toolById, toolBySlug, type Tool } from "@/lib/tools";
 import { LEGAL, LEGAL_UPDATED } from "@/lib/legal";
 import { BRAND, OPERATOR } from "@/lib/brand";
 import { readLicenses, LICENSES_URL } from "@/lib/licenses";
@@ -111,7 +111,9 @@ async function SlugContent({ params }: { params: PageProps<"/[lang]/[slug]">["pa
 
 function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
   const k = (s: string) => t[s as DictKey];
-  const related = TOOLS.filter((x) => x.category === tool.category && x.id !== tool.id).slice(0, 4);
+  // Its family's most used tools, then the most used of the others.
+  const related = byRank(TOOLS.filter((x) => x.category === tool.category && x.id !== tool.id)).slice(0, 4);
+  const popular = RANK.filter((id) => id !== tool.id && !related.some((r) => r.id === id)).slice(0, 4).map((id) => toolById(id));
   // AI tools default to the cloud AI: they say so instead of "Runs on your device".
   const cloudAi = !!tool.ai;
   const Badge = cloudAi ? Cloud : tool.runtime === "browser" ? ShieldCheck : Server;
@@ -150,24 +152,33 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
       <Workspace toolId={tool.id} />
 
       {/* What the page says to search engines and first-time visitors: not in the app. */}
-      <section data-web-only className="mx-auto mt-20 max-w-[960px] sm:mt-28">
+      <section data-web-only className="mx-auto mt-14 max-w-[1100px] sm:mt-20">
         <ToolContent tool={tool} t={t} lang={lang} />
-        {related.length > 0 && (
-          <div className="mt-14">
-            <h2 className="mb-4 text-[1.25rem] font-semibold tracking-[-0.02em]">{t[`cat.${tool.category}` as DictKey]}</h2>
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {related.map((r) => (
-                <li key={r.id}>
-                  <Link href={pageUrl(lang, `/${r.slug}`)} className="spot group card flex items-center gap-3 p-3 transition-[border-color,box-shadow,translate] duration-500 ease-(--ease-out) hover:-translate-y-1 hover:border-line-strong hover:shadow-lift">
-                    <ToolIcon tool={r} size={32} />
-                    <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{k(`tool.${r.id}.name`)}</span>
-                    <ArrowRight size={14} className="text-muted opacity-0 transition-opacity group-hover:opacity-100 rtl:rotate-180" />
+        {/* More of the same family, then the tools most used, as the home's cards. */}
+        {[
+          { title: t[`cat.${tool.category}` as DictKey], list: related },
+          { title: t["home.popular"], list: popular },
+        ].map((g) => g.list.length > 0 && (
+          <div key={g.title} className="mt-14">
+            <h2 className="mb-3 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-(--brand)" /> {g.title}
+            </h2>
+            <ul className="tool-cards grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+              {g.list.map((r) => (
+                <li key={r.id} data-cat={r.category}>
+                  <Link href={pageUrl(lang, `/${r.slug}`)} className="tool-card top-card group">
+                    <span className="top-card-icon shrink-0"><ToolIcon tool={r} size={40} /></span>
+                    <span className="mt-auto block min-w-0">
+                      <span className="block text-[15px] font-semibold leading-tight tracking-[-0.015em]">{k(`tool.${r.id}.name`)}</span>
+                      <span className="mt-1 line-clamp-2 block text-pretty text-[13px] leading-snug text-ink-2">{k(descKey(r))}</span>
+                    </span>
+                    <ArrowUpRight aria-hidden size={18} className="top-card-go rtl:-scale-x-100" />
                   </Link>
                 </li>
               ))}
             </ul>
           </div>
-        )}
+        ))}
       </section>
     </div>
   );

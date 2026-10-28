@@ -12,6 +12,7 @@ import { Options } from "./Options";
 import { StepTrail } from "./StepTrail";
 import { Processing } from "./Processing";
 import { LoadingOrb } from "../LoadingOrb";
+import { ToolFacts } from "./ToolFacts";
 import { useSplitHints } from "./splitHints";
 import type { PageItem } from "./PageBoard";
 import { AiNotice } from "./AiNotice";
@@ -561,7 +562,11 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
         )}
         {/* The reader's library comes first: what was read lately, one tap away. */}
         {tool.mode === "view" && <RecentFiles onOpen={(f) => void addFiles([f])} className="mx-auto mb-8 max-w-[760px]" />}
-        <Dropzone tool={tool} onFiles={addFiles} over={over} />
+        {/* Wide screens: the drop area with the tool's facts beside it. */}
+        <div className="select-grid">
+          <Dropzone tool={tool} onFiles={addFiles} over={over} />
+          <ToolFacts tool={tool} />
+        </div>
         {tool.id === "htmlToPdf" && <PasteHtml onFile={(f) => void addFiles([f])} />}
       </div>
     );

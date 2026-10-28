@@ -50,42 +50,50 @@ export function ToolContent({ tool, t, lang }: { tool: Tool; t: Dict; lang: Loca
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: toolJsonLd({ lang, slug: tool.slug, home: t["nav.allTools"], content: c }) }} />
 
-      <h2 className="reveal mb-6 display text-[1.4rem] sm:text-[1.6rem]">{c.howTo}</h2>
-      <ol className="reveal grid border-y border-line sm:grid-cols-3">
-        {c.steps.map((s, i) => (
-          <li key={i} className="flex flex-col gap-2 border-line py-6 not-first:border-t sm:px-6 sm:not-first:border-s sm:not-first:border-t-0 sm:first:ps-0">
-            <span className="font-mono text-[1.6rem] leading-none text-accent">{String(i + 1).padStart(2, "0")}</span>
-            <span className="text-pretty text-[15px] leading-relaxed text-ink-2">{s}</span>
-          </li>
-        ))}
-      </ol>
+      {/* How to use: three cards in the tool's colour, in one panel. */}
+      <section className="how-box">
+        <h2 className="display text-[1.4rem] sm:text-[1.7rem]">{c.howTo}</h2>
+        <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+          {c.steps.map((s, i) => (
+            <li key={i} className="tp-step">
+              <span className="tp-step-num">{i + 1}</span>
+              <span className="text-pretty text-[15px] leading-relaxed text-ink-2">{s}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-      <div className="mt-14 grid gap-10 md:grid-cols-[3fr_2fr]">
-        <section>
-          <h2 className="display text-[1.4rem] sm:text-[1.6rem]">{format(t["tp.about"], { name: c.name })}</h2>
-          <p className="mt-3 max-w-[64ch] text-pretty text-[16px] leading-relaxed text-ink-2">{c.intro}</p>
+      {/* What it does, beside why the files stay private. */}
+      <div className="mt-5 grid gap-5 md:grid-cols-[3fr_2fr]">
+        <section className="tp-about">
+          <h2 className="display text-[1.3rem] sm:text-[1.5rem]">{format(t["tp.about"], { name: c.name })}</h2>
+          <p className="mt-3 max-w-[64ch] text-pretty text-[15.5px] leading-relaxed text-ink-2">{c.intro}</p>
         </section>
-        <section className="reveal fold card relative self-start p-6 shadow-card">
+        <section className="reveal fold card relative p-6 shadow-card">
           <span aria-hidden className="tape -top-3 start-6 -rotate-3" />
-          <h2 className="flex items-center gap-2 text-[16px] font-medium tracking-[-0.01em]">
-            <Badge size={16} strokeWidth={1.75} className={c.onServer ? "text-muted" : "text-success"} aria-hidden />
-            {t["tp.private"]}
-          </h2>
+          <span className={`grid h-11 w-11 place-items-center rounded-2xl ${c.onServer ? "bg-surface-2 text-muted" : "bg-[color-mix(in_oklab,var(--success)_16%,transparent)] text-success"}`}>
+            <Badge size={20} strokeWidth={1.75} aria-hidden />
+          </span>
+          <h2 className="mt-4 text-[16.5px] font-semibold tracking-[-0.01em]">{t["tp.private"]}</h2>
           <p className="mt-2 text-pretty text-[15px] leading-relaxed text-ink-2">{c.privacy}</p>
         </section>
       </div>
 
+      {/* Questions, folded: two columns of cards, each opens in place. */}
       {c.faq.length > 0 && (
         <section className="mt-14">
-          <h2 className="display text-[1.4rem] sm:text-[1.6rem]">{format(t["tp.faq"], { name: c.name })}</h2>
-          <dl className="mt-4 divide-y divide-line border-y border-line">
-            {c.faq.map(({ q, a }) => (
-              <div key={q} className="reveal py-6">
-                <dt className="text-[16px] font-medium tracking-[-0.01em]">{q}</dt>
-                <dd className="mt-2 max-w-[64ch] text-pretty text-[15px] leading-relaxed text-ink-2">{a}</dd>
-              </div>
+          <h2 className="display text-[1.4rem] sm:text-[1.7rem]">{format(t["tp.faq"], { name: c.name })}</h2>
+          <div className="mt-5 grid items-start gap-3 md:grid-cols-2">
+            {c.faq.map(({ q, a }, i) => (
+              <details key={q} className="tp-faq group" open={i === 0}>
+                <summary>
+                  <span className="text-[15.5px] font-semibold tracking-[-0.01em]">{q}</span>
+                  <span aria-hidden className="tp-faq-plus">+</span>
+                </summary>
+                <p className="mt-3 text-pretty text-[15px] leading-relaxed text-ink-2">{a}</p>
+              </details>
             ))}
-          </dl>
+          </div>
         </section>
       )}
     </>

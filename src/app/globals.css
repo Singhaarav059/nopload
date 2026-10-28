@@ -1338,3 +1338,25 @@ body { overflow-x: clip; }
 @media (min-width: 640px) { .how-box { padding: 32px; } }
 .board-read > :not(.board-pages) { position: relative; z-index: 2; max-width: 56%; }
 @media (max-width: 520px) { .board-read > :not(.board-pages) { max-width: 64%; } .board-pages-mascot { display: none; } }
+
+/* A tool's page (ToolContent.tsx, Workspace.tsx): the drop area with its
+   facts beside it; steps as cards in the tool's colour; questions folded. */
+.select-grid { display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
+@media (min-width: 1024px) { .select-grid { grid-template-columns: 1fr 300px; align-items: stretch; } .select-grid .dropzone { max-width: none; margin: 0; } }
+.tool-facts {
+  flex-direction: column; gap: 12px; padding: 18px; border-radius: 28px; border: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 60%, var(--surface)), var(--surface) 55%);
+}
+.tool-facts-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.tool-facts-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 10px; background: var(--surface); color: var(--tint-ink); box-shadow: 0 2px 8px -4px rgb(0 0 0 / 0.3); }
+.tool-facts-chip { height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--surface); color: var(--ink-2); border: 1px solid var(--line); }
+.tp-step { display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); transition: translate 400ms var(--ease-spring), box-shadow 300ms; }
+.tp-step:hover { translate: 0 -3px; box-shadow: var(--shadow); }
+.tp-step-num { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--tint); color: var(--tint-ink); font-weight: 700; font-size: 15px; }
+.tp-about { padding: 24px; border-radius: 28px; border: 1px solid var(--line); background: radial-gradient(80% 90% at 0% 0%, color-mix(in oklab, var(--tint) 70%, transparent), transparent 70%), var(--surface); }
+.tp-faq { padding: 16px 18px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface); transition: border-color 200ms, box-shadow 300ms; }
+.tp-faq[open] { border-color: color-mix(in oklab, var(--tint-ink) 30%, var(--line)); box-shadow: var(--shadow); }
+.tp-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; list-style: none; }
+.tp-faq summary::-webkit-details-marker { display: none; }
+.tp-faq-plus { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 18px; line-height: 1; transition: rotate 400ms var(--ease-spring), background-color 200ms, color 200ms; }
+.tp-faq[open] .tp-faq-plus { rotate: 45deg; background: var(--tint); color: var(--tint-ink); }
