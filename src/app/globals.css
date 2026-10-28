@@ -59,14 +59,14 @@
    pastels become glows: a faint tint behind a brighter glyph. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #000000;
-    --surface: #121212;
-    --surface-2: #1c1c1c;
-    --ink: #f7f7f7;
-    --ink-2: #c9c9c9;
-    --muted: #8e8e8e;
-    --line: #232323;
-    --line-strong: #353535;
+    --bg: #0a0a0b;
+    --surface: #131315;
+    --surface-2: #1b1b1e;
+    --ink: #f4f4f5;
+    --ink-2: #b9b9c0;
+    --muted: #8a8a92;
+    --line: #232326;
+    --line-strong: #323236;
     --brand: #ff6a13;
     --brand-ink: #ffffff;
     --brand-hover: #ff8540;
@@ -78,29 +78,29 @@
     --focus: #ff8540;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 14px 36px -14px rgb(0 0 0 / 0.7);
     --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 60px -20px rgb(0 0 0 / 0.8);
-    --organize-tint: rgb(85 200 145 / 0.14);
+    --organize-tint: rgb(85 200 145 / 0.1);
     --organize-ink: #7fdcae;
-    --optimize-tint: rgb(96 205 235 / 0.14);
+    --optimize-tint: rgb(96 205 235 / 0.1);
     --optimize-ink: #7fd5ec;
-    --convertTo-tint: rgb(255 150 119 / 0.15);
+    --convertTo-tint: rgb(255 150 119 / 0.1);
     --convertTo-ink: #ffa487;
-    --convertFrom-tint: rgb(127 178 255 / 0.15);
+    --convertFrom-tint: rgb(127 178 255 / 0.1);
     --convertFrom-ink: #8dbbff;
-    --edit-tint: rgb(171 157 255 / 0.16);
+    --edit-tint: rgb(171 157 255 / 0.11);
     --edit-ink: #bcb0ff;
-    --security-tint: rgb(255 143 179 / 0.15);
+    --security-tint: rgb(255 143 179 / 0.1);
     --security-ink: #ff9cbd;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #000000;
-  --surface: #121212;
-  --surface-2: #1c1c1c;
-  --ink: #f7f7f7;
-  --ink-2: #c9c9c9;
-  --muted: #8e8e8e;
-  --line: #232323;
-  --line-strong: #353535;
+  --bg: #0a0a0b;
+  --surface: #131315;
+  --surface-2: #1b1b1e;
+  --ink: #f4f4f5;
+  --ink-2: #b9b9c0;
+  --muted: #8a8a92;
+  --line: #232326;
+  --line-strong: #323236;
   --brand: #ff6a13;
   --brand-ink: #ffffff;
   --brand-hover: #ff8540;
@@ -112,17 +112,17 @@
   --focus: #ff8540;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 14px 36px -14px rgb(0 0 0 / 0.7);
   --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 60px -20px rgb(0 0 0 / 0.8);
-  --organize-tint: rgb(85 200 145 / 0.14);
+  --organize-tint: rgb(85 200 145 / 0.1);
   --organize-ink: #7fdcae;
-  --optimize-tint: rgb(96 205 235 / 0.14);
+  --optimize-tint: rgb(96 205 235 / 0.1);
   --optimize-ink: #7fd5ec;
-  --convertTo-tint: rgb(255 150 119 / 0.15);
+  --convertTo-tint: rgb(255 150 119 / 0.1);
   --convertTo-ink: #ffa487;
-  --convertFrom-tint: rgb(127 178 255 / 0.15);
+  --convertFrom-tint: rgb(127 178 255 / 0.1);
   --convertFrom-ink: #8dbbff;
-  --edit-tint: rgb(171 157 255 / 0.16);
+  --edit-tint: rgb(171 157 255 / 0.11);
   --edit-ink: #bcb0ff;
-  --security-tint: rgb(255 143 179 / 0.15);
+  --security-tint: rgb(255 143 179 / 0.1);
   --security-ink: #ff9cbd;
 }
 :root { color-scheme: light dark; }
@@ -272,7 +272,7 @@ html {
   color: #fff;
   font-weight: 620;
   text-shadow: 0 1px 1px rgb(120 30 0 / 0.35);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -2px 0 rgb(0 0 0 / 0.12), 0 8px 20px -8px color-mix(in oklab, var(--brand) 70%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -1px 0 rgb(0 0 0 / 0.15), 0 1px 2px rgb(0 0 0 / 0.2);
 }
 /* A soft sheen that sweeps across on hover. */
 .btn-primary::before {
@@ -290,8 +290,8 @@ html {
 .btn-primary:hover:not(:disabled) {
   background: var(--brand-fill);
   filter: brightness(1.07);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -2px 0 rgb(0 0 0 / 0.12), 0 14px 28px -10px color-mix(in oklab, var(--brand) 75%, transparent);
-  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -1px 0 rgb(0 0 0 / 0.15), 0 6px 16px -8px rgb(0 0 0 / 0.4);
+  transform: translateY(-1px);
 }
 .btn-quiet {
   background: var(--surface);
@@ -1346,3 +1346,34 @@ body { overflow-x: clip; }
 .tp-faq summary::-webkit-details-marker { display: none; }
 .tp-faq-plus { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 18px; line-height: 1; transition: rotate 400ms var(--ease-spring), background-color 200ms, color 200ms; }
 .tp-faq[open] .tp-faq-plus { rotate: 45deg; background: var(--tint); color: var(--tint-ink); }
+
+/* ── Polish: restraint. Flat surfaces with fine borders, no drifting glows,
+   colour only where it means something (a family's icon, the one action). ── */
+.ambient { display: none; }
+.aurora-wash { opacity: 0.08 !important; }
+.top-card { background: var(--surface); border-color: var(--line); }
+.top-card:hover { border-color: color-mix(in oklab, var(--tint-ink) 40%, var(--line)); box-shadow: var(--shadow); translate: 0 -2px; }
+.top-card .top-card-icon { background: var(--tint); box-shadow: none; padding: 0; }
+.family-panel { background: var(--surface); }
+.tool-row:hover { background: var(--surface-2); }
+.how-box { background: var(--surface); }
+.tp-about { background: var(--surface); }
+.tool-facts { background: var(--surface); }
+.tool-facts-icon { background: var(--tint); box-shadow: none; }
+.aurora, .board-card.aurora {
+  background: radial-gradient(60% 80% at 100% 0%, color-mix(in oklab, var(--brand) 28%, transparent) 0%, transparent 65%), #111113;
+}
+.board-read { --stack: transparent; box-shadow: var(--shadow); }
+.board-read:hover, .board-read:active { box-shadow: var(--shadow-lift); }
+:root:not([data-theme="light"]) .board-card { box-shadow: none; }
+/* The chat: the file in a slim bar, the conversation and the page side by side. */
+.chat-layout { display: grid; gap: 14px; }
+@media (min-width: 1024px) { .chat-layout { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; } }
+.chat-file { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 10px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
+.chat-file-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 11px; background: var(--tint); color: var(--tint-ink); }
+.chat-side { display: grid; gap: 14px; }
+@media (min-width: 1024px) { .chat-side { position: sticky; top: 80px; } }
+.chat-options summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; }
+.chat-options summary::-webkit-details-marker { display: none; }
+.chat-options summary::after { content: "+"; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); transition: rotate 300ms var(--ease-spring); }
+.chat-options[open] summary::after { rotate: 45deg; }
