@@ -170,7 +170,8 @@ function ToolPage({ tool, t, lang }: { tool: Tool; t: Dict; lang: Locale }) {
                     <span className="top-card-icon shrink-0"><ToolIcon tool={r} size={40} /></span>
                     <span className="mt-auto block min-w-0">
                       <span className="block text-[15px] font-semibold leading-tight tracking-[-0.015em]">{k(`tool.${r.id}.name`)}</span>
-                      <span className="mt-1 line-clamp-2 block text-pretty text-[13px] leading-snug text-ink-2">{k(descKey(r))}</span>
+                      {/* Names only for the popular ones: the same on every page. */}
+                      {g.list === related && <span className="mt-1 line-clamp-2 block text-pretty text-[13px] leading-snug text-ink-2">{k(descKey(r))}</span>}
                     </span>
                     <ArrowUpRight aria-hidden size={18} className="top-card-go rtl:-scale-x-100" />
                   </Link>

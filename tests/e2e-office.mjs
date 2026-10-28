@@ -138,7 +138,7 @@ await test("Word → PDF on a first visit: one consent, a real PDF", async () =>
 });
 
 await test("the PDF continues into another tool", async () => {
-  await page.getByRole("link", { name: "Compress PDF" }).click();
+  await page.getByRole("link", { name: "Compress PDF" }).first().click();
   await page.waitForURL(/\/en\/compress-pdf/);
   await page.getByText("brief.pdf").first().waitFor({ timeout: 15000 });
   const path = await download(() => page.getByRole("button", { name: "Compress PDF", exact: true }).click(), 60000);

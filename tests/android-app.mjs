@@ -62,15 +62,6 @@ function apkCerts(buf) {
 }
 
 const manifest = read("android/app/src/main/AndroidManifest.xml").toString();
-const strings = read("android/app/src/main/res/values/strings.xml").toString();
-// As Android's resource compiler reads it: \" is a quote, and a bare quote is
-// dropped (so JSON in a string resource must escape its quotes).
-const string = (name) => {
-  const raw = strings.match(new RegExp(`name="${name}"[^>]*>([^<]*)<`))?.[1];
-  if (raw === undefined) return undefined;
-  ok(!/(^|[^\\])"/.test(raw), `${name} has a bare " (Android drops it): write \\"`);
-  return raw.replace(/\\"/g, '"').replace(/&amp;/g, "&");
-};
 const web = JSON.parse(read("public/manifest.webmanifest"));
 const links = JSON.parse(read("public/.well-known/assetlinks.json"));
 const gradle = read("android/app/build.gradle.kts").toString();
@@ -84,12 +75,19 @@ test("the package served is signed with the key assetlinks.json names", () => {
   return fp.slice(0, 23) + "…";
 });
 
-test("assetlinks.json names this package, and the app trusts this site", () => {
+// The app is its own web view (android/.../WebApp.java, since 1.5): it opens
+// this site, files opened with it go where the web app's go, and files
+// shared to it land on the same page as the web app's share target does.
+const webApp = read("android/app/src/main/java/dev/pages/nopload/WebApp.java").toString();
+const launcher = read("android/app/src/main/java/dev/pages/nopload/Launcher.java").toString();
+const origin = webApp.match(/ORIGIN = "([^"]+)"/)?.[1];
+
+test("assetlinks.json names this package, and the app opens this site", () => {
   const id = gradle.match(/applicationId = "([^"]+)"/)?.[1];
   ok(links.some((l) => l.target.package_name === id && l.relation.includes("delegate_permission/common.handle_all_urls")), `package ${id}`);
-  const site = JSON.parse(string("asset_statements"))[0].target.site;
-  ok(string("launch_url").startsWith(site) && string("file_url").startsWith(site), `site ${site}`);
-  return `${id} ↔ ${site}`;
+  ok(origin && new URL(origin).protocol === "https:", `origin ${origin}`);
+  ok(manifest.includes(`android:host="${new URL(origin).host}"`), "links to the site don't open the app");
+  return `${id} ↔ ${origin}`;
 });
 
 test("Open with: the same file types as the web app, to the same route", () => {
@@ -98,16 +96,15 @@ test("Open with: the same file types as the web app, to the same route", () => {
   ok(viewFilter, "no content:// VIEW filter");
   const mimes = [...viewFilter.matchAll(/mimeType="([^"]+)"/g)].map((m) => m[1]);
   for (const t of types) ok(mimes.includes(t), `${t} missing from the Android filter`);
-  ok(new URL(string("file_url")).pathname === web.file_handlers[0].action, `${string("file_url")} vs ${web.file_handlers[0].action}`);
+  const open = launcher.match(/OPEN = WebApp\.ORIGIN \+ "([^"]+)"/)?.[1];
+  ok(open === web.file_handlers[0].action, `${open} vs ${web.file_handlers[0].action}`);
   return mimes.join(", ");
 });
 
-test("Share: the same target as the web app's share_target", () => {
-  const share = JSON.parse(string("share_target"));
-  ok(share.action === web.share_target.action && share.method === web.share_target.method && share.enctype === web.share_target.enctype, "action, method or enctype differ");
-  ok(share.params.files[0].name === web.share_target.params.files[0].name, "file field differs");
-  ok(/android\.intent\.action\.SEND_MULTIPLE/.test(manifest), "several files can't be shared");
-  return `${share.method} ${share.action}`;
+test("Share: one file or several, to the page that takes them", () => {
+  ok(/android\.intent\.action\.SEND"/.test(manifest) && /android\.intent\.action\.SEND_MULTIPLE/.test(manifest), "can't be shared one or several files");
+  ok(/ACTION_SEND\.equals[\s\S]*?return OPEN/.test(launcher), "shared files don't go to the open page");
+  return `SEND, SEND_MULTIPLE → ${launcher.match(/OPEN = WebApp\.ORIGIN \+ "([^"]+)"/)?.[1]}`;
 });
 
 console.log(failed ? `\n${failed} failed` : "\nall passed");

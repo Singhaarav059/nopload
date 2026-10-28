@@ -79,13 +79,13 @@ export function ToolContent({ tool, t, lang }: { tool: Tool; t: Dict; lang: Loca
         </section>
       </div>
 
-      {/* Questions, folded: two columns of cards, each opens in place. */}
+      {/* Questions: two columns of cards, open (search engines read only what shows), each folds away. */}
       {c.faq.length > 0 && (
         <section className="mt-14">
           <h2 className="display text-[1.4rem] sm:text-[1.7rem]">{format(t["tp.faq"], { name: c.name })}</h2>
           <div className="mt-5 grid items-start gap-3 md:grid-cols-2">
-            {c.faq.map(({ q, a }, i) => (
-              <details key={q} className="tp-faq group" open={i === 0}>
+            {c.faq.map(({ q, a }) => (
+              <details key={q} className="tp-faq group" open>
                 <summary>
                   <span className="text-[15.5px] font-semibold tracking-[-0.01em]">{q}</span>
                   <span aria-hidden className="tp-faq-plus">+</span>
