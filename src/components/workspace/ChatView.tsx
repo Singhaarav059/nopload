@@ -7,6 +7,8 @@ import { PdfThumb } from "../PdfThumb";
 import { AiNotice } from "./AiNotice";
 import { Options } from "./Options";
 import { Blocks, Inline } from "./AnswerBlocks";
+import { LoadingOrb, Typing } from "../LoadingOrb";
+import { Mascot } from "../Logo";
 import { humanSize } from "@/lib/pdf/common";
 import type { Answer, DocIndex, Message } from "@/lib/ai/chat";
 import type { OptionDef } from "@/lib/tools";
@@ -148,15 +150,14 @@ export function ChatView({ file, options, defs, onOption, onError, onClose }: {
         className="card relative flex h-[calc(100dvh-var(--tabbar-h,0px)-120px)] max-h-[900px] min-h-[420px] min-w-0 flex-col overflow-hidden lg:sticky lg:top-20">
         <div ref={log} className="relative min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5" aria-live="polite" data-chat-log>
           {!index && (
-            <div className="flex flex-col items-center gap-3 py-10 text-[14px] text-muted">
-              <span aria-hidden className="orb" style={{ "--s": "72px" } as React.CSSProperties}><i /></span>
-              <span className="tabular">{t("chat.reading", { pct: Math.round(reading * 100) })}</span>
+            <div className="py-10">
+              <LoadingOrb small value={reading} label={t("chat.reading", { pct: Math.round(reading * 100) })} />
             </div>
           )}
           {index && !turns.length && here !== false && (
             <div className="flex min-h-full flex-col">
               <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6 text-center">
-                <span aria-hidden className="orb" style={{ "--s": "64px" } as React.CSSProperties}><i /></span>
+                <Mascot size={52} />
                 <p className="blur-in max-w-[34ch] text-pretty text-[16px] text-ink-2">{t("chat.empty", { n: pages })}</p>
               </div>
               {/* Questions to start with, drifting past in two rows; each row is
@@ -198,7 +199,7 @@ export function ChatView({ file, options, defs, onOption, onError, onClose }: {
                 ) : x.a ? (
                   <p className="text-muted">{t("chat.notFound")}</p>
                 ) : (
-                  <span aria-hidden className="orb" style={{ "--s": "40px" } as React.CSSProperties}><i /></span>
+                  <Typing />
                 )}
                 {x.a && x.a.parts.length > 0 && !(busy && i === turns.length - 1) ? <p className="mt-2 text-[12px] text-muted" data-answered-by="cloud">{t("chat.by.server")}</p> : null}
               </div>
