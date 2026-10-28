@@ -20,9 +20,8 @@ import { haptic, subscribeDevice, type Form, type Nav, type Os } from "@/lib/dev
 
 // The installed app's frame (data-app on <html>, src/lib/device.ts). Each
 // system gets the navigation its own apps have:
-//   phones        no bar: the home page is the hub (its tools, search and
-//                 the orange Open button, OpenFab.tsx), the header has Back,
-//                 Reader and Settings (Header.tsx)
+//   phones        a floating bar of five tabs, the chosen one an orange pill
+//                 with its name, gliding from tab to tab
 //   iPad, Mac     a sidebar of the tools by family
 //   Android tablet, ChromeOS  a navigation rail
 //   Windows       a navigation pane, the chosen item marked at its edge
@@ -78,10 +77,13 @@ export function AppShell() {
   useRipple(os === "android");
   useHeaderOnScroll(app && form === "phone");
   useMascotGaze();
-  if (!app) return null;
+  // Until the app has started (and in the page as built), the tab bar is
+  // there anyway, hidden unless the page turns out to be the app on a phone
+  // (app.css): the app's first frame already has it, instead of it arriving.
+  if (!app) return <TabBar open={setSheet} sheet={null} pre />;
   return (
     <>
-      {nav !== "tabs" && <Side nav={nav} open={setSheet} />}
+      {nav === "tabs" ? <TabBar open={setSheet} sheet={sheet} /> : <Side nav={nav} open={setSheet} />}
       {(["tools", "settings"] as const).map((kind) =>
         warm || sheet === kind ? <BottomSheet key={kind} os={os} phone={form === "phone"} kind={kind} open={sheet === kind} close={() => setSheet(null)} /> : null,
       )}
@@ -102,6 +104,34 @@ function useTabs() {
     { id: "flows", label: t("nav.workflows"), icon: Workflow, href: href("/workflows"), current: at(href("/workflows")) },
     { id: "settings", label: t("app.settings"), icon: Settings2, sheet: "settings" as const, current: false },
   ];
+}
+
+function TabBar({ open, sheet, pre }: { open: (s: Sheet) => void; sheet: Sheet; pre?: boolean }) {
+  const { t } = useI18n();
+  const tabs = useTabs();
+  return (
+    <nav aria-label={t("app.nav")} data-tabbar={pre ? "pre" : "pill"} className="app-tabbar">
+      {tabs.map((tab) => {
+        // A sheet tab is lit while its sheet is open, or while on one of its pages (Tools on a tool page).
+        const on = sheet ? sheet === tab.sheet : !!tab.current;
+        const body = (
+          <>
+            <span className="app-tab-icon"><tab.icon size={22} strokeWidth={on ? 2.2 : 1.8} /></span>
+            <span className="app-tab-label"><span>{tab.label}</span></span>
+          </>
+        );
+        return tab.href ? (
+          <Link key={tab.id} href={tab.href} data-tab={tab.id} aria-current={on ? "page" : undefined} aria-label={tab.label} className="app-tab" onClick={(e) => { haptic(); open(null); if (tab.id === "home") goHome(e, tab.href); }}>
+            {body}
+          </Link>
+        ) : (
+          <button key={tab.id} type="button" data-tab={tab.id} aria-expanded={on} aria-current={on ? "page" : undefined} aria-label={tab.label} className="app-tab" onClick={() => { haptic(); open(on ? null : tab.sheet!); }}>
+            {body}
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 // Phones: the header is clear over the top of the page and glass once it

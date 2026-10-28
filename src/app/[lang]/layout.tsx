@@ -11,6 +11,7 @@ import { ServiceWorker } from "@/components/ServiceWorker";
 import { ExtensionHandoff } from "@/components/ExtensionHandoff";
 import { PointerLight } from "@/components/PointerLight";
 import { AppShell } from "@/components/AppShell";
+import { EGRESS_SCRIPT } from "@/lib/egress";
 import { Welcome } from "@/components/Welcome";
 import { PageTransition } from "@/components/PageTransition";
 import { CommandBar } from "@/components/CommandBar";
@@ -74,6 +75,7 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: DEVICE_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: EGRESS_SCRIPT }} />
       </head>
       <body className="flex min-h-dvh flex-col">
         {/* Soft light drifting behind the page (globals.css .ambient). */}

@@ -20,7 +20,7 @@
   --side-w: 0px;
   overscroll-behavior: none;
 }
-:root[data-app][data-nav="tabs"] { --tabbar-h: 0px; }
+:root[data-app][data-nav="tabs"] { --tabbar-h: 86px; }
 :root[data-app][data-nav="rail"] { --side-w: 80px; }
 :root[data-app][data-nav="sidebar"] { --side-w: 264px; }
 :root[data-app][data-nav="fluent"] { --side-w: 280px; }
@@ -30,8 +30,8 @@
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-inline-start: var(--side-w);
 }
-/* Phones have no tab bar (src/components/AppShell.tsx): a little room at the bottom. */
-:root[data-app][data-nav="tabs"] body { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
+/* With the tab bar, a little room above it, so the last thing on the page doesn't touch it. */
+:root[data-app][data-nav="tabs"] body { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px); }
 :root[data-app][data-sheet] body { overflow: hidden; }
 
 /* An app's controls aren't text to select or links to preview. */
@@ -890,8 +890,8 @@ html[data-app] .install-pill { display: none; }
 }
 .vw-bar > .vw-btn, .vw-dock > .vw-btn { width: 46px; min-width: 46px; height: 46px; padding: 0; border-radius: 999px; }
 .vw-bar > p { height: 46px; line-height: 46px; padding: 0 18px; border-radius: 999px; }
-.vw-bar > .vw-more { width: auto; padding: 0 16px; background: var(--brand); color: #000; font-weight: 600; box-shadow: 0 10px 24px -10px color-mix(in oklab, var(--brand) 80%, transparent); }
-.vw-bar > .vw-more:hover { background: var(--brand-hover); }
+.vw-bar > .vw-more { width: auto; padding: 0 16px; background: var(--brand-fill); color: #fff; font-weight: 600; box-shadow: 0 10px 24px -10px color-mix(in oklab, var(--brand) 80%, transparent); }
+.vw-bar > .vw-more:hover { background: var(--brand-fill); filter: brightness(1.07); }
 .vw-bar > .vw-more[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .vw-dock > .vw-sep { display: none; }
 .vw-dock > .vw-count, .vw-dock > .vw-zoom { height: 46px; padding: 0 18px; }
@@ -907,3 +907,45 @@ html[data-app] .install-pill { display: none; }
 @media (max-width: 480px) { .vw-bar > p { padding: 0 14px; } .vw-bar { gap: 6px; } .vw-bar > .vw-btn { width: 42px; min-width: 42px; height: 42px; } .vw-bar > p { height: 42px; line-height: 42px; } }
 
 @media (prefers-reduced-motion: reduce) { .vw[data-chrome] :is(.vw-bar, .vw-dock) > * { animation: none !important; } }
+
+/* ---------- The tab bar, phones (AppShell.tsx TabBar) ---------- */
+/* A frosted pill floating off the bottom edge. The chosen tab grows into an
+   orange pill with its name (white on the deep orange); the others are
+   icons. The pill glides: its width and colour move with a spring, its
+   name unfolds, its icon pops. */
+:root[data-app] .app-tabbar[data-tabbar] {
+  display: flex; align-items: center; gap: 4px;
+  inset-inline: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); height: 64px; padding: 7px;
+  border-radius: 999px; border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 16px 36px -14px rgb(0 0 0 / 0.55), 0 2px 8px -4px rgb(0 0 0 / 0.25);
+  animation: app-bar-in 560ms var(--ease-spring) both;
+}
+.app-tabbar[data-tabbar="pre"] { display: none; }
+:root[data-app][data-nav="tabs"] .app-tabbar[data-tabbar="pre"] { display: flex; }
+:root[data-app] .app-tabbar[data-tabbar] .app-tab {
+  position: relative; flex: 1 1 0; min-width: 0; height: 100%; flex-direction: row; gap: 0; padding: 0 10px;
+  border-radius: 999px; color: var(--muted);
+  transition: flex-grow 520ms var(--ease-spring), background-color 300ms, color 200ms, gap 400ms var(--ease-spring);
+}
+:root[data-app] .app-tabbar[data-tabbar] .app-tab:active { scale: 0.94; transition-duration: 90ms; }
+:root[data-app] .app-tabbar[data-tabbar] .app-tab[aria-current] {
+  flex-grow: 3.4; gap: 7px; color: #fff; background: var(--brand-fill);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 8px 18px -8px color-mix(in oklab, var(--brand) 80%, transparent);
+}
+:root[data-app] .app-tabbar[data-tabbar] .app-tab-icon { width: auto; height: auto; background: none; }
+:root[data-app] .app-tabbar[data-tabbar] .app-tab[aria-current] .app-tab-icon { animation: app-tab-pop 460ms var(--ease-spring); }
+/* The name: folded to nothing, unfolded on the chosen tab. */
+:root[data-app] .app-tabbar[data-tabbar] .app-tab-label {
+  display: grid; grid-template-columns: 0fr; overflow: hidden; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em;
+  opacity: 0; transition: grid-template-columns 480ms var(--ease-spring), opacity 220ms;
+}
+:root[data-app] .app-tabbar[data-tabbar] .app-tab-label > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+:root[data-app] .app-tabbar[data-tabbar] .app-tab[aria-current] .app-tab-label { grid-template-columns: 1fr; opacity: 1; transition-delay: 0ms, 90ms; text-shadow: 0 1px 1px rgb(120 30 0 / 0.35); }
+@keyframes app-tab-pop { 0% { scale: 0.7; rotate: -12deg; } 60% { scale: 1.15; rotate: 4deg; } 100% { scale: 1; rotate: 0deg; } }
+@keyframes app-bar-in { from { translate: 0 calc(100% + 24px); opacity: 0; } }
+:root[data-sheet] .app-tabbar[data-tabbar] .app-tab:not([aria-current]) { opacity: 0.7; }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-app] .app-tabbar[data-tabbar], :root[data-app] .app-tabbar[data-tabbar] * { animation: none !important; transition: none !important; }
+}

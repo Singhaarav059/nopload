@@ -17,8 +17,8 @@ const rank = (t: Tool) => {
   return i < 0 ? FIRST.length : i;
 };
 
-// Phones: the orange button at the bottom of the home page. It opens files,
-// then asks what to do with them: the tools that take them, in a sheet.
+// The app's home: Open a file, then what to do with it: the tools that
+// take it, in a sheet.
 // Choosing one hands the files over (src/lib/handoff.ts).
 export function OpenFab() {
   const { t, href } = useI18n();
@@ -46,9 +46,8 @@ export function OpenFab() {
 
   return (
     <>
-      <div aria-hidden className="fab-room" />
-      <button type="button" data-fab className="fab" aria-label={t("app.open")} onClick={() => { haptic(); input.current?.click(); }}>
-        <Plus size={26} strokeWidth={2.4} />
+      <button type="button" data-fab className="btn btn-primary btn-lg w-full" onClick={() => { haptic(); input.current?.click(); }}>
+        <Plus size={20} strokeWidth={2.4} /> {t("app.open")}
       </button>
       <input
         ref={input}
@@ -74,7 +73,7 @@ export function OpenFab() {
             <div className="app-sheet-body px-4 pb-6">
               {/* The file, and a line from it down to what it can become. */}
               <p className="file-chip glass blur-in">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-(--brand) text-[#000]"><FileText size={16} /></span>
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-(--brand) text-white"><FileText size={16} /></span>
                 <span className="truncate text-[14px] font-medium">{files.length > 1 ? `${files[0].name} +${files.length - 1}` : files[0].name}</span>
               </p>
               <span aria-hidden className="link-line" />
