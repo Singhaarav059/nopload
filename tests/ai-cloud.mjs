@@ -626,6 +626,11 @@ await test("speak: a sentence comes back as MP3 from MeloTTS, in the document's 
   eq(res.headers.get("x-content-type-options"), "nosniff", "safe headers");
 });
 
+await test("speak: WAV, as MeloTTS really answers, is sent as WAV", async () => {
+  const wav = { async run() { return { audio: Buffer.from("RIFF....WAVEfmt ").toString("base64") }; } };
+  eq((await post({ task: "speak", text: "Hi", language: "en" }, { AI: wav })).headers.get("content-type"), "audio/wav", "type");
+});
+
 await test("speak: refused for a language it doesn't have, without text, from another site, or when off", async () => {
   eq((await post({ task: "speak", text: "Hallo", language: "de" }, { AI: melo() })).status, 400, "German");
   eq((await post({ task: "speak", text: " ", language: "en" }, { AI: melo() })).status, 400, "empty");
