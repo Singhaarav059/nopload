@@ -895,7 +895,10 @@ async function speak(env: Env, ip: string, body: Record<string, unknown>): Promi
   const cacheKey = new Request(`https://speak.cache/${digest}`);
   const cache = edgeCache();
   const hit = await cache?.match(cacheKey).catch(() => undefined);
-  if (hit) return new Response(hit.body, { headers: { ...headers, "Content-Type": hit.headers.get("Content-Type") || "audio/mpeg", "X-AI-Cache": "hit" } });
+  if (hit) {
+    const kept = new Uint8Array(await hit.arrayBuffer());
+    return new Response(kept, { headers: { ...headers, "Content-Type": typeOf(kept), "X-AI-Cache": "hit" } });
+  }
   let ok: boolean;
   try {
     ok = await allowSpeak(env, ip, text.length);
