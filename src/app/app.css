@@ -610,6 +610,10 @@ html[data-viewer] body { overflow: hidden; }
 .vw-read { max-width: 38em; margin: 0 auto; padding: 8px 22px 40px; line-height: 1.65; font-family: Georgia, "Iowan Old Style", "Noto Serif", serif; }
 .vw-read h2 { font-family: var(--font-sans); font-weight: 700; font-size: 1.25em; line-height: 1.3; margin: 1.6em 0 0.5em; }
 .vw-read p { margin: 0 0 0.9em; text-wrap: pretty; }
+.vw-read-table { overflow-x: auto; margin: 0 0 1em; font-family: var(--font-sans); font-size: 0.8em; }
+.vw-read-table table { width: 100%; border-collapse: collapse; }
+.vw-read-table th, .vw-read-table td { padding: 5px 8px; border-bottom: 1px solid currentColor; border-color: color-mix(in oklab, currentColor 18%, transparent); text-align: start; }
+.vw-read-table th { font-weight: 600; }
 .vw-read p[data-list] { padding-inline-start: 1.1em; text-indent: -0.8em; }
 .vw-read p[data-list]::before { content: "•  "; }
 

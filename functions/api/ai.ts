@@ -25,10 +25,15 @@
 // The prompts live here, one per task, so the endpoint can't be used as a
 // general-purpose chatbot, and every input is capped in size.
 //
-//   GET  /api/ai → { groq, cerebras, anthropic, gemini, openrouter, cloudflare }: which are set up.
+//   GET  /api/ai → { groq, cerebras, anthropic, gemini, openrouter, cloudflare, speak }: which are set up
+//        (speak: the languages the studio voice has, when it's on).
 //   POST /api/ai { task: "chat", sources, question, history? }      → text, streamed
 //   POST /api/ai { task: "summarize", text, points, language }      → text, streamed
 //   POST /api/ai { task: "translate", texts, language }             → { texts }
+//   POST /api/ai { task: "narrate", text, language, first? }        → text, streamed:
+//        one section of a document explained aloud, as a presenter would (Read aloud's Explain)
+//   POST /api/ai { task: "speak", text, language }                  → audio/mpeg:
+//        Read aloud's studio voice, Workers AI's MeloTTS (see speak() below)
 // Any of them may add provider: "cloudflare" to use only Workers AI (the
 // visitor chose it; their text then goes nowhere else).
 // The X-AI-Provider response header names who answered; X-AI-Cache: hit
@@ -66,6 +71,11 @@
 //   AI_DAILY_CHARS      optional cap on the characters all visitors send in
 //                       a day (UTC); 2,000,000 is about 600,000 tokens.
 //   AI_QUOTA also keeps the chat fair-use counts exact (table ai_chat).
+//   AI_SPEAK            optional: "off" turns the studio voice off.
+//   AI_SPEAK_DAILY_CHARS optional: the characters all visitors together may
+//                       have spoken by the studio voice in a day (default
+//                       300,000, about 5 hours of audio: well inside Workers
+//                       AI's free daily allowance).
 //   ANTHROPIC_MODEL, FALLBACK_MODEL, *_BASE_URL, AI_RETRY_JITTER_MS ("1500-2500")
 //                       optional overrides; AI_CACHE "off" keeps no replies.
 
@@ -110,6 +120,8 @@ export type Env = {
   OPENROUTER_MODEL?: string;
   OPENROUTER_MODELS?: string;
   OPENROUTER_BASE_URL?: string;
+  AI_SPEAK?: string;
+  AI_SPEAK_DAILY_CHARS?: string;
 };
 type Context = { request: Request; env: Env };
 
@@ -118,7 +130,7 @@ const FALLBACK_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 const DEFAULT_ORIGINS = ["https://nopload.vercel.app"];
 
 // Input caps, in characters.
-const MAX = { sources: 24_000, question: 2_000, history: 4, turn: 2_000, text: 60_000, texts: 12_000, items: 200 };
+const MAX = { sources: 24_000, question: 2_000, history: 4, turn: 2_000, text: 60_000, texts: 12_000, items: 200, section: 8_000, speak: 700 };
 
 // Per visitor (the address Cloudflare saw, which the sender can't choose):
 // characters and requests in the last hour, and requests in the last
@@ -384,6 +396,25 @@ export function jobOf(body: Record<string, unknown>): Job | string {
       maxTokens: Math.min(16_000, 400 + Math.ceil(total * 1.5)),
       json: true,
       count: texts.length,
+    };
+  }
+  if (body.task === "narrate") {
+    const text = str(body.text, MAX.section);
+    if (!text.trim()) return "text is required";
+    const language = languageName(str(body.language, 20) || "en");
+    return {
+      system: [
+        `You are a professional presenter explaining one section of a document aloud to a listener, in ${language}.`,
+        "The section follows; \"## \" marks its heading, \"- \" a list item, \" · \" separates table cells.",
+        "Speak as a person would: warm, clear, confident, in short spoken sentences. Plain text only: no Markdown, lists, headings, symbols or emojis.",
+        "Open by naming the section naturally (\"Next, the results.\"), then explain what it says: its main points, the figures that matter, and what they mean, in your own words.",
+        "For a table, say what it compares and point out the notable values; never read every cell.",
+        "Use only what the section says; never add facts, opinions or outside knowledge. Say numbers, dates and names exactly as written.",
+        "Keep it to about a third of the section's length, at most 220 words.",
+        body.first ? "This is the first section: start with one sentence on what kind of document this is." : "Don't greet the listener or introduce yourself.",
+      ].join("\n"),
+      messages: [{ role: "user", content: text }],
+      maxTokens: 700,
     };
   }
   return "unknown task";
@@ -786,10 +817,105 @@ async function check(env: Env) {
   return report;
 }
 
+// ── The studio voice (Read aloud): a sentence or two of a document made into
+// speech by Workers AI's MeloTTS, a natural-sounding open model that is
+// nearly free there (about 19 of the 10,000 free daily "neurons" a minute of
+// audio). Only the text being read is sent, and audio already made is kept
+// in Cloudflare's cache for a week, so a document read twice costs nothing
+// more. Per visitor at most 40,000 characters a day (about 45 minutes), and
+// AI_SPEAK_DAILY_CHARS for everyone together; over either, 429, and the page
+// carries on with the device's own voice.
+const SPEAK_MODEL = "@cf/myshell-ai/melotts";
+// The document languages it speaks, and its name for each.
+const SPEAK_LANGS: Record<string, string> = { en: "en", es: "es", fr: "fr", zh: "zh" };
+const SPEAK = { visitor: 40_000, site: 300_000 };
+export const speakLanguages = (env: Env) => (env.AI && env.AI_SPEAK !== "off" ? Object.keys(SPEAK_LANGS) : []);
+
+const SPEAK_SCHEMA = "CREATE TABLE IF NOT EXISTS ai_speak (ip TEXT PRIMARY KEY, day INTEGER NOT NULL, chars INTEGER NOT NULL)";
+// ?1 who ("*" for everyone), ?2 today, ?3 characters, ?4 the cap.
+const RESERVE_SPEAK = `INSERT INTO ai_speak (ip, day, chars) VALUES (?1, ?2, ?3)
+  ON CONFLICT (ip) DO UPDATE SET chars = CASE WHEN day <> ?2 THEN ?3 ELSE chars + ?3 END, day = ?2
+  WHERE day <> ?2 OR chars + ?3 <= ?4
+  RETURNING chars`;
+const speakSchemas = new WeakMap<D1, Promise<unknown>>();
+const speaking = new Map<string, { day: number; chars: number }>();
+
+async function allowSpeak(env: Env, ip: string, chars: number): Promise<boolean> {
+  const day = Math.floor(Date.now() / DAY);
+  const site = Math.max(0, Number(env.AI_SPEAK_DAILY_CHARS) || SPEAK.site);
+  if (env.AI_QUOTA) {
+    const db = env.AI_QUOTA;
+    let made = speakSchemas.get(db);
+    if (!made) speakSchemas.set(db, (made = db.prepare(SPEAK_SCHEMA).run().catch((e) => (speakSchemas.delete(db), Promise.reject(e)))));
+    await made;
+    if (!(await db.prepare(RESERVE_SPEAK).bind(ip, day, chars, SPEAK.visitor).first())) return false;
+    if (await db.prepare(RESERVE_SPEAK).bind("*", day, chars, site).first()) return true;
+    await db.prepare("UPDATE ai_speak SET chars = max(0, chars - ?2) WHERE ip = ?1").bind(ip, chars).run();
+    return false;
+  }
+  if (speaking.size > 10_000) for (const [k, v] of speaking) if (v.day !== day) speaking.delete(k);
+  const add = (who: string, cap: number) => {
+    const prev = speaking.get(who);
+    const used = prev?.day === day ? prev.chars : 0;
+    return used + chars <= cap ? () => speaking.set(who, { day, chars: used + chars }) : null;
+  };
+  const mine = add(ip, SPEAK.visitor);
+  const all = add("*", site);
+  if (!mine || !all) return false;
+  mine();
+  all();
+  return true;
+}
+
+// What Workers AI gives back as bytes: raw audio, a stream of it, or JSON
+// with the audio in base64.
+async function audioBytes(out: unknown): Promise<Uint8Array<ArrayBuffer>> {
+  if (out instanceof Uint8Array) return new Uint8Array(out);
+  if (out instanceof ArrayBuffer) return new Uint8Array(out);
+  if (out instanceof ReadableStream) return new Uint8Array(await new Response(out).arrayBuffer());
+  const b64 = (out as { audio?: unknown } | null)?.audio;
+  if (typeof b64 === "string" && b64) return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  throw new Error("no audio");
+}
+
+type EdgeCache = { match(r: Request): Promise<Response | undefined>; put(r: Request, res: Response): Promise<void> };
+const edgeCache = () => (globalThis as { caches?: { default?: EdgeCache } }).caches?.default;
+
+async function speak(env: Env, ip: string, body: Record<string, unknown>): Promise<Response> {
+  const text = str(body.text, MAX.speak).replace(/\s+/g, " ").trim();
+  const lang = SPEAK_LANGS[str(body.language, 20).toLowerCase().split("-")[0]];
+  if (!speakLanguages(env).length) return json({ error: "the studio voice is off" }, 503);
+  if (!text) return json({ error: "text is required" }, 400);
+  if (!lang) return json({ error: "no studio voice for this language" }, 400);
+  const headers = { ...SAFE, "Content-Type": "audio/mpeg", "X-AI-Provider": "cloudflare" };
+  const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${SPEAK_MODEL}\n${lang}\n${text}`)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const cacheKey = new Request(`https://speak.cache/${digest}`);
+  const cache = edgeCache();
+  const hit = await cache?.match(cacheKey).catch(() => undefined);
+  if (hit) return new Response(hit.body, { headers: { ...headers, "X-AI-Cache": "hit" } });
+  let ok: boolean;
+  try {
+    ok = await allowSpeak(env, ip, text.length);
+  } catch (e) {
+    console.warn("AI_QUOTA failed, refusing:", e instanceof Error ? e.message : e);
+    return json({ error: "AI usage limits are unavailable" }, 503, { "Retry-After": "60" });
+  }
+  if (!ok) return json({ error: "today's studio voice is used up", limit: "day" }, 429);
+  let audio: Uint8Array<ArrayBuffer>;
+  try {
+    audio = await audioBytes(await env.AI!.run(SPEAK_MODEL, { prompt: text, lang }));
+  } catch (e) {
+    console.warn("speech failed:", e instanceof Error ? e.message : e);
+    return json({ error: "the studio voice didn't answer" }, 503, { "Retry-After": "60" });
+  }
+  await cache?.put(cacheKey, new Response(audio.slice(), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=604800" } })).catch(() => {});
+  return new Response(audio, { headers });
+}
+
 export async function onRequestGet({ request, env }: Context) {
   if (request && new URL(request.url).searchParams.has("check")) return json(await check(env));
   const set = new Set(providers(env));
-  return json(Object.fromEntries(ORDER.map((name) => [name, set.has(name)])));
+  return json({ ...Object.fromEntries(ORDER.map((name) => [name, set.has(name)])), speak: speakLanguages(env) });
 }
 
 export async function onRequestPost({ request, env }: Context) {
@@ -804,10 +930,11 @@ export async function onRequestPost({ request, env }: Context) {
   } catch {
     return json({ error: "send JSON" }, 400);
   }
-  const job = jobOf(body);
-  if (typeof job === "string") return json({ error: job }, 400);
   // Only the address Cloudflare saw: headers like X-Forwarded-For are the sender's to write.
   const ip = request.headers.get("CF-Connecting-IP") || "?";
+  if (body.task === "speak") return speak(env, ip, body);
+  const job = jobOf(body);
+  if (typeof job === "string") return json({ error: job }, 400);
   const only = body.provider === "cloudflare" ? "cloudflare" : undefined;
   const key = env.AI_CACHE === "off" ? null : await cacheKey(job, only);
 

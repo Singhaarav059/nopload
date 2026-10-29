@@ -4,14 +4,16 @@
 // right text and showed the answer:
 //  - chat: one sentence citing the first excerpt's page, "(p. N)";
 //  - summarize: the text's first sentences as Markdown points, as many as asked;
-//  - translate: each block with "ES " in front.
+//  - translate: each block with "ES " in front;
+//  - narrate: "Next, " and the section's heading, then one sentence;
+//  - speak: 503 (the studio voice busy), or `speak` when it's set.
 // `mode` changes how it answers next: { status: 503 } or { status: 429,
 // limit: "minute" | "day" }; `posts` is what it was sent.
 export async function aiStandIn(ctx) {
   const state = { mode: { status: 200, provider: "groq" }, posts: [] };
   await ctx.route("**/api/ai", async (route) => {
     const req = route.request();
-    if (req.method() === "GET") return route.fulfill({ json: { groq: true, cerebras: false, anthropic: true, gemini: true, openrouter: false, cloudflare: true } });
+    if (req.method() === "GET") return route.fulfill({ json: { groq: true, cerebras: false, anthropic: true, gemini: true, openrouter: false, cloudflare: true, speak: ["en", "es", "fr", "zh"] } });
     const body = req.postDataJSON();
     state.posts.push({ body, bytes: req.postDataBuffer()?.length ?? 0, origin: (await req.allHeaders()).origin });
     const { mode } = state;
@@ -25,6 +27,11 @@ export async function aiStandIn(ctx) {
       const sentences = String(body.text).replace(/\s+/g, " ").split(/(?<=[.!?])\s+/).filter((s) => /\p{L}{3}/u.test(s));
       return route.fulfill({ headers, contentType: "text/plain", body: sentences.slice(0, body.points).map((s) => `- ${s}`).join("\n") || "- The document." });
     }
+    if (body.task === "narrate") {
+      const title = String(body.text).match(/^## (.+)$/m)?.[1] ?? "the opening";
+      return route.fulfill({ headers, contentType: "text/plain", body: `Next, ${title}. This section explains what it covers.` });
+    }
+    if (body.task === "speak") return state.speak ? route.fulfill(state.speak(body)) : route.fulfill({ status: 503, json: { error: "the studio voice didn't answer" } });
     if (body.task === "translate") return route.fulfill({ headers, json: { texts: body.texts.map((s) => `ES ${s}`) } });
     return route.fulfill({ status: 400, json: { error: "unknown task" } });
   });
