@@ -32,7 +32,7 @@
 //   POST /api/ai { task: "translate", texts, language }             → { texts }
 //   POST /api/ai { task: "narrate", text, language, first? }        → text, streamed:
 //        one section of a document explained aloud, as a presenter would (Read aloud's Explain)
-//   POST /api/ai { task: "speak", text, language }                  → audio/mpeg:
+//   POST /api/ai { task: "speak", text, language }                  → audio (WAV or MP3):
 //        Read aloud's studio voice, Workers AI's MeloTTS (see speak() below)
 // Any of them may add provider: "cloudflare" to use only Workers AI (the
 // visitor chose it; their text then goes nowhere else).
@@ -409,7 +409,7 @@ export function jobOf(body: Record<string, unknown>): Job | string {
         "Speak as a person would: warm, clear, confident, in short spoken sentences. Plain text only: no Markdown, lists, headings, symbols or emojis.",
         "Open by naming the section naturally (\"Next, the results.\"), then explain what it says: its main points, the figures that matter, and what they mean, in your own words.",
         "For a table, say what it compares and point out the notable values; never read every cell.",
-        "Use only what the section says; never add facts, opinions or outside knowledge. Say numbers, dates and names exactly as written.",
+        "Use only what the section says; never add facts, opinions or outside knowledge, and don't remark on what it leaves out. Say numbers, dates and names exactly as written.",
         "Keep it to about a third of the section's length, at most 220 words.",
         body.first ? "This is the first section: start with one sentence on what kind of document this is." : "Don't greet the listener or introduce yourself.",
       ].join("\n"),
@@ -887,12 +887,15 @@ async function speak(env: Env, ip: string, body: Record<string, unknown>): Promi
   if (!speakLanguages(env).length) return json({ error: "the studio voice is off" }, 503);
   if (!text) return json({ error: "text is required" }, 400);
   if (!lang) return json({ error: "no studio voice for this language" }, 400);
-  const headers = { ...SAFE, "Content-Type": "audio/mpeg", "X-AI-Provider": "cloudflare" };
+  const headers = { ...SAFE, "X-AI-Provider": "cloudflare" };
+  // MeloTTS on Workers AI answers WAV, though its schema says MP3: the type
+  // is read from the audio itself, which Safari insists on.
+  const typeOf = (a: Uint8Array) => (String.fromCharCode(...a.subarray(0, 4)) === "RIFF" ? "audio/wav" : "audio/mpeg");
   const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${SPEAK_MODEL}\n${lang}\n${text}`)))].map((b) => b.toString(16).padStart(2, "0")).join("");
   const cacheKey = new Request(`https://speak.cache/${digest}`);
   const cache = edgeCache();
   const hit = await cache?.match(cacheKey).catch(() => undefined);
-  if (hit) return new Response(hit.body, { headers: { ...headers, "X-AI-Cache": "hit" } });
+  if (hit) return new Response(hit.body, { headers: { ...headers, "Content-Type": hit.headers.get("Content-Type") || "audio/mpeg", "X-AI-Cache": "hit" } });
   let ok: boolean;
   try {
     ok = await allowSpeak(env, ip, text.length);
@@ -908,8 +911,9 @@ async function speak(env: Env, ip: string, body: Record<string, unknown>): Promi
     console.warn("speech failed:", e instanceof Error ? e.message : e);
     return json({ error: "the studio voice didn't answer" }, 503, { "Retry-After": "60" });
   }
-  await cache?.put(cacheKey, new Response(audio.slice(), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=604800" } })).catch(() => {});
-  return new Response(audio, { headers });
+  const type = typeOf(audio);
+  await cache?.put(cacheKey, new Response(audio.slice(), { headers: { "Content-Type": type, "Cache-Control": "public, max-age=604800" } })).catch(() => {});
+  return new Response(audio, { headers: { ...headers, "Content-Type": type } });
 }
 
 export async function onRequestGet({ request, env }: Context) {
