@@ -19,6 +19,9 @@ async function test(name, fn) {
     console.log(`FAIL ${name}: ${e.message}`);
   }
 }
+const ok = (v, what) => {
+  if (!v) throw new Error(what);
+};
 const eq = (a, b, what) => {
   if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${what}: ${JSON.stringify(a)} ≠ ${JSON.stringify(b)}`);
 };
@@ -116,8 +119,9 @@ const small = { task: "summarize", text: "The lease ends in May.", points: 1, la
 const claude = { ANTHROPIC_API_KEY: "test", ANTHROPIC_BASE_URL: base, ...quick };
 
 await test("GET says which providers are set up", async () => {
-  const none = { groq: false, cerebras: false, anthropic: false, gemini: false, openrouter: false, cloudflare: false };
-  eq(await (await onRequestGet({ env: { ...claude, AI: workersAi("") } })).json(), { ...none, anthropic: true, cloudflare: true }, "Claude and Workers AI");
+  const none = { groq: false, cerebras: false, anthropic: false, gemini: false, openrouter: false, cloudflare: false, speak: [] };
+  eq(await (await onRequestGet({ env: { ...claude, AI: workersAi("") } })).json(), { ...none, anthropic: true, cloudflare: true, speak: ["en", "es", "fr", "zh"] }, "Claude and Workers AI (and its studio voice)");
+  eq((await (await onRequestGet({ env: { AI: workersAi(""), AI_SPEAK: "off" } })).json()).speak, [], "the studio voice turned off");
   eq(await (await onRequestGet({ env: {} })).json(), none, "none");
   eq(await (await onRequestGet({ env: { ...groq, GEMINI_API_KEY: "g", OPENROUTER_API_KEY: "o" } })).json(), { ...none, groq: true, gemini: true }, "Gemini on with its keys; OpenRouter, which may train and isn't named, stays off");
   eq(await (await onRequestGet({ env: { OPENROUTER_API_KEY: "o", AI_FREE_TIERS_MAY_TRAIN: "1" } })).json(), { ...none, openrouter: true }, "unless allowed");
@@ -601,6 +605,60 @@ await test("fair use with AI_QUOTA: exact across instances, and 60 a day", async
   // Yesterday's count doesn't carry over.
   quota.db.prepare("UPDATE ai_chat SET day = ? WHERE ip = '10.3.3.4'").run(today - 1);
   eq((await post(chat, env, { "cf-connecting-ip": "10.3.3.4" })).status, 200, "a new day");
+});
+
+// Workers AI's MeloTTS: JSON with the audio in base64, as the binding returns it.
+const melo = (fail = false) => ({
+  calls: [],
+  async run(model, input) {
+    this.calls.push({ model, input });
+    if (fail) throw new Error("3036: daily free allocation used up");
+    return { audio: Buffer.from(`ID3 ${input.lang} ${input.prompt}`).toString("base64") };
+  },
+});
+
+await test("speak: a sentence comes back as MP3 from MeloTTS, in the document's language", async () => {
+  const ai = melo();
+  const res = await post({ task: "speak", text: "  Hola,   mundo. ", language: "es-MX" }, { AI: ai });
+  eq([res.status, res.headers.get("content-type")], [200, "audio/mpeg"], "status and type");
+  eq(Buffer.from(await res.arrayBuffer()).toString(), "ID3 es Hola, mundo.", "audio");
+  eq(ai.calls[0], { model: "@cf/myshell-ai/melotts", input: { prompt: "Hola, mundo.", lang: "es" } }, "model and input");
+  eq(res.headers.get("x-content-type-options"), "nosniff", "safe headers");
+});
+
+await test("speak: refused for a language it doesn't have, without text, from another site, or when off", async () => {
+  eq((await post({ task: "speak", text: "Hallo", language: "de" }, { AI: melo() })).status, 400, "German");
+  eq((await post({ task: "speak", text: " ", language: "en" }, { AI: melo() })).status, 400, "empty");
+  eq((await post({ task: "speak", text: "Hi", language: "en" }, { AI: melo(), AI_SPEAK: "off" })).status, 503, "off");
+  eq((await post({ task: "speak", text: "Hi", language: "en" }, { AI: melo() }, { origin: "https://evil.example" })).status, 403, "origin");
+  const ai = melo();
+  await post({ task: "speak", text: "x".repeat(5000), language: "en" }, { AI: ai });
+  eq(ai.calls[0].input.prompt.length, 700, "capped at 700 characters");
+});
+
+await test("speak: Workers AI failing is a 503, so the page carries on with the device's voice", async () => {
+  eq((await post({ task: "speak", text: "Hi", language: "en" }, { AI: melo(true) })).status, 503, "status");
+});
+
+await test("speak: 40,000 characters a day per visitor, and the site's daily cap, exactly with AI_QUOTA", async () => {
+  const quota = d1();
+  const env = { AI: melo(), AI_QUOTA: quota, AI_SPEAK_DAILY_CHARS: "1500" };
+  const one = { task: "speak", text: "y".repeat(700), language: "en" };
+  const statuses = await Promise.all([1, 2, 3].map((i) => post(one, env, { "cf-connecting-ip": `10.8.0.${i}` }).then((r) => r.status)));
+  eq(statuses.sort(), [200, 200, 429], "two fit in 1,500");
+  eq(quota.db.prepare("SELECT chars FROM ai_speak WHERE ip = '*'").get().chars, 1400, "the site's count");
+  const solo = { AI: melo(), AI_QUOTA: d1() };
+  let last = 0;
+  for (let i = 0; i < 58; i++) last = (await post(one, solo, { "cf-connecting-ip": "10.8.1.1" })).status;
+  eq(last, 429, "one visitor stops after 40,000");
+});
+
+await test("narrate: one section explained aloud, as a presenter, in its language", async () => {
+  const job = jobOf({ task: "narrate", text: "## Results\nRevenue rose 12%.", language: "fr", first: true });
+  ok(typeof job === "object" && /presenter/.test(job.system) && /French/.test(job.system) && /first section/.test(job.system), "prompt");
+  eq(job.messages[0].content, "## Results\nRevenue rose 12%.", "the section");
+  eq(typeof jobOf({ task: "narrate", text: " " }), "string", "empty refused");
+  eq(jobOf({ task: "narrate", text: "z".repeat(20_000) }).messages[0].content.length, 8000, "capped");
 });
 
 server.close();

@@ -30,14 +30,21 @@ const ENDPOINT = "/api/ai";
 
 // Whether this copy of the site has the endpoint with a provider set up
 // (static hosts without it, offline, the extension: no).
-let available: Promise<boolean> | null = null;
+type Status = Partial<Record<Provider, boolean>> & { speak?: string[] };
+let status: Promise<Status | null> | null = null;
+const statusOf = () => {
+  if (!AI_CLOUD) return Promise.resolve(null);
+  status ??= fetch(ENDPOINT, { cache: "no-store" })
+    .then((r) => (r.ok ? (r.json() as Promise<Status>) : null))
+    .catch(() => null);
+  return status;
+};
 export function cloudAvailable(): Promise<boolean> {
-  if (!AI_CLOUD) return Promise.resolve(false);
-  available ??= fetch(ENDPOINT, { cache: "no-store" })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((s: Partial<Record<Provider, boolean>> | null) => PROVIDERS.some((p) => s?.[p]))
-    .catch(() => false);
-  return available;
+  return statusOf().then((s) => PROVIDERS.some((p) => s?.[p]));
+}
+// The document languages the studio voice (Read aloud) speaks here; none when it's off.
+export function studioLanguages(): Promise<string[]> {
+  return statusOf().then((s) => (Array.isArray(s?.speak) ? s.speak : []));
 }
 
 const providerOf = (r: Response): Provider => {

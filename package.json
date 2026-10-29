@@ -37,6 +37,7 @@
     "test:tables": "node tests/tables.mjs",
     "test:organize": "node tests/organize.mjs",
     "test:plural": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/plural.mjs",
+    "test:narrate": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/narrate.mjs",
     "test:pageboard": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/pageboard.mjs",
     "test:split": "node tests/split.mjs",
     "test:protect": "node tests/protect.mjs",

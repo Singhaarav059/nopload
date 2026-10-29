@@ -38,6 +38,8 @@ jobs:
         run: npm run test:readme
       - name: Count strings (plural forms)
         run: npm run test:plural
+      - name: Read aloud as a narrator (structure, tables, voices by accent)
+        run: npm run test:narrate
       - run: npm run test:static
       - name: Server build defences (addresses, egress proxy, limits, subprocesses)
         run: node scripts/ci-report.mjs "test:server" npm run test:server

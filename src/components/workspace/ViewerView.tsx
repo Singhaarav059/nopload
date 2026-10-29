@@ -865,7 +865,9 @@ export function ViewerView({ file, onClose, onError }: { file: File; onClose: ()
           <article className="vw-read" style={{ fontSize: readSize }}>
             {reading === "loading" ? <p className="opacity-70"><Loader2 size={18} className="inline animate-spin" /></p>
               : reading === "none" ? <p>{t("viewer.readingNone")}</p>
-                : reading.map((p, i) => p.kind === "heading" ? <h2 key={i}>{p.text}</h2> : <p key={i} data-list={p.kind === "list" || undefined}>{p.kind === "list" ? p.text.replace(/^[-–•*·▪◦]\s*/, "") : p.text}</p>)}
+                : reading.map((p, i) => p.kind === "heading" ? <h2 key={i}>{p.text}</h2>
+                  : p.kind === "table" && p.rows ? <div key={i} className="vw-read-table"><table><tbody>{p.rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => (ri === 0 ? <th key={ci}>{c}</th> : <td key={ci}>{c}</td>))}</tr>)}</tbody></table></div>
+                  : <p key={i} data-list={p.kind === "list" || undefined}>{p.kind === "list" ? p.text.replace(/^[-–•*·▪◦]\s*/, "") : p.text}</p>)}
           </article>
         ) : doc && (
           <div ref={pagesEl} className="vw-pages" style={{ width: pos.width, height: pos.height }}>

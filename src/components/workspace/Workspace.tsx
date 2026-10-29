@@ -597,8 +597,7 @@ export function Workspace({ toolId, preset }: { toolId: ToolId; preset?: Record<
       <div>
         {dropHint}
         {errorBox}
-        <FileBoard items={items} onChange={(n) => { setItems(n); if (!n.length) reset(); }} sortable={false} />
-        <ListenView key={items[0].id} file={files[0]} onError={(e) => void drop(items[0].id, files[0], e)} />
+        <ListenView key={items[0].id} file={files[0]} onError={(e) => void drop(items[0].id, files[0], e)} onClose={() => { setItems([]); reset(); }} />
       </div>
     );
   }
