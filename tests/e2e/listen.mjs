@@ -142,7 +142,7 @@ await suite(async ({ browser, test }) => {
   await ctx.close();
 
   // Explain and the studio voice, with a stand-in for the server AI.
-  const ctx2 = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 1000 } });
+  const ctx2 = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 1000 }, serviceWorkers: "block" });
   await ctx2.addInitScript(fakeSpeech);
   const ai = await aiStandIn(ctx2);
   const page2 = await ctx2.newPage();
@@ -179,6 +179,18 @@ await suite(async ({ browser, test }) => {
 
   await test("the studio voice: its audio plays, sentence after sentence, made ahead", async () => {
     const tone = readFileSync(new URL("../fixtures/tone.mp3", import.meta.url));
+    // Playwright's Firefox plays no sound at all here (MP3 and WAV alike
+    // fail with a decode error on a blank page): there, this can't be tested.
+    const plays = await page2.evaluate(async (b64) => {
+      const a = new Audio(URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: "audio/mpeg" })));
+      return new Promise((ok) => {
+        a.onended = () => ok(true);
+        a.onerror = () => ok(false);
+        a.play().catch(() => ok(false));
+        setTimeout(() => ok(false), 4000);
+      });
+    }, tone.toString("base64"));
+    if (!plays) return "this browser plays no audio here";
     ai.speak = () => ({ status: 200, contentType: "audio/mpeg", body: tone });
     ai.posts.length = 0;
     await page2.reload();
